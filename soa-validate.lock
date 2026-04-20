@@ -1,0 +1,17 @@
+{
+  "schema": "https://soa-harness.org/schemas/v1.0/pin-lock.schema.json",
+  "description": "Pins this implementation to a specific SOA-Harness specification commit. Bumping this pin is a deliberate, reviewable action — see CONTRIBUTING.md pin-bump protocol. Never bump silently.",
+  "spec_repo": "https://github.com/wleeb1010/soa-harness-specification",
+  "spec_commit_sha": "559dec8588441bc29639190870e4541146242b90",
+  "spec_commit_date": "2026-04-20",
+  "spec_manifest_sha256": "3cd2adf01d88be1f9d27b60c1b3581117475e5916224e4e9caba368dd343d33c",
+  "spec_manifest_status": "placeholder",
+  "pinned_artifacts": {
+    "soa-validate-must-map.json": "pinned at spec commit; no digest yet (MANIFEST placeholder)",
+    "ui-validate-must-map.json": "pinned at spec commit; no digest yet (MANIFEST placeholder)",
+    "test-vectors/": "pinned at spec commit; digests in MANIFEST.supplementary_artifacts",
+    "test-vectors/jcs-parity/": "pinned at spec commit; source of truth for cross-language JCS byte-equivalence"
+  },
+  "pin_bump_protocol": "Open GitHub issue on this repo announcing the intent to bump. Identify which spec commits are being adopted. Link to spec-repo PRs with material changes (normative text, schemas, test vectors). Wait 24h for sibling-session (soa-validate) acknowledgment that they are ready to bump too. Merge the pin bump PR with both siblings in lockstep — impl and validate never ship against mismatched spec commits.",
+  "next_review": "After each spec-repo commit that changes soa-validate-must-map.json, schemas/, test-vectors/, or the two Markdown spec files."
+}

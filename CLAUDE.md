@@ -64,3 +64,29 @@ We ship milestones by literal test-ID count, not by subjective completeness. See
 - `pnpm -r lint` — green
 - `pnpm typecheck` — green
 - If touching crypto paths, @-mention the second reviewer in `CODEOWNERS`
+
+## Parallel Claude Code sessions
+
+You may be running alongside a sibling session in `../soa-validate/` (and occasionally in `../soa-harness=specification/`). Each session has its own task list and memory — **nothing crosses session boundaries automatically**.
+
+**Before making a change, ask yourself: does this affect a contract the sibling repo depends on?**
+
+Contracts that cross session boundaries:
+- The Runner's HTTP API (port, endpoints, request/response schemas) — validator tests against this
+- Wire formats for signed artifacts (Agent Card, PDA, MANIFEST) — validator verifies these
+- StreamEvent enum values and payload schemas — validator asserts the closed set
+- JCS parity vectors (consumed from `../soa-harness=specification/test-vectors/jcs-parity/`)
+
+For contract changes: open a GitHub issue on THIS repo, cross-reference a matching issue on `soa-validate`, wait for sibling acknowledgment before merging. See `COORDINATION.md` for the full protocol.
+
+**Always-safe changes** (no coordination required): package-internal refactoring, unit tests that don't change observable behavior, internal logging, bug fixes that bring behavior INTO alignment with the spec (vs. away from it).
+
+## Session startup context
+
+On first session start in this repo, read in this order:
+1. `CONTEXT.md` — condensed summary of where we are, what's been decided, what ships next
+2. `~/.claude/plans/soa-harness-impl-m1.md` — the M1 tactical plan
+3. `~/.claude/plans/put-a-plan-together-glittery-hartmanis.md` — the full roadmap across all three repos
+4. `soa-validate.lock` — which spec commit we're targeting
+
+`graphify-spec` MCP is already registered and connected (user level). Use it freely for spec questions.
