@@ -1,0 +1,19 @@
+# CODEOWNERS — soa-harness-impl
+#
+# Syntax: <path-glob>  <@owner1>  [<@owner2> ...]
+# At least one listed owner must approve PRs touching matched files.
+# Paths tagged [CRYPTO] in the title require approval from TWO listed owners
+# (rule enforced by branch protection + PR review policy, not this file alone).
+
+# Default: all files require maintainer review
+*                                     @wleeb1010
+
+# Crypto-sensitive paths — second reviewer required in addition to default
+packages/core/src/jcs.ts              @wleeb1010
+packages/core/src/digest.ts           @wleeb1010
+packages/core/test/parity/            @wleeb1010
+packages/runner/src/audit/            @wleeb1010
+packages/runner/src/session/          @wleeb1010
+
+# TODO as maintainers are added, replace or augment @wleeb1010 entries above
+# so CODEOWNERS reflects the quorum rule declared in GOVERNANCE.md.
