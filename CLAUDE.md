@@ -37,7 +37,7 @@ When you write code in this repo:
 
 1. **Crypto-sensitive paths require two-reviewer approval.** See `CODEOWNERS`. Paths: `packages/core/`, `packages/runner/src/audit/`, `packages/runner/src/session/`, any PDA/JWS/JCS signing code. Flag PRs touching these so a reviewer knows to request a second pair of eyes.
 
-2. **Never reimplement JCS.** Use `@filen/rfc8785`. The integer-only `jcs()` in spec-repo `build-manifest.mjs` is a test-vector helper, NOT a production primitive. Wrapping in `packages/core/src/jcs.ts` is fine; reimplementing the algorithm is a red flag.
+2. **Never reimplement JCS.** Use `canonicalize`. The integer-only `jcs()` in spec-repo `build-manifest.mjs` is a test-vector helper, NOT a production primitive. Wrapping in `packages/core/src/jcs.ts` is fine; reimplementing the algorithm is a red flag.
 
 3. **Never hand-roll JWS.** Use `jose`. All sign/verify goes through that library.
 

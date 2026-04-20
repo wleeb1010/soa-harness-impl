@@ -20,7 +20,7 @@
 
 ### 2. TypeScript for Runner + Gateway, Go for the validator
 - Spec's Gateway reference sketch is already TS/Fastify — reusing establishes pattern continuity
-- Spec explicitly endorses `@filen/rfc8785` (TS) and `canonicaljson-go` (Go) for JCS
+- Spec explicitly endorses `canonicalize` (TS) and `canonicaljson-go` (Go) for JCS
 - `jose` (TS) is the mature JWS library in this ecosystem
 - `ajv` handles JSON Schema 2020-12 validation
 
@@ -62,7 +62,7 @@ This split unblocks M5 even if no second-party impl materializes.
 | HTTP framework | `fastify` | Matches Gateway sketch; `onSend` hooks work for HSTS/CSP; TLS 1.3 `minVersion` + `requestCert` idiomatic |
 | JWS | `jose` | Production-grade, actively maintained, handles EdDSA/ES256/RS256 |
 | JSON Schema | `ajv` with 2020-12 plugin | Best-in-class for this draft |
-| JCS | `@filen/rfc8785` | Only production-grade TS RFC 8785 implementation |
+| JCS | `canonicalize` | Only production-grade TS RFC 8785 implementation |
 | Test runner | `vitest` | ESM-native, fast, Jest-compatible |
 | Monorepo | `pnpm` workspaces | Standard, supports per-package publishing |
 | Demo keystore | Software keystore with warning | `keytar` pulls `node-gyp` which kills 90-second demo budget on Windows |

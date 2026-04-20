@@ -38,7 +38,7 @@ One reviewer approval + green CI is sufficient.
 
 ## What NOT to do
 
-- **Never hand-roll JCS or JWS.** Use `@filen/rfc8785` and `jose`. Reimplementing these primitives is a security risk and is explicitly out of scope for this repo.
+- **Never hand-roll JCS or JWS.** Use `canonicalize` and `jose`. Reimplementing these primitives is a security risk and is explicitly out of scope for this repo.
 - **Never modify files in `soa-harness-specification/`.** The spec is the source of truth. If a normative change is needed, it goes to the spec repo first, then this repo bumps `soa-validate.lock`.
 - **Never co-release with the spec.** Spec changes land first. This repo's next release pins to the new spec MANIFEST digest as a separate, reviewable action.
 - **Never generate expected test values.** Expected values (digests, signatures, canonical bytes) come from spec test vectors at the pinned MANIFEST. If you need to compute one in this repo, the architecture is wrong.

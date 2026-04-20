@@ -2,7 +2,7 @@
   "name": "@soa-harness/core",
   "version": "0.0.0",
   "private": true,
-  "description": "SOA-Harness core primitives: JCS canonicalization (wrapper around @filen/rfc8785), digest helpers, tasks-fingerprint.",
+  "description": "SOA-Harness core primitives: JCS canonicalization (wrapper around the canonicalize npm package by Samuel Erdtman), digest helpers, tasks-fingerprint.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
