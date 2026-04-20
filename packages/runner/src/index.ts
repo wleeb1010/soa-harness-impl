@@ -36,3 +36,10 @@ export {
   type ToolEntry,
   type ToolsFile
 } from "./registry/index.js";
+export {
+  probesPlugin,
+  alwaysReady,
+  type ProbesPluginOptions,
+  type ReadinessProbe,
+  type ReadinessReason
+} from "./probes/index.js";

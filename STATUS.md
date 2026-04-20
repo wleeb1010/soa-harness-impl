@@ -1,5 +1,15 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (end of day)
+
+### Week 2 — /health + /ready probes wired and live
+
+- **Done tonight:** `packages/runner/src/probes/` — Fastify plugin for `/health` and `/ready` per Core §5.4. `/health` returns 200 + `{"status":"alive","soaHarnessVersion":"1.0"}`; `/ready` returns 200 + `{"status":"ready"}` when the readiness probe passes, else 503 + `{"status":"not-ready","reason":"<enum>"}` with `reason` a closed enum of `bootstrap-pending | tool-pool-initializing | persistence-unwritable | audit-sink-unreachable | crl-stale` (no new reasons without a spec change). Default `ReadinessProbe` is `alwaysReady`; real per-component aggregators wire in when bootstrap, CRL, and audit sink land. 6 tests: health shape, health unauthenticated, ready default=200, ready with each of the 5 enum reasons, ready flips 503→200 dynamically.
+- **Live smoke on 127.0.0.1:7700:** `/health` → 200 with the exact body the spec mandates; `/ready` → 200 {"status":"ready"}; card JSON + JWS still 200 — no route regressions.
+- **Deferred:** Agent Card JWS verify + x5c chain walk, PDA verifier, Permission resolver, real readiness aggregation wiring these checks into `/ready`. Those remain on the Week 2 punch list.
+
+72 tests green (30 core + 4 schemas + 38 runner).
+
 ## 2026-04-20 (later)
 
 ### Week 2 — day 1: CRL cache + Tool Registry landed

@@ -1,6 +1,7 @@
 import { fastify, type FastifyInstance, type FastifyServerOptions } from "fastify";
 import type { InitialTrust } from "./bootstrap/index.js";
 import { cardPlugin, type JwsAlg, type PrivateKeyLike } from "./card/index.js";
+import { probesPlugin, type ReadinessProbe } from "./probes/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -9,6 +10,8 @@ export interface BuildRunnerOptions {
   kid: string;
   privateKey: PrivateKeyLike;
   x5c: string[];
+  /** Readiness aggregator. Default: alwaysReady. Real checks wire in per component as they land. */
+  readiness?: ReadinessProbe;
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -22,6 +25,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
     privateKey: opts.privateKey,
     x5c: opts.x5c
   });
+
+  await app.register(probesPlugin, opts.readiness ? { readiness: opts.readiness } : {});
 
   return app;
 }
