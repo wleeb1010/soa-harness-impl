@@ -1,0 +1,24 @@
+{
+  "soaHarnessVersion": "1.0",
+  "name": "test-runner-agent",
+  "version": "1.0.0",
+  "description": "Week 1 smoke Agent Card — used by integration tests.",
+  "url": "https://runner.test.local",
+  "protocolVersion": "a2a-0.3",
+  "agentType": "general-purpose",
+  "permissions": {
+    "activeMode": "ReadOnly",
+    "handler": "Interactive"
+  },
+  "security": {
+    "oauthScopes": [],
+    "trustAnchors": [
+      {
+        "issuer": "CN=Test CA, O=SOA-Test, C=US",
+        "spki_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "uri": "https://ca.test.local/soa-test",
+        "publisher_kid": "soa-release-v1.0"
+      }
+    ]
+  }
+}

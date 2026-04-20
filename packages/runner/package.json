@@ -13,11 +13,23 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "soa-runner": "./dist/bin/start-runner.js"
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "start": "node ./dist/bin/start-runner.js"
+  },
+  "dependencies": {
+    "@soa-harness/core": "workspace:*",
+    "@soa-harness/schemas": "workspace:*",
+    "fastify": "^5.8.5",
+    "jose": "^6.2.2"
   }
 }

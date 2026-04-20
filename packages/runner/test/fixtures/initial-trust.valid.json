@@ -1,0 +1,8 @@
+{
+  "soaHarnessVersion": "1.0",
+  "publisher_kid": "soa-release-v1.0",
+  "spki_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "issuer": "CN=Test CA, O=SOA-Test, C=US",
+  "issued_at": "2026-01-01T00:00:00Z",
+  "channel": "sdk-pinned"
+}
