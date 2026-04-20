@@ -19,3 +19,20 @@ export {
   type SignedCard
 } from "./card/index.js";
 export { buildRunnerApp, startRunner, type BuildRunnerOptions, type StartRunnerOptions } from "./server.js";
+export {
+  CrlCache,
+  type Crl,
+  type CrlCacheOptions,
+  type CrlCheckOutcome,
+  type CrlFetcher,
+  type CrlFreshness,
+  type CrlRevokedKid
+} from "./crl/index.js";
+export {
+  ToolRegistry,
+  loadToolRegistry,
+  type Control,
+  type RiskClass,
+  type ToolEntry,
+  type ToolsFile
+} from "./registry/index.js";

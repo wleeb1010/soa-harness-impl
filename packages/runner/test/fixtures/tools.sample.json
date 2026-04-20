@@ -1,0 +1,29 @@
+{
+  "$schema": "https://soa-harness.org/schemas/v1.0/tools.schema.json",
+  "tools": [
+    {
+      "name": "fs__read_file",
+      "risk_class": "ReadOnly",
+      "default_control": "AutoAllow",
+      "description": "Read bytes from an absolute path."
+    },
+    {
+      "name": "fs__write_file",
+      "risk_class": "Mutating",
+      "default_control": "Prompt",
+      "description": "Write UTF-8 bytes to an absolute path."
+    },
+    {
+      "name": "fs__delete_file",
+      "risk_class": "Destructive",
+      "default_control": "Prompt",
+      "description": "Unlink a file."
+    },
+    {
+      "name": "net__http_get",
+      "risk_class": "Egress",
+      "default_control": "Prompt",
+      "description": "Perform an outbound HTTPS GET."
+    }
+  ]
+}

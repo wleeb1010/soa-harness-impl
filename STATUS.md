@@ -1,5 +1,19 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (later)
+
+### Week 2 — day 1: CRL cache + Tool Registry landed
+
+- **Done:**
+  - CRL cache (`packages/runner/src/crl/`) implements UI §7.3.1 + Core §10.6 three-state freshness: `fresh` (age ≤ refresh interval, default 1h), `stale-but-valid` (> refresh interval, ≤ 2h ceiling, still within CRL `not_after`), `expired` (past `not_after` OR > 2h unreachable OR no cache entry). Only `expired` fails closed, with a specific `failureReason` of `crl-expired` / `crl-unreachable` / `crl-missing`. CRL bodies are schema-validated against the pinned `crl.schema.json`; invalid shapes throw on `refresh()`. 8 tests covering all state transitions, revoked-kid detection, schema rejection, and refresh semantics.
+  - Tool Registry (`packages/runner/src/registry/`) loads a static `tools.json` and indexes by name. Each entry carries `name`, `risk_class` (closed enum: ReadOnly / Mutating / Egress / Destructive), `default_control` (closed enum: AutoAllow / Prompt / Deny). Constructor rejects duplicates and unknown enum values. 7 tests. Sample fixture with 4 demo tools (`fs__read_file`, `fs__write_file`, `fs__delete_file`, `net__http_get`).
+- **Active:** Week 2 components 3-5 remain — Agent Card JWS verify + x5c chain walk, PDA verifier, Permission resolver, health/ready probes, boot-time verification wiring. These feed SV-BOOT-01 and SV-PERM-01.
+- **Blocked:** Nothing on our side. Still pinned at spec `1f72bf6`.
+
+66 tests green (30 core + 4 schemas + 32 runner). Runner test files: `bootstrap.test.ts` (8), `card.test.ts` (9), `crl.test.ts` (8), `registry.test.ts` (7).
+
+---
+
 ## 2026-04-20
 
 ### Week 1 CLOSED — standing by for Week 2
