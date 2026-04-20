@@ -3,6 +3,10 @@ import { importPKCS8, type CryptoKey, type KeyObject } from "jose";
 import { loadInitialTrust } from "../bootstrap/index.js";
 import { startRunner } from "../server.js";
 import { generateEd25519KeyPair, generateSelfSignedEd25519Cert } from "../card/cert.js";
+import { createClock } from "../clock/index.js";
+import { CrlCache, type Crl, type CrlFetcher } from "../crl/index.js";
+import { BootOrchestrator } from "../boot/index.js";
+import type { TrustAnchor } from "../card/verify.js";
 
 const TRUST_PATH = process.env.RUNNER_TRUST_PATH ?? "./initial-trust.json";
 const CARD_PATH = process.env.RUNNER_CARD_PATH ?? "./agent-card.json";
@@ -11,6 +15,7 @@ const HOST = process.env.RUNNER_HOST ?? "0.0.0.0";
 const SIGNING_KEY_PATH = process.env.RUNNER_SIGNING_KEY;
 const SIGNING_ALG = (process.env.RUNNER_SIGNING_ALG as "EdDSA" | "ES256" | undefined) ?? "EdDSA";
 const CERT_CHAIN_PATH = process.env.RUNNER_X5C;
+const DEMO_MODE = process.env.RUNNER_DEMO_MODE === "1";
 
 function pemCertChainToX5c(pem: string): string[] {
   const matches = pem.matchAll(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/g);
@@ -44,7 +49,7 @@ async function resolveKeyAndX5c(
 
   if (SIGNING_ALG !== "EdDSA") {
     throw new Error(
-      `Ephemeral-key demo mode only supports EdDSA, got SIGNING_ALG=${SIGNING_ALG}. Supply RUNNER_SIGNING_KEY + RUNNER_X5C for other algorithms.`
+      `Ephemeral-key demo mode only supports EdDSA, got SIGNING_ALG=${SIGNING_ALG}.`
     );
   }
 
@@ -54,18 +59,50 @@ async function resolveKeyAndX5c(
     subject: `CN=${kid},O=SOA-Harness-Demo`
   });
   console.warn(
-    "[start-runner] WARNING: no RUNNER_SIGNING_KEY / RUNNER_X5C set — generated an ephemeral Ed25519 " +
-      "keypair + self-signed cert in memory. Self-signed leaves do NOT chain to any trust anchor; " +
-      "this is acceptable for local smoke only. Production: operator-issued chain anchored in " +
-      "security.trustAnchors per Core §6.1.1."
+    "[start-runner] WARNING: no RUNNER_SIGNING_KEY / RUNNER_X5C — generated an ephemeral Ed25519 " +
+      "keypair + self-signed cert. Production: operator-issued chain anchored in trustAnchors."
   );
   return { privateKey: keys.privateKey, x5c: [cert] };
 }
 
+function demoCrlFetcher(now: () => Date): CrlFetcher {
+  return async (anchorUri) => {
+    const issuedAt = now();
+    const notAfter = new Date(issuedAt.getTime() + 24 * 60 * 60 * 1000);
+    const crl: Crl = {
+      issuer: `CN=Demo CA for ${anchorUri}`,
+      issued_at: issuedAt.toISOString(),
+      not_after: notAfter.toISOString(),
+      revoked_kids: []
+    };
+    return crl;
+  };
+}
+
 async function main() {
-  const trust = loadInitialTrust({ path: TRUST_PATH });
-  const card: unknown = JSON.parse(readFileSync(CARD_PATH, "utf8"));
+  const clock = createClock({
+    envClock: process.env.RUNNER_TEST_CLOCK,
+    nodeEnv: process.env.NODE_ENV,
+    tlsEnabled: false,
+    host: HOST
+  });
+
+  const trust = loadInitialTrust({ path: TRUST_PATH, now: clock() });
+  const card = JSON.parse(readFileSync(CARD_PATH, "utf8")) as {
+    security?: { trustAnchors?: TrustAnchor[] };
+  };
+  const anchors = card.security?.trustAnchors ?? [];
   const { privateKey, x5c } = await resolveKeyAndX5c(trust.publisher_kid);
+
+  const crl = new CrlCache({
+    fetcher: DEMO_MODE
+      ? demoCrlFetcher(clock)
+      : async () => {
+          throw new Error("RUNNER_DEMO_MODE=0 and no production CRL fetcher configured — supply one.");
+        },
+    now: clock
+  });
+  const boot = new BootOrchestrator({ anchors, crl });
 
   const app = await startRunner({
     trust,
@@ -74,6 +111,7 @@ async function main() {
     kid: trust.publisher_kid,
     privateKey,
     x5c,
+    readiness: boot,
     host: HOST,
     port: PORT
   });
@@ -83,6 +121,15 @@ async function main() {
   console.log(`[start-runner] Agent Card endpoint live at ${bound}`);
   console.log(`[start-runner]   GET http://${HOST}:${PORT}/.well-known/agent-card.json`);
   console.log(`[start-runner]   GET http://${HOST}:${PORT}/.well-known/agent-card.jws`);
+  console.log(`[start-runner]   GET http://${HOST}:${PORT}/health`);
+  console.log(`[start-runner]   GET http://${HOST}:${PORT}/ready  (503 until boot completes)`);
+
+  try {
+    await boot.boot();
+    console.log(`[start-runner] boot complete — /ready returning 200`);
+  } catch (err) {
+    console.error(`[start-runner] boot FAILED — /ready remains 503:`, err);
+  }
 
   const shutdown = async (sig: string) => {
     console.log(`[start-runner] received ${sig}, closing`);

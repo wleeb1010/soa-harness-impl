@@ -68,3 +68,10 @@ export {
   type ResolveInput,
   type ResolveOutcome
 } from "./permission/index.js";
+export {
+  createClock,
+  TestClockInProductionError,
+  type Clock,
+  type ClockFactoryInputs
+} from "./clock/index.js";
+export { BootOrchestrator, type BootOrchestratorOptions } from "./boot/index.js";

@@ -100,6 +100,22 @@ export class CrlCache {
     return { freshness, revoked: false };
   }
 
+  /**
+   * Freshness-only probe for the boot orchestrator (§5.4). Returns "expired"
+   * when there is no cache entry, we're past the CRL's own not_after, or we
+   * have gone longer than the 2h stale ceiling without a successful fetch.
+   */
+  anchorFreshness(anchorUri: string): CrlFreshness {
+    const entry = this.entries.get(anchorUri);
+    if (!entry) return "expired";
+    const now = this.nowFn();
+    const notAfter = new Date(entry.crl.not_after);
+    if (Number.isFinite(notAfter.getTime()) && now >= notAfter) return "expired";
+    const ageMs = now.getTime() - entry.fetchedAt.getTime();
+    if (ageMs > this.staleCeilingMs) return "expired";
+    return ageMs <= this.refreshIntervalMs ? "fresh" : "stale-but-valid";
+  }
+
   /** Test helper: has a CRL been fetched for this anchor? */
   hasEntry(anchorUri: string): boolean {
     return this.entries.has(anchorUri);

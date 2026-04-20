@@ -1,5 +1,31 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (Week 2 CLOSE)
+
+### Week 2 closed — clock hook + boot wiring live, all four test IDs ready
+
+**Signal for validator:** Week 2 impl live on :7700 with /health, /ready (gated by BootOrchestrator), Agent Card JSON + detached JWS, and the full verification-side libraries (`verifyAgentCardJws`, `verifyPda`, `resolvePermission`). Clock injection hook (L-01 §10.6.1) accepts `RUNNER_TEST_CLOCK` in non-prod; refuses when `NODE_ENV=production` or TLS binds non-loopback. Pinned to `fe74d39`. Validator cleared to run the full Week 2 live suite.
+
+**Scoreboard:**
+- `HR-01` — Trust bootstrap loader: green on `bootstrap.test.ts` (8) against the initial-trust fixture; loader is wired into `start-runner` bin and the `BootOrchestrator.boot()` path.
+- `HR-02` — CRL cache three-state machine: green on `crl.test.ts` (8) + `clock.test.ts` (8) + `boot.test.ts` (7) with injected clocks driving every fresh / stale-but-valid / expired transition deterministically. Cache is warmed at boot and reassessed on every `/ready` call.
+- `SV-BOOT-01` — Boot-time verification sequence: green on `boot.test.ts` including the 503 → 200 → 503 transition when wall-clock advances past the CRL 2h ceiling. Live on :7700 via `BootOrchestrator` wired into the plugin-scoped readiness probe.
+- `SV-PERM-01` — Permission resolver (§10.3 + §10.4): green on `permission.test.ts` (19 tests including a 27-tuple sweep). `verifyPda` is the gatekeeper between the raw pda.jws and the resolver's `verifiedPda` input.
+
+**Live smoke on 127.0.0.1:7700 (RUNNER_DEMO_MODE=1):**
+- `/health` → 200 `{"status":"alive","soaHarnessVersion":"1.0"}`
+- `/ready` → 200 `{"status":"ready"}` after boot; pre-boot and post-degradation → 503 with closed-enum reason
+- `/.well-known/agent-card.json` + `/.well-known/agent-card.jws` → 200, protected header has `{alg, kid, typ=soa-agent-card+jws, x5c}`
+
+**Clock hook (L-01):**
+- `RUNNER_TEST_CLOCK=<ISO 8601>` adopted in non-prod; refuses when `NODE_ENV=production` OR TLS binds a non-loopback host. 0.0.0.0 + TLS fires the guard (loopback-indistinguishable).
+- Consumed by `CrlCache`, `BootOrchestrator`, and `loadInitialTrust`. The PDA verifier already accepted a `now` parameter pre-L-01.
+- 8 tests in `clock.test.ts` cover: wall-clock default, frozen-time adoption, prod-env guard, TLS-non-loopback guard, loopback TLS allowed, 0.0.0.0 guard fires, invalid ISO 8601 rejection.
+
+**Pin:** `fe74d3931e50f52697d8fab0c07336a9f3bb099e`. MANIFEST regen (`00d6755df…`) re-hashed locally and matches the paste. `pin_history` records the adoption reason.
+
+**Repo-wide:** 123 tests green (30 core + 4 schemas + 89 runner across 10 test files). `pnpm -r build / typecheck / lint / test` green. No cross-repo contracts left open.
+
 ## 2026-04-20 (end of day — big push)
 
 ### Week 2 — core verification pieces landed
