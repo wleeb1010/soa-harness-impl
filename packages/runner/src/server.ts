@@ -8,6 +8,7 @@ export interface BuildRunnerOptions {
   alg: JwsAlg;
   kid: string;
   privateKey: PrivateKeyLike;
+  x5c: string[];
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -18,7 +19,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
     card: opts.card,
     alg: opts.alg,
     kid: opts.kid,
-    privateKey: opts.privateKey
+    privateKey: opts.privateKey,
+    x5c: opts.x5c
   });
 
   return app;

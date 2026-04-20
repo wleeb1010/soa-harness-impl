@@ -2,6 +2,18 @@
 
 ## 2026-04-20
 
+### Week 1 conformance fix — URL + typ + x5c corrected
+
+**Impl Week 1 conformance fix landed, URL+typ+x5c corrected, pinned to `1f72bf6`, validate session cleared to re-run live.**
+
+- URL path `/.well-known/agent-card.json.jws` → `/.well-known/agent-card.jws` (matches §6.1 line 221 and the §5.1 shorthand clarified in spec commit `1f72bf6`).
+- JWS `typ` `soa-card+jws` → `soa-agent-card+jws` per §6.1.1 row 1.
+- Protected header now carries the full `{alg, kid, typ, x5c}` set §6.1.1 mandates. `x5c` is a required `CardSignOptions` field — a non-empty RFC 7515 §4.1.6 leaf-first base64-DER cert array. The signer rejects an empty `x5c` rather than emitting a non-conformant header.
+- Demo bin: when no operator cert chain is supplied (`RUNNER_SIGNING_KEY` + `RUNNER_X5C` missing), generates an ephemeral Ed25519 keypair AND a self-signed X.509 cert over it via `@peculiar/x509`, then feeds the DER into `x5c[0]`. Loud warning notes a self-signed leaf does not chain to any real trust anchor — production supplies a chain anchored in `security.trustAnchors`.
+- Pin bumped `6c1bc99 → 1f72bf6`; `spec_manifest_sha256` unchanged (no MANIFEST regen). `pin_history` entry records the readability-fix rationale.
+- Live smoke on 127.0.0.1: `GET /.well-known/agent-card.jws` → 200 + `application/jose` + detached `h..s`; decoded protected header is `{"alg":"EdDSA","kid":"soa-release-v1.0","typ":"soa-agent-card+jws","x5c":["MIIBHDC…"]}`. Old URL returns 404, confirming no residual route.
+- 51 tests green: 30 core + 4 schemas + 17 runner (8 bootstrap + 9 card, the new card test is the `x5c`-header structural assertion).
+
 ### Week 1 — Agent Card endpoint LIVE
 
 **Agent Card endpoint live at :7700 — validator can run SV-CARD-01 and SV-SIGN-01.**

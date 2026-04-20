@@ -10,7 +10,7 @@ export interface CardPluginOptions extends CardSignOptions {
 }
 
 const DEFAULT_JSON_PATH = "/.well-known/agent-card.json";
-const DEFAULT_JWS_PATH = "/.well-known/agent-card.json.jws";
+const DEFAULT_JWS_PATH = "/.well-known/agent-card.jws";
 
 export const cardPlugin: FastifyPluginAsync<CardPluginOptions> = async (app, opts) => {
   const validate = registry["agent-card"];

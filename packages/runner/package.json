@@ -27,9 +27,11 @@
     "start": "node ./dist/bin/start-runner.js"
   },
   "dependencies": {
+    "@peculiar/x509": "^2.0.0",
     "@soa-harness/core": "workspace:*",
     "@soa-harness/schemas": "workspace:*",
     "fastify": "^5.8.5",
-    "jose": "^6.2.2"
+    "jose": "^6.2.2",
+    "reflect-metadata": "^0.2.2"
   }
 }

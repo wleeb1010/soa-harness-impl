@@ -6,3 +6,4 @@ export {
   type PrivateKeyLike,
   type SignedCard
 } from "./signer.js";
+export { generateSelfSignedEd25519Cert, generateEd25519KeyPair } from "./cert.js";

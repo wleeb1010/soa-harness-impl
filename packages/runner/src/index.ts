@@ -10,6 +10,8 @@ export {
 export {
   cardPlugin,
   signAgentCard,
+  generateSelfSignedEd25519Cert,
+  generateEd25519KeyPair,
   type CardPluginOptions,
   type CardSignOptions,
   type JwsAlg,

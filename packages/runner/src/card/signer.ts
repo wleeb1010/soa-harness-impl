@@ -9,6 +9,12 @@ export interface CardSignOptions {
   alg: JwsAlg;
   kid: string;
   privateKey: PrivateKeyLike;
+  /**
+   * RFC 7515 §4.1.6 cert chain, leaf-first (index 0 = signing cert). Each entry
+   * is a base64-encoded DER X.509 certificate. Required per Core §6.1.1 row 1:
+   * the Agent Card JWS protected header MUST carry `alg`, `kid`, and `x5c`.
+   */
+  x5c: string[];
 }
 
 export interface SignedCard {
@@ -18,9 +24,18 @@ export interface SignedCard {
 }
 
 export async function signAgentCard(opts: CardSignOptions): Promise<SignedCard> {
+  if (!Array.isArray(opts.x5c) || opts.x5c.length === 0) {
+    throw new Error("signer: x5c must be a non-empty array (Core §6.1.1 requires leaf-first cert chain)");
+  }
+
   const canonicalBody = jcsBytes(opts.card);
   const compact = await new CompactSign(canonicalBody)
-    .setProtectedHeader({ alg: opts.alg, kid: opts.kid, typ: "soa-card+jws" })
+    .setProtectedHeader({
+      alg: opts.alg,
+      kid: opts.kid,
+      typ: "soa-agent-card+jws",
+      x5c: opts.x5c
+    })
     .sign(opts.privateKey);
 
   const parts = compact.split(".");
