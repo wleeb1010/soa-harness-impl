@@ -1,0 +1,23 @@
+{
+  "name": "create-soa-agent",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Bootstrap a new SOA-Harness agent repo with a working Runner, Agent Card, and example hook.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "templates"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  }
+}

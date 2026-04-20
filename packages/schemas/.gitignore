@@ -1,0 +1,3 @@
+src/schemas/vendored/
+src/validators/generated/
+src/registry.ts

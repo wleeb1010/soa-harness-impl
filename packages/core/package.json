@@ -1,0 +1,23 @@
+{
+  "name": "@soa-harness/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SOA-Harness core primitives: JCS canonicalization (wrapper around @filen/rfc8785), digest helpers, tasks-fingerprint.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  }
+}

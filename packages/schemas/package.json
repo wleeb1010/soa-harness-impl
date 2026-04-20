@@ -1,0 +1,29 @@
+{
+  "name": "@soa-harness/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Compiled Ajv validators for SOA-Harness schemas, generated from the pinned spec commit.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "prebuild": "node scripts/build-validators.mjs",
+    "build": "tsc -b",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "codegen": "node scripts/build-validators.mjs"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}

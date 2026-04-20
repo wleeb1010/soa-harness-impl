@@ -1,0 +1,87 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout impl
+        uses: actions/checkout@v4
+        with:
+          path: soa-harness-impl
+
+      - name: Read pinned spec commit
+        id: pin
+        shell: bash
+        working-directory: soa-harness-impl
+        run: |
+          SHA=$(node -e "console.log(JSON.parse(require('fs').readFileSync('soa-validate.lock','utf8')).spec_commit_sha)")
+          echo "spec_sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout spec at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: wleeb1010/soa-harness-specification
+          ref: ${{ steps.pin.outputs.spec_sha }}
+          path: soa-harness=specification
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Get pnpm store path
+        id: pnpm-store
+        shell: bash
+        working-directory: soa-harness-impl
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('soa-harness-impl/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Install
+        working-directory: soa-harness-impl
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: soa-harness-impl
+        run: pnpm -r build
+
+      - name: Typecheck
+        working-directory: soa-harness-impl
+        run: pnpm typecheck
+
+      - name: Lint
+        working-directory: soa-harness-impl
+        run: pnpm -r lint
+
+      - name: Test
+        working-directory: soa-harness-impl
+        run: pnpm -r test
