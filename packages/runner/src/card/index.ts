@@ -7,3 +7,11 @@ export {
   type SignedCard
 } from "./signer.js";
 export { generateSelfSignedEd25519Cert, generateEd25519KeyPair } from "./cert.js";
+export {
+  verifyAgentCardJws,
+  CardSignatureFailed,
+  type CardVerifyFailureReason,
+  type TrustAnchor,
+  type VerifyAgentCardOptions,
+  type VerifiedCard
+} from "./verify.js";
