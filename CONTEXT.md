@@ -20,7 +20,7 @@
 
 ### 2. TypeScript for Runner + Gateway, Go for the validator
 - Spec's Gateway reference sketch is already TS/Fastify — reusing establishes pattern continuity
-- Spec explicitly endorses `canonicalize` (TS) and `canonicaljson-go` (Go) for JCS
+- Spec explicitly endorses `canonicalize` (TS) and `gowebpki/jcs` (Go) for JCS
 - `jose` (TS) is the mature JWS library in this ecosystem
 - `ajv` handles JSON Schema 2020-12 validation
 
