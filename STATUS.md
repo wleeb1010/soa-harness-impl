@@ -1,5 +1,19 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (end of day — big push)
+
+### Week 2 — core verification pieces landed
+
+- **Pin:** bumped `1f72bf6 → 9d25163` (lockstep with `soa-validate`; impl does not consume HR-01 / HR-02 vectors directly). `spec_manifest_sha256` updated — MANIFEST regen added 8 supplementary_artifacts for HR-01 / HR-02 (63 → 71). Re-hashed `MANIFEST.json` locally and matched the paste byte for byte.
+- **Agent Card JWS verifier** (`packages/runner/src/card/verify.ts`) — detached-form parse, typ/alg/kid/x5c checks, `jose.importX509` + `jose.compactVerify` with reattached payload, x5c chain walk with SPKI match against trust anchors. 10-ish closed-enum `CardSignatureFailed` reasons. Full RFC 5280 path validation (SV-SIGN-04) intentionally deferred. 7 tests.
+- **PDA verifier** (`packages/runner/src/attestation/verify-pda.ts`) — compact JWS, `typ=soa-pda+jws`, `canonical-decision.schema.json` validation, handler_kid equality check, 15-min window cap + 60s skew, injectable `HandlerKeyResolver` + optional `KidRevokedCheck`, final `jose.compactVerify`. 10 tests covering every failure path.
+- **Permission resolver** (`packages/runner/src/permission/resolver.ts`) — Core §10.3 exactly: capability gate, tighten-only override throwing `ConfigPrecedenceViolation`, §10.4 Autonomous+Destructive guard, dispatch on AutoAllow / Prompt / Deny with PDA-satisfied / PDA-unsatisfied branches. 19 tests including a 27-tuple sweep of (capability × handler × control).
+
+108 tests green (30 core + 4 schemas + 74 runner across 8 test files). Still pinned at spec `9d25163`.
+
+- **Active:** Boot-time verification wiring (load trust → warm CRL → flip `/ready` 503→200) + live SV-PERM-01 smoke against the pda.jws fixture remain before Week 2 can be formally closed.
+- **Blocked:** Nothing cross-repo. Validator session can begin SV-CARD-01 / SV-SIGN-01 / SV-PERM-01 runs against the existing endpoint; HR-01 / HR-02 validator-side assertions land when the boot sequence wires everything together.
+
 ## 2026-04-20 (end of day)
 
 ### Week 2 — /health + /ready probes wired and live
