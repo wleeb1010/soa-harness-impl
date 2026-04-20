@@ -16,3 +16,11 @@
 Local verification: `pnpm -r build`, `pnpm -r typecheck`, `pnpm -r lint`, `pnpm -r test` all green on Windows. 34 tests passing (21 core + 13 schemas across 5 test files).
 
 Sibling spec pinned at `6c1bc99`; sibling validate session has parity vectors published.
+
+### Week 0 sign-off (post-parity)
+
+Parity test reconfirmed green (13/13) after pulling. Pin is already
+at `6c1bc9916472f23dcf237f5634f3ff33baff45e9` — the sibling `soa-validate`
+repo pins the same commit, so impl and validator are in lockstep on
+the same spec. No further bump required to close Week 0; next commit
+begins Week 1 (trust bootstrap + Agent Card).
