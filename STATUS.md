@@ -2,6 +2,16 @@
 
 ## 2026-04-20
 
+### Week 1 CLOSED — standing by for Week 2
+
+- **SV-CARD-01:** green on vector AND live. Vector-based unit assertion (protected-header structure, `typ=soa-agent-card+jws`, ETag shape, Cache-Control) + live run against `127.0.0.1:7700/.well-known/agent-card.json`.
+- **SV-SIGN-01:** green on vector AND live. Detached JWS round-trips through `jose.flattenedVerify` (reattached payload) AND through `jose.compactVerify` (reassembled form); protected header decodes to `{alg:"EdDSA", kid:"soa-release-v1.0", typ:"soa-agent-card+jws", x5c:["MIIBHDC…"]}`.
+- **Three conformance fixes landed** (spec commit `1f72bf6`): URL path `.json.jws → .jws`, `typ` `soa-card+jws → soa-agent-card+jws`, `x5c` required in protected header (leaf-first RFC 7515 §4.1.6 base64 DER array).
+- **Pinned to `1f72bf6`.** `soa-validate.lock` bumped `6c1bc99 → 1f72bf6` (readability fix; no normative change, no MANIFEST regen). `pin_history` carries the rationale.
+- **Week 1 complete.** Standing by for Week 2 kickoff (StreamEvent SSE emitter — §14.1 closed enum, `/stream/v1/:session_id`, integration against the spec's `stream-event-payloads.schema.json`).
+
+51 tests green (30 core + 4 schemas + 17 runner). No cross-repo contracts left open. Sibling spec and `soa-validate` both pinned at `1f72bf6`.
+
 ### Week 1 conformance fix — URL + typ + x5c corrected
 
 **Impl Week 1 conformance fix landed, URL+typ+x5c corrected, pinned to `1f72bf6`, validate session cleared to re-run live.**
