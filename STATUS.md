@@ -2,8 +2,13 @@
 
 ## 2026-04-20
 
-- **Done:** Week 0 Day 1 repo wiring (`package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `eslint.config.js`, 4 package skeletons: `@soa-harness/core`, `@soa-harness/schemas`, `@soa-harness/runner`, `create-soa-agent`). CI workflow (`.github/workflows/ci.yml`) with Node 20 matrix on Ubuntu/macOS/Windows, checks out spec sibling at pinned commit before build. Week 0 Day 4 schemas package: `scripts/build-validators.mjs` reads `soa-validate.lock`, verifies sibling at pinned spec (currently `b1497025`), vendors 14 schemas, compiles standalone Ajv 2020-12 validators, emits typed registry. Smoke tests (4) green.
-- **Active:** Week 0 Day 2-3 (JCS parity harness) deferred until the spec-repo generator has been run against the pinned commit and `test-vectors/jcs-parity/generated/` is populated. Week 0 Day 5 (`@soa-harness/core` digest + tasks-fingerprint + JCS wrapper) not yet started.
-- **Blocked:** `test-vectors/jcs-parity/generated/` is empty at spec commit `b1497025`. The parity harness (Day 2-3) needs the sibling validate/spec session to run `generate-vectors.mjs` and commit the outputs so we can consume them at the pinned commit. No cross-repo contracts changed — all work so far is package-internal.
+### PM update — Day 5 core helpers landed
 
-Local verification: `pnpm -r build`, `pnpm -r typecheck`, `pnpm -r lint`, `pnpm -r test` all green on Windows (Node v22.19.0, pnpm 10.33.0).
+- **Done:**
+  - Week 0 Day 1 repo wiring (`package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `eslint.config.js`, 4 package skeletons). CI workflow checks out sibling spec at pinned commit before build.
+  - Week 0 Day 4 schemas package: `scripts/build-validators.mjs` vendors schemas from the pinned spec, compiles 14 standalone Ajv 2020-12 validators, emits typed registry. 4 smoke tests green.
+  - Week 0 Day 5 `@soa-harness/core` helpers: `src/jcs.ts` (wrapper over Erdtman's `canonicalize`), `src/digest.ts` (`sha256Hex`, `digestJson`, `digestRawUtf8` ports), `src/tasks-fingerprint.ts` (port of spec's `compute.mjs`). 17 unit tests green locally — including a parity test against the spec's `test-vectors/tasks-fingerprint/` fixture that pins the expected fingerprint at the soa-validate.lock spec commit.
+- **Active:** Nothing in-flight on our side. Week 1 (Trust bootstrap + Agent Card) is unblocked as soon as the parity vectors (Day 2-3) land.
+- **Blocked:** Day 2-3 (JCS cross-language parity harness) waits for the sibling validate/spec session to run `generate-vectors.mjs` and commit `test-vectors/jcs-parity/generated/*.json` at a pinned commit. No contracts crossed — all core helpers are package-internal and match the spec's reference bit for bit.
+
+Local verification: `pnpm -r build`, `pnpm -r typecheck`, `pnpm -r lint`, `pnpm -r test` all green (21 tests passing) on Windows (Node v22.19.0, pnpm 10.33.0). Sibling spec repo pinned at `208e5dd`.
