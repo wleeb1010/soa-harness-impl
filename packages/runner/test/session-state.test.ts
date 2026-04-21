@@ -254,6 +254,77 @@ describe("GET /sessions/:session_id/state — §12.5.1", () => {
     expect(body.error).toBe("malformed-session-id");
   });
 
+  it("L-29 lazy-hydrate: on-disk session with no in-memory record → 200 after first call registers", async () => {
+    // Fresh app with a session file on disk but NO in-memory registration.
+    // First request hydrates (registering bearer + session), second request
+    // with the same bearer passes normal validate().
+    const fresh = await newApp({ preRegister: false });
+    try {
+      await fresh.persister.writeSession(fullSession());
+      const first = await fresh.app.inject({
+        method: "GET",
+        url: `/sessions/${SESSION}/state`,
+        headers: { authorization: `Bearer ${BEARER}` }
+      });
+      expect(first.statusCode, `status=${first.statusCode} body=${first.body}`).toBe(200);
+      const second = await fresh.app.inject({
+        method: "GET",
+        url: `/sessions/${SESSION}/state`,
+        headers: { authorization: `Bearer ${BEARER}` }
+      });
+      expect(second.statusCode).toBe(200);
+    } finally {
+      await fresh.app.close();
+      rmSync(fresh.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("L-29 lazy-hydrate: first-bearer-wins — subsequent different bearer gets 403", async () => {
+    const fresh = await newApp({ preRegister: false });
+    try {
+      await fresh.persister.writeSession(fullSession());
+      // First caller (original bearer) hydrates + succeeds.
+      const first = await fresh.app.inject({
+        method: "GET",
+        url: `/sessions/${SESSION}/state`,
+        headers: { authorization: `Bearer ${BEARER}` }
+      });
+      expect(first.statusCode).toBe(200);
+      // Second caller with a DIFFERENT bearer is rejected with
+      // session-bearer-mismatch — hydrate happens only once; subsequent
+      // calls go through the normal sessionStore.validate() gate.
+      const second = await fresh.app.inject({
+        method: "GET",
+        url: `/sessions/${SESSION}/state`,
+        headers: { authorization: `Bearer a-completely-different-bearer` }
+      });
+      expect(second.statusCode).toBe(403);
+      const body = JSON.parse(second.body) as { error: string };
+      expect(body.error).toBe("session-bearer-mismatch");
+    } finally {
+      await fresh.app.close();
+      rmSync(fresh.dir, { recursive: true, force: true });
+    }
+  });
+
+  it("L-29 lazy-hydrate: no session file on disk → 404 unknown-session (unchanged)", async () => {
+    const fresh = await newApp({ preRegister: false });
+    try {
+      // No session file written — hydrate returns false; handler 404s.
+      const res = await fresh.app.inject({
+        method: "GET",
+        url: `/sessions/${SESSION}/state`,
+        headers: { authorization: `Bearer ${BEARER}` }
+      });
+      expect(res.statusCode).toBe(404);
+      const body = JSON.parse(res.body) as { error: string };
+      expect(body.error).toBe("unknown-session");
+    } finally {
+      await fresh.app.close();
+      rmSync(fresh.dir, { recursive: true, force: true });
+    }
+  });
+
   it("not-a-side-effect: persister file size stays identical across two reads (no on-disk mutation)", async () => {
     const { statSync } = await import("node:fs");
     await ctx.persister.writeSession(fullSession());

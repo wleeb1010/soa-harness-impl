@@ -1,0 +1,236 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  SessionPersister,
+  scanAndResumeInProgressSessions,
+  IN_PROGRESS_STATUSES,
+  TERMINAL_STATUSES,
+  type PersistedSession,
+  type PersistedSideEffect,
+  type ResumeContext,
+  type ScanOutcomeEntry
+} from "../src/session/index.js";
+import { AuditChain } from "../src/audit/index.js";
+
+// §12.5 L-29 resume-trigger #1 tests: startup-scan enumerates the session
+// directory and invokes resumeSession for in-progress statuses only.
+
+const FROZEN_NOW = new Date("2026-04-21T18:00:00.000Z");
+const CARD_VERSION = "1.0";
+const TOOL_POOL_HASH = "sha256:bootscanpool000000000000000000000000000000000000000000000000aa01";
+
+function tmpDir(): string {
+  return mkdtempSync(join(tmpdir(), "soa-scan-"));
+}
+
+function session(id: string, status: string, overrides: Partial<PersistedSession> = {}): PersistedSession {
+  return {
+    session_id: id,
+    format_version: "1.0",
+    activeMode: "WorkspaceWrite",
+    messages: [],
+    workflow: {
+      task_id: `task-${id}`,
+      status,
+      side_effects: [],
+      checkpoint: {}
+    },
+    counters: {},
+    tool_pool_hash: TOOL_POOL_HASH,
+    card_version: CARD_VERSION,
+    ...overrides
+  } as PersistedSession;
+}
+
+function makeCtx(overrides: Partial<ResumeContext> & {
+  replayCalls?: PersistedSideEffect[];
+} = {}): ResumeContext {
+  const replayCalls = overrides.replayCalls ?? [];
+  return {
+    currentCardVersion: overrides.currentCardVersion ?? CARD_VERSION,
+    currentToolPoolHash: overrides.currentToolPoolHash ?? TOOL_POOL_HASH,
+    toolCompensation: overrides.toolCompensation ?? (() => ({ canCompensate: false })),
+    replayPending:
+      overrides.replayPending ??
+      (async (se) => {
+        replayCalls.push(se);
+        return null;
+      }),
+    compensate: overrides.compensate ?? (async () => undefined),
+    cardActiveMode: overrides.cardActiveMode ?? "WorkspaceWrite",
+    clock: overrides.clock ?? (() => FROZEN_NOW)
+  };
+}
+
+describe("scanAndResumeInProgressSessions — L-29 resume-trigger #1", () => {
+  let dir: string;
+  let persister: SessionPersister;
+
+  beforeEach(() => {
+    dir = tmpDir();
+    persister = new SessionPersister({ sessionDir: dir });
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("closed enums: IN_PROGRESS_STATUSES + TERMINAL_STATUSES cover the §12.1 workflow.status set", () => {
+    // Defensive: these are closed sets per §12.1 status enum. If the spec
+    // adds a value, adding it here is a deliberate change, not silent drift.
+    expect(Array.from(IN_PROGRESS_STATUSES).sort()).toEqual([
+      "Blocked",
+      "Executing",
+      "Handoff",
+      "Optimizing",
+      "Planning"
+    ]);
+    expect(Array.from(TERMINAL_STATUSES).sort()).toEqual(["Cancelled", "Failed", "Succeeded"]);
+  });
+
+  it("empty session directory: scan returns no outcomes + logs the zero-count line", async () => {
+    const logs: string[] = [];
+    const outcomes = await scanAndResumeInProgressSessions({
+      persister,
+      resumeCtx: makeCtx(),
+      log: (msg) => logs.push(msg)
+    });
+    expect(outcomes).toEqual([]);
+    expect(logs.some((l) => l.includes("no persisted sessions"))).toBe(true);
+  });
+
+  it("in-progress status (Executing) with pending side_effect: resumeSession invoked, outcome=resumed", async () => {
+    const pending: PersistedSideEffect = {
+      tool: "fs__write_file",
+      idempotency_key: "idk-scan-01",
+      phase: "pending",
+      args_digest: "sha256:aaaa000000000000000000000000000000000000000000000000000000000001",
+      first_attempted_at: "2026-04-21T17:00:00.000Z",
+      last_phase_transition_at: "2026-04-21T17:00:00.000Z"
+    };
+    const s = session("ses_scanfixtureexec0001", "Executing", {
+      workflow: { task_id: "t", status: "Executing", side_effects: [pending], checkpoint: {} }
+    } as Partial<PersistedSession>);
+    await persister.writeSession(s);
+
+    const replayCalls: PersistedSideEffect[] = [];
+    const outcomes = await scanAndResumeInProgressSessions({
+      persister,
+      resumeCtx: makeCtx({ replayCalls })
+    });
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]?.action).toBe("resumed");
+    expect(outcomes[0]?.status).toBe("Executing");
+    expect(replayCalls).toHaveLength(1); // pending replayed
+
+    // Post-scan file: phase advanced to committed.
+    const reread = await persister.readSession("ses_scanfixtureexec0001");
+    const postSe = (reread.workflow as { side_effects: PersistedSideEffect[] }).side_effects[0];
+    expect(postSe?.phase).toBe("committed");
+  });
+
+  it("all five in-progress statuses: each triggers a resume call", async () => {
+    const statuses = ["Planning", "Executing", "Optimizing", "Handoff", "Blocked"] as const;
+    for (const [i, status] of statuses.entries()) {
+      await persister.writeSession(session(`ses_scanfixtureip00${i}01`, status));
+    }
+    const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
+    expect(outcomes).toHaveLength(5);
+    for (const o of outcomes) {
+      expect(o.action).toBe("resumed");
+      expect(IN_PROGRESS_STATUSES.has(o.status)).toBe(true);
+    }
+  });
+
+  it("terminal statuses (Succeeded, Failed, Cancelled) are skipped; no resume call fires", async () => {
+    const statuses = ["Succeeded", "Failed", "Cancelled"] as const;
+    for (const [i, status] of statuses.entries()) {
+      await persister.writeSession(session(`ses_scanfixtureterm0${i}1`, status));
+    }
+    const replayCalls: PersistedSideEffect[] = [];
+    const outcomes = await scanAndResumeInProgressSessions({
+      persister,
+      resumeCtx: makeCtx({ replayCalls })
+    });
+    expect(outcomes).toHaveLength(3);
+    for (const o of outcomes) {
+      expect(o.action).toBe("skipped-terminal");
+      expect(TERMINAL_STATUSES.has(o.status)).toBe(true);
+    }
+    expect(replayCalls).toHaveLength(0);
+  });
+
+  it("mixed scan: in-progress + terminals produce distinct outcome actions", async () => {
+    await persister.writeSession(session("ses_mixfixtureexec00a1", "Executing"));
+    await persister.writeSession(session("ses_mixfixtureok0000a1", "Succeeded"));
+    await persister.writeSession(session("ses_mixfixtureplan00a1", "Planning"));
+    await persister.writeSession(session("ses_mixfixturefail00a1", "Failed"));
+
+    const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
+    const byId = new Map(outcomes.map((o) => [o.session_id, o]));
+    expect(byId.get("ses_mixfixtureexec00a1")?.action).toBe("resumed");
+    expect(byId.get("ses_mixfixtureplan00a1")?.action).toBe("resumed");
+    expect(byId.get("ses_mixfixtureok0000a1")?.action).toBe("skipped-terminal");
+    expect(byId.get("ses_mixfixturefail00a1")?.action).toBe("skipped-terminal");
+  });
+
+  it("unknown workflow status is recorded as skipped-unknown-status (not crashed)", async () => {
+    const weird = session("ses_unknownfixture00001", "Paused" as unknown as string);
+    await persister.writeSession(weird);
+    const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]?.action).toBe("skipped-unknown-status");
+  });
+
+  it("corrupted session file is recorded as failed-read; does NOT halt scan of other sessions", async () => {
+    const { writeFileSync } = await import("node:fs");
+    await persister.writeSession(session("ses_scanfixturehealth01", "Executing"));
+    writeFileSync(persister.pathFor("ses_scanfixturebroken01"), "{ invalid json");
+    const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
+    expect(outcomes).toHaveLength(2);
+    const byId = new Map(outcomes.map((o) => [o.session_id, o]));
+    expect(byId.get("ses_scanfixturehealth01")?.action).toBe("resumed");
+    expect(byId.get("ses_scanfixturebroken01")?.action).toBe("failed-read");
+  });
+
+  it("audit chain integration: one session-resume row appended per outcome", async () => {
+    await persister.writeSession(session("ses_auditfixtureexec01", "Executing"));
+    await persister.writeSession(session("ses_auditfixtureok0001", "Succeeded"));
+    const chain = new AuditChain(() => FROZEN_NOW);
+    const outcomes = await scanAndResumeInProgressSessions({
+      persister,
+      resumeCtx: makeCtx(),
+      chain
+    });
+    expect(outcomes).toHaveLength(2);
+    const snapshot = chain.snapshot();
+    expect(snapshot).toHaveLength(2);
+    for (const row of snapshot) {
+      expect(row["kind"]).toBe("session-resume");
+      expect(row["timestamp"]).toBe(FROZEN_NOW.toISOString());
+      expect(typeof row["session_id"]).toBe("string");
+      expect(typeof row["action"]).toBe("string");
+    }
+  });
+
+  it("card_version drift during scan: outcome=failed-resume with reason detail", async () => {
+    await persister.writeSession(session("ses_driftfixture0000001", "Executing", { card_version: "0.9-legacy" } as Partial<PersistedSession>));
+    const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
+    expect(outcomes[0]?.action).toBe("failed-resume");
+    expect(outcomes[0]?.detail).toContain("CardVersionDrift");
+  });
+
+  it("tool_pool_hash drift: outcome=failed-resume reason=tool-pool-hash-mismatch", async () => {
+    await persister.writeSession(
+      session("ses_tpoolfixture0000001", "Executing", {
+        tool_pool_hash: "sha256:stale0000000000000000000000000000000000000000000000000000000000aa"
+      } as Partial<PersistedSession>)
+    );
+    const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
+    expect(outcomes[0]?.action).toBe("failed-resume");
+    expect(outcomes[0]?.detail).toContain("ToolPoolStale");
+    expect(outcomes[0]?.detail).toContain("tool-pool-hash-mismatch");
+  });
+});

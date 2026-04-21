@@ -16,7 +16,12 @@ import {
   parseAuditSinkFailureModeEnv,
   assertAuditSinkEnvListenerSafe
 } from "../audit/index.js";
-import { SessionPersister } from "../session/index.js";
+import {
+  SessionPersister,
+  scanAndResumeInProgressSessions,
+  type ResumeContext,
+  type PersistedSideEffect
+} from "../session/index.js";
 import { composeReadiness } from "../probes/index.js";
 import {
   MarkerEmitter,
@@ -399,6 +404,44 @@ async function main() {
     console.log(`[start-runner] boot complete — /ready returning 200`);
   } catch (err) {
     console.error(`[start-runner] boot FAILED — /ready remains 503:`, err);
+  }
+
+  // L-29 Normative MUST #1 — post-boot / pre-listener resume scan.
+  // Walk <sessionDir>, invoke resumeSession for every session whose
+  // workflow.status is in {Planning, Executing, Optimizing, Handoff, Blocked}.
+  // Outcomes are audited so operators see the recovery trail.
+  //
+  // The bin's scan uses a no-op replay/compensate context — the §10.3-driven
+  // tool-invocation layer lands in M3. A quiescent session (no pending/inflight
+  // side_effects) passes through step 4 cleanly; a session with real in-flight
+  // work gets its phase advanced via the noop replay (caller responsibility to
+  // supply real replay fns once M3 tool dispatch wires in).
+  const cardVersion =
+    typeof (card as { version?: unknown }).version === "string"
+      ? ((card as { version: string }).version)
+      : "1.0";
+  const toolPoolHash = registry
+    ? `sha256:registry-size-${registry.size()}` // M3 computes real JCS hash
+    : "sha256:no-registry-loaded";
+  const resumeCtx: ResumeContext = {
+    currentCardVersion: cardVersion,
+    currentToolPoolHash: toolPoolHash,
+    toolCompensation: () => ({ canCompensate: false }),
+    replayPending: async (_se: PersistedSideEffect) => null,
+    compensate: async () => undefined,
+    cardActiveMode: activeCapability,
+    clock
+  };
+  try {
+    await scanAndResumeInProgressSessions({
+      persister,
+      resumeCtx,
+      chain,
+      log: (msg) => console.log(msg),
+      clock
+    });
+  } catch (err) {
+    console.error(`[start-runner] L-29 boot scan FAILED (non-fatal; listener still opens):`, err);
   }
 
   const shutdown = async (sig: string) => {

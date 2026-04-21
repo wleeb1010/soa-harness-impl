@@ -24,3 +24,11 @@ export {
   type PersistedSideEffect,
   type ToolCompensationSupport
 } from "./resume.js";
+
+export {
+  scanAndResumeInProgressSessions,
+  IN_PROGRESS_STATUSES,
+  TERMINAL_STATUSES,
+  type ScanOutcomeEntry,
+  type ScanAndResumeOptions
+} from "./boot-scan.js";

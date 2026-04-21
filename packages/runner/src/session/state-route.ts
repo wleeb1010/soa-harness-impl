@@ -26,6 +26,54 @@ import { SessionPersister, SessionFormatIncompatible } from "./persist.js";
 const SESSION_ID_RE = /^ses_[A-Za-z0-9]{16,}$/;
 const WINDOW_MS = 60_000;
 
+/**
+ * L-29 lazy-hydrate helper. Returns true when the session was registered
+ * from disk, false when the file doesn't exist (→ caller 404s).
+ * A corrupted/bad-format file propagates the underlying error — the caller's
+ * main try/catch surfaces it as 500 persisted-state-incompatible.
+ */
+async function tryLazyHydrate(
+  opts: SessionStateRouteOptions,
+  sessionId: string,
+  bearer: string
+): Promise<boolean> {
+  let persisted: PersistedSession;
+  try {
+    persisted = await opts.persister.readSession(sessionId);
+  } catch (err) {
+    if (err instanceof SessionFormatIncompatible && err.reason === "file-missing") {
+      return false;
+    }
+    throw err;
+  }
+  // Register the session with the sessionStore so subsequent validate() calls
+  // pass. The InMemorySessionStore's register() signature is cached-only —
+  // narrow the ts-expect-error surface by asserting the shape we need here.
+  const store = opts.sessionStore as unknown as {
+    register: (
+      session_id: string,
+      bearer: string,
+      opts?: {
+        activeMode?: "ReadOnly" | "WorkspaceWrite" | "DangerFullAccess";
+        user_sub?: string;
+        canDecide?: boolean;
+      }
+    ) => void;
+  };
+  if (typeof store.register !== "function") {
+    // A non-InMemorySessionStore impl (future stores) MAY not support
+    // on-demand registration. Fail closed to 404 — operator's store
+    // SHOULD be pre-populated via boot scan instead.
+    return false;
+  }
+  store.register(sessionId, bearer, {
+    activeMode: persisted.activeMode as "ReadOnly" | "WorkspaceWrite" | "DangerFullAccess",
+    user_sub: "lazy-hydrated",
+    canDecide: false
+  });
+  return true;
+}
+
 export interface SessionStateRouteOptions {
   persister: SessionPersister;
   sessionStore: SessionStore;
@@ -243,8 +291,19 @@ export const sessionStatePlugin: FastifyPluginAsync<SessionStateRouteOptions> = 
       // sessions:read:<session_id> is default-granted on §12.6 session bootstrap.
       // The bearer must validate against THIS session_id specifically — cross-
       // session reads are forbidden (scope is per-session_id).
+      //
+      // L-29 Normative MUST #2 — lazy-hydrate: if the session isn't in the
+      // in-memory store but a matching on-disk file exists, the endpoint
+      // auto-hydrates before serving. This handles the client-reconnect-
+      // after-runner-restart case without forcing operators to re-bootstrap
+      // every session. First-bearer-wins: the bearer presented on the
+      // hydrating call becomes the canonical bearer for the session in
+      // this process. Subsequent requests with a different bearer → 403.
       if (!opts.sessionStore.exists(sessionId)) {
-        return reply.code(404).send({ error: "unknown-session" });
+        const hydrated = await tryLazyHydrate(opts, sessionId, bearer);
+        if (!hydrated) {
+          return reply.code(404).send({ error: "unknown-session" });
+        }
       }
       if (!opts.sessionStore.validate(sessionId, bearer)) {
         return reply.code(403).send({ error: "session-bearer-mismatch" });

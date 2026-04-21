@@ -124,6 +124,28 @@ export class SessionPersister {
   }
 
   /**
+   * Enumerate `ses_*.json` entries in the session directory. Used by the
+   * L-29 startup-scan resume trigger. Returns bare session_ids (no extension).
+   * Missing directory → empty array (a fresh deployment has no persisted
+   * sessions). Non-matching files are filtered out.
+   */
+  async listSessionIds(): Promise<string[]> {
+    try {
+      const entries = await fsp.readdir(this.sessionDir);
+      const out: string[] = [];
+      for (const name of entries) {
+        if (!name.endsWith(".json")) continue;
+        const id = name.slice(0, -".json".length);
+        if (/^ses_[A-Za-z0-9]{16,}$/.test(id)) out.push(id);
+      }
+      return out.sort(); // deterministic order for tests + audit-log readability
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw err;
+    }
+  }
+
+  /**
    * Atomically write a session file. Guarantees:
    *   - final file contains the complete, fsync'd payload after the call returns
    *   - on crash mid-write, the previous final file is untouched
