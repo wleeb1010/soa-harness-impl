@@ -7,6 +7,7 @@ import type { ReadinessProbe } from "../probes/index.js";
 import type { ToolRegistry } from "../registry/index.js";
 import type { Control } from "../registry/types.js";
 import type { MarkerEmitter } from "../markers/index.js";
+import type { StreamEventEmitter } from "../stream/index.js";
 import {
   SessionPersister,
   SessionFormatIncompatible,
@@ -73,6 +74,14 @@ export interface PermissionsDecisionsRouteOptions {
   toolPoolHash?: string;
   /** Card version embedded when synthesizing a missing session file. */
   cardVersion?: string;
+  /**
+   * M3-T2 StreamEvent emitter. When present, a §14.1 PermissionDecision
+   * event fires after successful commit (both fresh + replay). The
+   * prompt_id is synthesized from the audit_record_id so the UI can
+   * correlate the decision back to the chain; scope is "once" for M2/M3
+   * headless calls (per §14.1.1 PermissionDecision payload schema).
+   */
+  emitter?: StreamEventEmitter;
 }
 
 const WINDOW_MS = 60_000;
@@ -504,6 +513,27 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       }
       await opts.persister!.writeSession(bracketSession, {
         markerPhase: { kind: "committed", side_effect: sideEffectIndex }
+      });
+    }
+
+    // §14.1 PermissionDecision — emit AFTER the commit write completes so
+    // the event lands once per decision (not once per retry) and always
+    // reflects the final recorded outcome. The prompt_id is synthesized
+    // from the aud_ audit row id so clients can correlate back to the
+    // chain; decision is mapped to the §14.1.1 allow/deny enum.
+    if (opts.emitter) {
+      const decisionAllowOrDeny = finalDecision === "AutoAllow" ? "allow" : "deny";
+      opts.emitter.emit({
+        session_id: sessionId,
+        type: "PermissionDecision",
+        payload: {
+          // §14.1.1 pattern: prm_[A-Za-z0-9]{8,}. aud_<12hex> satisfies.
+          prompt_id: `prm_${recordId.slice("aud_".length)}`,
+          decision: decisionAllowOrDeny,
+          scope: "once",
+          signer_kid: pdaSignerKid ?? "runtime-resolver",
+          reason: finalReason
+        }
       });
     }
 

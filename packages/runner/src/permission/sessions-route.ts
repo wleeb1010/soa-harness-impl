@@ -4,6 +4,7 @@ import type { ReadinessProbe } from "../probes/index.js";
 import { CAPABILITY_PERMITS, type Capability } from "./types.js";
 import { InMemorySessionStore } from "./session-store.js";
 import type { SessionPersister, PersistedSession } from "../session/index.js";
+import type { StreamEventEmitter } from "../stream/index.js";
 
 export interface SessionsRouteOptions {
   sessionStore: InMemorySessionStore;
@@ -43,6 +44,15 @@ export interface SessionsRouteOptions {
    * §12.5 step 2 can detect card drift at resume.
    */
   cardVersion?: string;
+  /**
+   * M3-T2 StreamEvent emitter. When present, a `SessionStart` event fires
+   * per §14.1 after successful persist-before-201. Optional; when omitted
+   * the plugin doesn't emit (backwards-compat for tests that don't
+   * exercise the stream surface).
+   */
+  emitter?: StreamEventEmitter;
+  /** Agent Card `name` — embedded in SessionStart payload (required field). */
+  agentName?: string;
 }
 
 const WINDOW_MS = 60_000;
@@ -206,6 +216,22 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
           detail: err instanceof Error ? err.message : String(err)
         });
       }
+    }
+
+    // §14.1 SessionStart after persist-before-201 so the event sequence
+    // for this session begins with sequence=0 and event_id-stable
+    // pagination works from the first read.
+    if (opts.emitter) {
+      opts.emitter.emit({
+        session_id: created.session_id,
+        type: "SessionStart",
+        payload: {
+          agent_name: opts.agentName ?? "soa-harness-runner",
+          agent_version: runnerVersion,
+          card_version: opts.cardVersion ?? "1.0",
+          resumed: false
+        }
+      });
     }
 
     return reply.code(201).send({

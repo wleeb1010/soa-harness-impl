@@ -25,6 +25,7 @@ import {
 } from "./audit/index.js";
 import { sessionStatePlugin, SessionPersister } from "./session/index.js";
 import { budgetProjectionPlugin, toolsRegisteredPlugin } from "./observability/index.js";
+import { eventsRecentPlugin, StreamEventEmitter } from "./stream/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -70,6 +71,9 @@ export interface BuildRunnerOptions {
     persister?: SessionPersister;
     toolPoolHash?: string;
     cardVersion?: string;
+    /** M3-T2 §14.1 StreamEvent emitter — fires SessionStart post-201. */
+    emitter?: StreamEventEmitter;
+    agentName?: string;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -119,6 +123,8 @@ export interface BuildRunnerOptions {
     markers?: import("./markers/index.js").MarkerEmitter;
     toolPoolHash?: string;
     cardVersion?: string;
+    /** M3-T2 §14.1 StreamEvent emitter — fires PermissionDecision post-commit. */
+    emitter?: StreamEventEmitter;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/sink-events
@@ -165,6 +171,16 @@ export interface BuildRunnerOptions {
     runnerVersion?: string;
     requestsPerMinute?: number;
     registeredAt?: Date;
+  };
+  /** M3-T2: GET /events/recent (§14.5) polling channel for the §14.1 25-type enum. */
+  eventsRecent?: {
+    emitter: StreamEventEmitter;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    defaultLimit?: number;
+    maxLimit?: number;
   };
   fastifyOptions?: FastifyServerOptions;
 }
@@ -214,7 +230,9 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.requestsPerMinute !== undefined ? { requestsPerMinute: sb.requestsPerMinute } : {}),
       ...(sb.persister !== undefined ? { persister: sb.persister } : {}),
       ...(sb.toolPoolHash !== undefined ? { toolPoolHash: sb.toolPoolHash } : {}),
-      ...(sb.cardVersion !== undefined ? { cardVersion: sb.cardVersion } : {})
+      ...(sb.cardVersion !== undefined ? { cardVersion: sb.cardVersion } : {}),
+      ...(sb.emitter !== undefined ? { emitter: sb.emitter } : {}),
+      ...(sb.agentName !== undefined ? { agentName: sb.agentName } : {})
     });
   }
 
@@ -284,6 +302,20 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
     });
   }
 
+  if (opts.eventsRecent !== undefined) {
+    const er = opts.eventsRecent;
+    await app.register(eventsRecentPlugin, {
+      emitter: er.emitter,
+      sessionStore: er.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: er.clock,
+      ...(er.runnerVersion !== undefined ? { runnerVersion: er.runnerVersion } : {}),
+      ...(er.requestsPerMinute !== undefined ? { requestsPerMinute: er.requestsPerMinute } : {}),
+      ...(er.defaultLimit !== undefined ? { defaultLimit: er.defaultLimit } : {}),
+      ...(er.maxLimit !== undefined ? { maxLimit: er.maxLimit } : {})
+    });
+  }
+
   if (opts.permissionsDecisions !== undefined) {
     const pd = opts.permissionsDecisions;
     const routeOpts: PermissionsDecisionsRouteOptions = {
@@ -303,7 +335,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.persister !== undefined ? { persister: pd.persister } : {}),
       ...(pd.markers !== undefined ? { markers: pd.markers } : {}),
       ...(pd.toolPoolHash !== undefined ? { toolPoolHash: pd.toolPoolHash } : {}),
-      ...(pd.cardVersion !== undefined ? { cardVersion: pd.cardVersion } : {})
+      ...(pd.cardVersion !== undefined ? { cardVersion: pd.cardVersion } : {}),
+      ...(pd.emitter !== undefined ? { emitter: pd.emitter } : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
   }

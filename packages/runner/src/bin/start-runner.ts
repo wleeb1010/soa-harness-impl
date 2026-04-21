@@ -24,6 +24,7 @@ import {
   type PersistedSideEffect
 } from "../session/index.js";
 import { composeReadiness } from "../probes/index.js";
+import { StreamEventEmitter } from "../stream/index.js";
 import {
   MarkerEmitter,
   parseCrashTestMarkersEnv,
@@ -290,6 +291,11 @@ async function main() {
     );
   }
 
+  // M3-T2 StreamEvent emitter — one instance shared across sessions-
+  // bootstrap, decisions, events-recent, and future T-1 Memory / T-4
+  // Budget emission sites.
+  const streamEmitter = new StreamEventEmitter({ clock });
+
   // Build the ResumeContext before startRunner so both the state-route
   // plugin (lazy-hydrate) and the post-boot scan share the same ctx.
   const cardVersionForResume =
@@ -356,7 +362,12 @@ async function main() {
             cardVersion:
               typeof (card as { version?: unknown }).version === "string"
                 ? (card as { version: string }).version
-                : "1.0"
+                : "1.0",
+            emitter: streamEmitter,
+            agentName:
+              typeof (card as { name?: unknown }).name === "string"
+                ? ((card as { name: string }).name)
+                : "soa-harness-runner"
           }
         }
       : {}),
@@ -380,6 +391,12 @@ async function main() {
       resumeCtx
     },
     budgetProjection: {
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
+    },
+    eventsRecent: {
+      emitter: streamEmitter,
       sessionStore,
       clock,
       runnerVersion: "1.0"
@@ -424,7 +441,8 @@ async function main() {
             cardVersion:
               typeof (card as { version?: unknown }).version === "string"
                 ? (card as { version: string }).version
-                : "1.0"
+                : "1.0",
+            emitter: streamEmitter
           }
         }
       : {}),
@@ -449,6 +467,7 @@ async function main() {
   console.log(`  GET http://${HOST}:${PORT}/audit/sink-events?after=<id>&limit=<n>`);
   console.log(`  GET http://${HOST}:${PORT}/budget/projection/<session_id>`);
   if (registry) console.log(`  GET http://${HOST}:${PORT}/tools/registered`);
+  console.log(`  GET http://${HOST}:${PORT}/events/recent?session_id=<id>&after=<eid>&limit=<n>`);
   if (registry) {
     console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
     console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);
