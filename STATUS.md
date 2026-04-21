@@ -1,5 +1,64 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M3 Week 1 Day 2 — T-2 StreamEvent + /events/recent live)
+
+- **Done:** `T-2` shipped. §14.1 closed 25-type enum emitter in
+  `packages/runner/src/stream/` with per-session monotonic sequence,
+  unique `evt_<12hex>` ids, FIFO eviction, defensive-copy snapshot.
+  `emit()` throws `StreamEventTypeInvalid` at emit-side when the type
+  isn't canonical — no unknown types leak to `/events/recent`. The
+  rev-1 plan exemplars (`SessionCreated`, `MemoryDegraded`,
+  `AuditSinkDegraded`, `BudgetWarning`) are explicitly absent from the
+  enum — `MemoryDegraded` rides `SessionEnd.payload.stop_reason` per
+  §8.3.1, not a standalone event type.
+  **Emission wired at two sites:** POST `/sessions` → `SessionStart`
+  (post persist-before-201); POST `/permissions/decisions` →
+  `PermissionDecision` (post committed-phase bracket-persist write).
+  Idempotent replay path does NOT re-emit. **GET
+  `/events/recent?session_id=<sid>&after=<evt_id>&limit=<n>`** live per
+  §14.5: schema-pinned body, 120 rpm, session-scoped auth, byte-identity
+  excluding `generated_at`, not-a-side-effect invariant, full
+  400/401/403/404/429/503 error matrix.
+- **Active:** `T-1` (Memory subsystem + `/memory/state`) next. `T-4`
+  (Budget full accounting), `T-5` (Dynamic MCP), `T-6` (Hooks) queue
+  for Week 2.
+- **Blocked:** None. Validator restart needed to pick up T-2 on
+  `:7700` — next STATUS confirms.
+- **Pin:** `5e97277` (unchanged).
+- **Scoreboard:** 358 repo-wide tests green (was 345, +13 for T-2:
+  8 stream-emitter + 5 events-recent). 23 M3 tests have impl coverage
+  (+1 for SV-STR-OBS-01).
+
+Live verified end-to-end (fresh smoke, pre-restart baseline):
+- POST `/sessions` → 201 + `SessionStart` sequence=0 with
+  `agent_name=soa-conformance-test-agent`, `card_version=1.0.0`,
+  `resumed:false`.
+- POST `/permissions/decisions` → 201 + `PermissionDecision`
+  sequence=1 with `prompt_id=prm_b5905a329f7a` (synthesized from audit
+  record id), `decision=allow`, `scope=once`,
+  `signer_kid=runtime-resolver`.
+- GET `/events/recent?session_id=<sid>` → schema-valid paginated body
+  listing both events in sequence order with stable `next_after`.
+
+<!-- machine-readable -->
+```json
+{
+  "week": 1,
+  "day": 2,
+  "t_tasks_landed": ["T-2"],
+  "t_tasks_active": ["T-1"],
+  "endpoints_live_added": ["/events/recent"],
+  "stream_event_emission_sites": [
+    {"endpoint": "POST /sessions", "event_type": "SessionStart"},
+    {"endpoint": "POST /permissions/decisions", "event_type": "PermissionDecision"}
+  ],
+  "spec_pin": "5e97277",
+  "tests_green_total": 358,
+  "m3_impl_coverage_estimate": 23
+}
+```
+<!-- /machine-readable -->
+
 ## 2026-04-21 (:7700 restarted against HEAD — T-3 endpoints now live)
 
 - **Done:** Bounced the long-running `:7700` process so commit `8b5d650`
