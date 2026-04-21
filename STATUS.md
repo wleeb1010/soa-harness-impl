@@ -1,5 +1,28 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (Week 3 day 1)
+
+### `/permissions/resolve` live on :7700 — validator cleared for SV-PERM-01 live path
+
+**Signal:** Week 3 Day 1 impl live: `GET /permissions/resolve?tool=<name>&session_id=<id>` online at port 7700. Pinned to spec `2eccf6e`. Validator cleared to flip SV-PERM-01 live assertion.
+
+- **Pin bump:** `fe74d39 → 2eccf6e` (adopt §10.3.1 + `permissions-resolve-response.schema.json`). `spec_manifest_sha256` changed to `838cacbc…`; re-hashed locally and matched the paste.
+- **Endpoint (`packages/runner/src/permission/resolve-route.ts`):**
+  - GET-only; `Cache-Control: no-store` on every response.
+  - **Auth:** `Authorization: Bearer <token>` — `401` missing, `403` wrong session, backed by `InMemorySessionStore` (sha256 of bearer is retained, not the cleartext).
+  - **Rate limit:** 60 req/min per bearer (configurable), `429` with `Retry-After` when exceeded.
+  - **Readiness gate:** `503 {status:"not-ready", reason:<§5.4 enum>}` when BootOrchestrator hasn't flipped green.
+  - **Response:** schema-conformant body via `resolvePermissionForQuery` — runs §10.3 steps 1–4 and records every step in `trace[]` (`passed|tightened|rejected|skipped`). Terminal decisions `AutoAllow | Prompt | Deny | CapabilityDenied | ConfigPrecedenceViolation`. `policy_endpoint_applied: false` when configured; omitted when unset (M1 does not invoke the external endpoint).
+- **Not-a-side-effect property:** two sequential queries leave `ToolRegistry` and `InMemorySessionStore` byte-identical; repeated queries produce identical response bodies (idempotent / pure). No audit writes, no StreamEvent emissions, no PermissionPrompt even when `decision=Prompt`.
+- **Bin wiring (`packages/runner/src/bin/start-runner.ts`):** `RUNNER_TOOLS_PATH` loads the Tool Registry; `RUNNER_DEMO_SESSION=<sid>:<bearer>` pre-registers a session for live smoke. When the registry is absent the endpoint is simply not registered (early-milestone deployments that don't expose the observability surface).
+- **Live smoke (127.0.0.1:7700):**
+  - Unauth → `401`
+  - `fs__write_file` under ReadOnly capability → `CapabilityDenied` + `trace[2].result=rejected`
+  - `fs__read_file` under ReadOnly → `AutoAllow`, full 4-step trace
+- **Tests:** 15 new in `permission-resolve.test.ts` — auth matrix (401/403/400/404), §10.3 step paths (Prompt / CapabilityDenied / ConfigPrecedenceViolation / policyEndpoint trace), rate limit 429 + Retry-After, readiness 503, not-a-side-effect property (registry + sessionStore invariant across queries), idempotence. Schema conformance tested via `@soa-harness/schemas` registry.
+
+138 tests green (30 core + 4 schemas + 104 runner across 11 files). Pinned at spec `2eccf6e`. Server on :7700 with five endpoints live: `/health`, `/ready`, `/.well-known/agent-card.{json,jws}`, `/permissions/resolve`.
+
 ## 2026-04-20 (Week 2 CLOSE)
 
 ### Week 2 closed — clock hook + boot wiring live, all four test IDs ready
