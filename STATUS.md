@@ -1,5 +1,31 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (T-03 + T-08 parallel — both shipped)
+
+### `POST /sessions request_decide_scope` live + session.schema activeMode-required pinned
+
+**Signal for validator:** T-03 shipped — `POST /sessions` now accepts `request_decide_scope:true` and grants the `permissions:decide:<session_id>` scope on the returned bearer. `RUNNER_DEMO_SESSION` stays as a convenience but is no longer required for the V-08 full matrix.
+
+**T-03 — `request_decide_scope` on POST /sessions (§12.6 impl-side extension):**
+- Request body gains optional `request_decide_scope: boolean` (default false).
+- When `true` → `SessionRecord.canDecide = true` → bearer carries `permissions:decide:<session_id>` in addition to the existing scopes.
+- When false / absent / explicit false → same behavior (canDecide=false).
+- Non-boolean → 400 malformed-request.
+- `sessions:create` scope never carried on session bearers (the bootstrap bearer is the only thing that can mint new sessions).
+- 5 new tests: omitted → false, `true` → true, explicit false → false, non-boolean → 400, bearer-hash round-trip (create → validate → getRecord.canDecide reflects).
+- Live verified: a session created with `request_decide_scope:true` drives `POST /permissions/decisions` → 201 with `audit_record_id=aud_99a2750a2f65`. A session created without the flag gets 403 on the same endpoint.
+
+**T-08 — session.schema.json refresh + resume-path migration:**
+- Schema already at the required shape at the current pin (1971e87); `activeMode` is in `required[]`. No regeneration needed — vendored copy was pulled fresh on the last codegen run.
+- New helper `migratePre1SessionFile(file, cardActiveMode)`: pure function that defaults `activeMode` from the Agent Card when a pre-1.0 session file is missing the field. Tags the migrated record with `_migrated: { from: "pre-1.0" }` so operators see the upgrade at resume time.
+- 6 new tests: full-shape round-trip, schema rejects missing-activeMode (regression for L-20 drift), enum acceptance, helper no-op when present, helper defaults from card when absent, pre-1.0 → migrated → schema-valid round-trip.
+
+**Audit-chain tests:** unchanged — the switch to schema-conformant audit rows happened in T-01 and continues to hold.
+
+190 tests green (30 core + 4 schemas + 156 runner across 17 files). Pinned at spec `1971e87`. Eight endpoints live on :7700.
+
+Punch list: T-06 / T-07 / T-05 remain (fixtures + loopback guard), then the Week 5 gate (hooks + `create-soa-agent` scaffold).
+
 ## 2026-04-20 (T-01 live — `/audit/records` paginated)
 
 ### `GET /audit/records` live on :7700 — V-06 + V-10 unblocked

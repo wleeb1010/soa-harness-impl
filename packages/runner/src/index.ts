@@ -76,6 +76,11 @@ export {
 } from "./clock/index.js";
 export { BootOrchestrator, type BootOrchestratorOptions } from "./boot/index.js";
 export {
+  migratePre1SessionFile,
+  type MigratedSession,
+  type PersistedSession
+} from "./session/index.js";
+export {
   AuditChain,
   auditTailPlugin,
   GENESIS,

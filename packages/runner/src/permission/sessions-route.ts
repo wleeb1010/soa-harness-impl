@@ -50,6 +50,13 @@ interface BootstrapRequest {
   requested_activeMode?: unknown;
   user_sub?: unknown;
   session_ttl_seconds?: unknown;
+  /**
+   * T-03: when `true`, the returned session_bearer carries the
+   * `permissions:decide:<session_id>` scope in addition to the default
+   * `stream:read:<sid>` + `permissions:resolve:<sid>` + `audit:read`.
+   * Default false. `sessions:create` is never carried on session bearers.
+   */
+  request_decide_scope?: unknown;
 }
 
 export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> = async (app, opts) => {
@@ -97,6 +104,15 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
       ttlSeconds = Math.min(ttlRaw, maxTtl);
     }
 
+    // T-03: request_decide_scope must be boolean when present.
+    const rawDecideScope = body.request_decide_scope;
+    if (rawDecideScope !== undefined && typeof rawDecideScope !== "boolean") {
+      return reply
+        .code(400)
+        .send({ error: "malformed-request", detail: "request_decide_scope must be a boolean" });
+    }
+    const canDecide = rawDecideScope === true;
+
     const requestedMode = requested as Capability;
     if (CAP_RANK[requestedMode] > CAP_RANK[opts.cardActiveMode]) {
       return reply.code(403).send({
@@ -109,7 +125,8 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
       activeMode: requestedMode,
       user_sub: userSub,
       ttlSeconds,
-      now: opts.clock()
+      now: opts.clock(),
+      canDecide
     });
 
     return reply.code(201).send({

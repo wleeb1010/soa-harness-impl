@@ -170,3 +170,94 @@ describe("POST /sessions — error paths", () => {
     await app.close();
   });
 });
+
+describe("POST /sessions — T-03 request_decide_scope extension", () => {
+  async function bootstrapAndGetRecord(
+    body: Record<string, unknown>
+  ): Promise<{ statusCode: number; store: InMemorySessionStore; session_id?: string }> {
+    const { app, store } = await newApp({ cardActiveMode: "DangerFullAccess" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { authorization: `Bearer ${BOOTSTRAP_BEARER}`, "content-type": "application/json" },
+      payload: JSON.stringify(body)
+    });
+    const parsed = res.statusCode === 201 ? JSON.parse(res.body) : null;
+    await app.close();
+    return {
+      statusCode: res.statusCode,
+      store,
+      ...(parsed ? { session_id: parsed.session_id as string } : {})
+    };
+  }
+
+  it("omitted request_decide_scope → session.canDecide === false (decide endpoint would 403)", async () => {
+    const { statusCode, store, session_id } = await bootstrapAndGetRecord({
+      requested_activeMode: "ReadOnly",
+      user_sub: "alice"
+    });
+    expect(statusCode).toBe(201);
+    const rec = store.getRecord(session_id!);
+    expect(rec?.canDecide).toBe(false);
+  });
+
+  it("request_decide_scope:true → session.canDecide === true", async () => {
+    const { statusCode, store, session_id } = await bootstrapAndGetRecord({
+      requested_activeMode: "DangerFullAccess",
+      user_sub: "alice",
+      request_decide_scope: true
+    });
+    expect(statusCode).toBe(201);
+    const rec = store.getRecord(session_id!);
+    expect(rec?.canDecide).toBe(true);
+  });
+
+  it("request_decide_scope:false explicit → same as omitted (canDecide === false)", async () => {
+    const { statusCode, store, session_id } = await bootstrapAndGetRecord({
+      requested_activeMode: "ReadOnly",
+      user_sub: "alice",
+      request_decide_scope: false
+    });
+    expect(statusCode).toBe(201);
+    const rec = store.getRecord(session_id!);
+    expect(rec?.canDecide).toBe(false);
+  });
+
+  it("non-boolean request_decide_scope → 400 malformed-request", async () => {
+    const { app } = await newApp({ cardActiveMode: "DangerFullAccess" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { authorization: `Bearer ${BOOTSTRAP_BEARER}`, "content-type": "application/json" },
+      payload: JSON.stringify({
+        requested_activeMode: "ReadOnly",
+        user_sub: "alice",
+        request_decide_scope: "yes" // not a boolean
+      })
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it("scope bookkeeping round-trips: session_bearer validates, getRecord reflects canDecide", async () => {
+    const { app, store } = await newApp({ cardActiveMode: "DangerFullAccess" });
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { authorization: `Bearer ${BOOTSTRAP_BEARER}`, "content-type": "application/json" },
+      payload: JSON.stringify({
+        requested_activeMode: "WorkspaceWrite",
+        user_sub: "bob",
+        request_decide_scope: true
+      })
+    });
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    const sid = body.session_id as string;
+    const bearer = body.session_bearer as string;
+    expect(store.validate(sid, bearer)).toBe(true);
+    expect(store.getRecord(sid)?.canDecide).toBe(true);
+    expect(store.getRecord(sid)?.activeMode).toBe("WorkspaceWrite");
+    await app.close();
+  });
+});
