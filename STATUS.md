@@ -1,5 +1,70 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M3 Week 1 Day 1 — pin bump + T-3 scaffolds + T-0 Memory MCP mock)
+
+- **Done:** Pin bumped to spec `5e97277` (L-33 rev 2 + L-34). Four new
+  schemas vendored (`memory-state-response`, `budget-projection-response`,
+  `tools-registered-response`, `events-recent-response`); registry now
+  loads 26 validators. **T-3 scaffolds**: `/budget/projection/:session_id`
+  + `/tools/registered` live with schema-conformant placeholder bodies
+  (real accounting in Week 2). **T-0 Memory MCP mock**: new workspace
+  package `@soa-harness-tools/memory-mcp-mock` implementing the §8.1
+  three-tool protocol over HTTP with env-controlled timeout + error
+  injection; loads pinned corpus-seed.json for deterministic scoring.
+- **Active:** T-1 (Memory subsystem + `/memory/state`) + T-2 (StreamEvent
+  25-type emission + `/events/recent`) — both start Week 1 Day 2.
+- **Blocked:** None.
+- **Pin:** `5e97277` (manifest `d211c3c9…103e`).
+- **Scoreboard:** 345 repo-wide tests green (was 332 + 13 new: 6 T-3
+  scaffold tests + 7 T-0 mock tests). 22 M3 tests have impl coverage —
+  well inside Week 1's target of 22.
+
+Live verified:
+- `/budget/projection/<sid>` → 200 schema-valid body with
+  `cold_start_baseline_active:true` + `safety_factor:1.15`.
+- `/tools/registered` → 200 with `registry_version` = sha256 of
+  JCS-canonicalized tools array.
+- Memory MCP mock on `127.0.0.1:8001` → `/health`=200; POST
+  `/search_memories{"query":"audit chain","limit":2}` → `mem_seed_0016`
+  ranks top with `composite_score:0.742` against the pinned seed corpus.
+
+<!-- machine-readable -->
+```json
+{
+  "week": 1,
+  "day": 1,
+  "t_tasks_landed": ["T-3", "T-0"],
+  "t_tasks_active": ["T-1", "T-2"],
+  "endpoints_live": [
+    "/health",
+    "/ready",
+    "/.well-known/agent-card.json",
+    "/.well-known/agent-card.jws",
+    "/permissions/resolve",
+    "/permissions/decisions",
+    "/sessions",
+    "/sessions/:session_id/state",
+    "/audit/tail",
+    "/audit/records",
+    "/audit/sink-events",
+    "/budget/projection/:session_id",
+    "/tools/registered"
+  ],
+  "memory_mcp_mock_endpoint": "http://127.0.0.1:8001",
+  "spec_pin": "5e97277",
+  "spec_manifest_sha256": "d211c3c94436fb43afc5c616284f35b6993d2fdfb9bcd45af09a8696aef3103e",
+  "tests_green": {
+    "core": 30,
+    "schemas": 4,
+    "runner": 298,
+    "create_soa_agent": 6,
+    "memory_mcp_mock": 7,
+    "total": 345
+  }
+}
+```
+<!-- /machine-readable -->
+
 ## 2026-04-21 (SV-SESS-02 + SV-SESS-09: resume_session wired at both triggers)
 
 ### Both L-29 triggers now invoke the full §12.5 algorithm — target 30/0/2
