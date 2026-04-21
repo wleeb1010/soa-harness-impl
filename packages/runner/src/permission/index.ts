@@ -30,3 +30,7 @@ export {
   type PermissionsResolveRouteOptions
 } from "./resolve-route.js";
 export { sessionsBootstrapPlugin, type SessionsRouteOptions } from "./sessions-route.js";
+export {
+  permissionsDecisionsPlugin,
+  type PermissionsDecisionsRouteOptions
+} from "./decisions-route.js";

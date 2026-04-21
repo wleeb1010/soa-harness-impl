@@ -127,8 +127,10 @@ async function main() {
     const activeMode = (mode && ["ReadOnly", "WorkspaceWrite", "DangerFullAccess"].includes(mode)
       ? mode
       : "WorkspaceWrite") as Capability;
-    sessionStore.register(sid, bearer, { activeMode });
-    console.log(`[start-runner] pre-registered demo session ${sid} (activeMode=${activeMode})`);
+    sessionStore.register(sid, bearer, { activeMode, canDecide: true });
+    console.log(
+      `[start-runner] pre-registered demo session ${sid} (activeMode=${activeMode}, canDecide=true)`
+    );
   }
 
   const registryPath = TOOLS_FIXTURE ?? TOOLS_PATH ?? (existsSync("./tools.json") ? "./tools.json" : undefined);
@@ -185,7 +187,25 @@ async function main() {
       sessionStore,
       clock,
       runnerVersion: "1.0"
-    }
+    },
+    ...(registry
+      ? {
+          permissionsDecisions: {
+            registry,
+            sessionStore,
+            chain,
+            clock,
+            activeCapability,
+            ...(card.permissions?.toolRequirements !== undefined
+              ? { toolRequirements: card.permissions.toolRequirements }
+              : {}),
+            ...(card.permissions?.policyEndpoint !== undefined
+              ? { policyEndpoint: card.permissions.policyEndpoint }
+              : {}),
+            runnerVersion: "1.0"
+          }
+        }
+      : {})
   });
 
   const addr = app.server.address();
@@ -196,7 +216,10 @@ async function main() {
   console.log(`  GET http://${HOST}:${PORT}/health`);
   console.log(`  GET http://${HOST}:${PORT}/ready`);
   console.log(`  GET http://${HOST}:${PORT}/audit/tail`);
-  if (registry) console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
+  if (registry) {
+    console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
+    console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);
+  }
   if (BOOTSTRAP_BEARER) console.log(`  POST http://${HOST}:${PORT}/sessions   (bootstrap bearer via SOA_RUNNER_BOOTSTRAP_BEARER)`);
 
   try {

@@ -5,10 +5,13 @@ import { probesPlugin, type ReadinessProbe } from "./probes/index.js";
 import {
   permissionsResolvePlugin,
   sessionsBootstrapPlugin,
+  permissionsDecisionsPlugin,
   type PermissionsResolveRouteOptions,
+  type PermissionsDecisionsRouteOptions,
   type SessionStore,
   InMemorySessionStore
 } from "./permission/index.js";
+import type { HandlerKeyResolver, KidRevokedCheck } from "./attestation/index.js";
 import type { ToolRegistry } from "./registry/index.js";
 import type { Capability } from "./permission/index.js";
 import type { Control } from "./registry/index.js";
@@ -63,6 +66,26 @@ export interface BuildRunnerOptions {
     chain: AuditChain;
     sessionStore: SessionStore;
     clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+  };
+  /**
+   * Optional — when present the Runner exposes POST /permissions/decisions
+   * per Core §10.3.2. Requires a ToolRegistry, an AuditChain (shared with
+   * auditTail for a consistent view of the hash chain), and a SessionStore.
+   * resolvePdaVerifyKey is optional; omit when no PDA handler keys are enrolled
+   * (all PDA submissions will coerce to Deny per §10.3.2).
+   */
+  permissionsDecisions?: {
+    registry: ToolRegistry;
+    sessionStore: SessionStore;
+    chain: AuditChain;
+    clock: Clock;
+    activeCapability: Capability;
+    toolRequirements?: Record<string, Control>;
+    policyEndpoint?: string;
+    resolvePdaVerifyKey?: HandlerKeyResolver;
+    isPdaKidRevoked?: KidRevokedCheck;
     runnerVersion?: string;
     requestsPerMinute?: number;
   };
@@ -125,6 +148,25 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(at.runnerVersion !== undefined ? { runnerVersion: at.runnerVersion } : {}),
       ...(at.requestsPerMinute !== undefined ? { requestsPerMinute: at.requestsPerMinute } : {})
     });
+  }
+
+  if (opts.permissionsDecisions !== undefined) {
+    const pd = opts.permissionsDecisions;
+    const routeOpts: PermissionsDecisionsRouteOptions = {
+      registry: pd.registry,
+      sessionStore: pd.sessionStore,
+      chain: pd.chain,
+      readiness: readiness ?? { check: () => null },
+      clock: pd.clock,
+      activeCapability: pd.activeCapability,
+      ...(pd.toolRequirements !== undefined ? { toolRequirements: pd.toolRequirements } : {}),
+      ...(pd.policyEndpoint !== undefined ? { policyEndpoint: pd.policyEndpoint } : {}),
+      ...(pd.resolvePdaVerifyKey !== undefined ? { resolvePdaVerifyKey: pd.resolvePdaVerifyKey } : {}),
+      ...(pd.isPdaKidRevoked !== undefined ? { isPdaKidRevoked: pd.isPdaKidRevoked } : {}),
+      ...(pd.runnerVersion !== undefined ? { runnerVersion: pd.runnerVersion } : {}),
+      ...(pd.requestsPerMinute !== undefined ? { requestsPerMinute: pd.requestsPerMinute } : {})
+    };
+    await app.register(permissionsDecisionsPlugin, routeOpts);
   }
 
   return app;

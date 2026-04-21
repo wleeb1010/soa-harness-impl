@@ -19,6 +19,12 @@ export interface SessionRecord {
   user_sub: string;
   created_at: Date;
   expires_at: Date;
+  /**
+   * True when the bearer carries the `permissions:decide:<session_id>` scope
+   * granted by T-03 `request_decide_scope:true` on POST /sessions. Required
+   * by /permissions/decisions (§10.3.2). Default false.
+   */
+  canDecide: boolean;
 }
 
 export interface CreateSessionInput {
@@ -28,6 +34,8 @@ export interface CreateSessionInput {
   now: Date;
   /** Optional explicit bearer (for tests). When omitted, the store mints a random one. */
   bearer?: string;
+  /** Grant permissions:decide:<session_id> scope on the returned bearer. T-03. */
+  canDecide?: boolean;
 }
 
 export interface CreatedSession {
@@ -48,7 +56,13 @@ export class InMemorySessionStore implements SessionStore {
   register(
     session_id: string,
     bearer: string,
-    opts?: { activeMode?: Capability; user_sub?: string; expires_at?: Date; created_at?: Date }
+    opts?: {
+      activeMode?: Capability;
+      user_sub?: string;
+      expires_at?: Date;
+      created_at?: Date;
+      canDecide?: boolean;
+    }
   ): void {
     const created_at = opts?.created_at ?? new Date();
     const expires_at = opts?.expires_at ?? new Date(created_at.getTime() + 60 * 60 * 1000);
@@ -57,7 +71,8 @@ export class InMemorySessionStore implements SessionStore {
       activeMode: opts?.activeMode ?? "WorkspaceWrite",
       user_sub: opts?.user_sub ?? "test-user",
       created_at,
-      expires_at
+      expires_at,
+      canDecide: opts?.canDecide ?? false
     };
     this.records.set(session_id, { rec, bearerHash: this.hash(bearer) });
   }
@@ -71,7 +86,8 @@ export class InMemorySessionStore implements SessionStore {
       activeMode: input.activeMode,
       user_sub: input.user_sub,
       created_at: input.now,
-      expires_at: new Date(input.now.getTime() + input.ttlSeconds * 1000)
+      expires_at: new Date(input.now.getTime() + input.ttlSeconds * 1000),
+      canDecide: input.canDecide ?? false
     };
     this.records.set(session_id, { rec, bearerHash: this.hash(session_bearer) });
     return { session_id, session_bearer, record: rec };
