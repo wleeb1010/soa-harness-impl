@@ -1,0 +1,96 @@
+name: create-soa-agent-demo
+
+# Measures the cold-cache "npx create-soa-agent → first audit row" time on
+# Linux / macOS / Windows per the Week 5b exit-gate. Fails the PR if any
+# platform exceeds 120s (target is ≤ 90s on 2026-era GH runners).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  demo-cold-cache:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout impl
+        uses: actions/checkout@v4
+        with:
+          path: soa-harness-impl
+
+      - name: Read pinned spec commit
+        id: pin
+        shell: bash
+        working-directory: soa-harness-impl
+        run: |
+          SHA=$(node -e "console.log(JSON.parse(require('fs').readFileSync('soa-validate.lock','utf8')).spec_commit_sha)")
+          echo "spec_sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout spec at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: wleeb1010/soa-harness-specification
+          ref: ${{ steps.pin.outputs.spec_sha }}
+          path: soa-harness=specification
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Install + build
+        working-directory: soa-harness-impl
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm -r build
+
+      - name: Cold-cache demo timing
+        id: timer
+        shell: bash
+        working-directory: soa-harness-impl
+        run: |
+          set -e
+          START=$(node -e "console.log(Date.now())")
+          node packages/create-soa-agent/dist/cli.js demo-agent --demo
+          cd demo-agent
+          # Start the demo in background; it produces the first audit row
+          # immediately after /ready flips green.
+          node ./start.mjs > demo.log 2>&1 &
+          DEMO_PID=$!
+          # Poll /audit/tail until record_count > 0.
+          for i in $(seq 1 60); do
+            sleep 1
+            BODY=$(curl -s -H "Authorization: Bearer ${SOA_RUNNER_BOOTSTRAP_BEARER:-demo-bootstrap-bearer-replace-me}" http://127.0.0.1:7700/audit/tail || true)
+            COUNT=$(echo "$BODY" | node -e "try{console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).record_count||0)}catch{console.log(0)}")
+            if [ "$COUNT" -gt 0 ]; then
+              break
+            fi
+          done
+          END=$(node -e "console.log(Date.now())")
+          ELAPSED_MS=$((END - START))
+          echo "elapsed_ms=$ELAPSED_MS" >> "$GITHUB_OUTPUT"
+          echo "[create-soa-agent-demo] $ELAPSED_MS ms (target ≤ 90000, ceiling 120000)"
+          kill $DEMO_PID 2>/dev/null || true
+          if [ "$ELAPSED_MS" -gt 120000 ]; then
+            echo "::error::cold-cache demo exceeded 120000ms ceiling: ${ELAPSED_MS}ms"
+            exit 1
+          fi
+
+      - name: Upload demo log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-log-${{ matrix.os }}
+          path: |
+            soa-harness-impl/demo-agent/demo.log

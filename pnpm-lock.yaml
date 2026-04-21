@@ -33,7 +33,24 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
 
-  packages/create-soa-agent: {}
+  packages/create-soa-agent:
+    dependencies:
+      '@peculiar/x509':
+        specifier: ^2.0.0
+        version: 2.0.0
+      '@soa-harness/core':
+        specifier: workspace:*
+        version: link:../core
+      '@soa-harness/runner':
+        specifier: workspace:*
+        version: link:../runner
+      reflect-metadata:
+        specifier: ^0.2.0
+        version: 0.2.2
+    devDependencies:
+      '@soa-harness/schemas':
+        specifier: workspace:*
+        version: link:../schemas
 
   packages/runner:
     dependencies:

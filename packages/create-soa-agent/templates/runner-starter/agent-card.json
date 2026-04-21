@@ -1,0 +1,24 @@
+{
+  "soaHarnessVersion": "1.0",
+  "name": "demo-agent",
+  "version": "1.0.0",
+  "description": "Minimal ReadOnly demo agent produced by `create-soa-agent`. Swap in your own Card before shipping anywhere non-local.",
+  "url": "https://runner.local.demo",
+  "protocolVersion": "a2a-0.3",
+  "agentType": "general-purpose",
+  "permissions": {
+    "activeMode": "ReadOnly",
+    "handler": "Interactive"
+  },
+  "security": {
+    "oauthScopes": [],
+    "trustAnchors": [
+      {
+        "issuer": "CN=SOA-Harness Demo Self-Signed, O=create-soa-agent, C=US",
+        "spki_sha256": "__CLI_REPLACES_AT_INSTALL_________________________________________",
+        "uri": "https://ca.local.demo/",
+        "publisher_kid": "soa-demo-publisher-v1.0"
+      }
+    ]
+  }
+}

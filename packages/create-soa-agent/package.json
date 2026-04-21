@@ -13,11 +13,26 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "templates"],
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "bin": {
+    "create-soa-agent": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
+  },
+  "dependencies": {
+    "@peculiar/x509": "^2.0.0",
+    "@soa-harness/core": "workspace:*",
+    "@soa-harness/runner": "workspace:*",
+    "reflect-metadata": "^0.2.0"
+  },
+  "devDependencies": {
+    "@soa-harness/schemas": "workspace:*"
   }
 }

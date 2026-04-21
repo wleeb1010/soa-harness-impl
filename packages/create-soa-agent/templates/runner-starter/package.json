@@ -1,0 +1,14 @@
+{
+  "name": "__CLI_REPLACES_AT_INSTALL__",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo SOA-Harness agent scaffolded by create-soa-agent.",
+  "main": "./start.mjs",
+  "scripts": {
+    "start": "node ./start.mjs"
+  },
+  "dependencies": {
+    "@soa-harness/runner": "workspace:*"
+  }
+}
