@@ -10,6 +10,7 @@ import { BootOrchestrator } from "../boot/index.js";
 import { InMemorySessionStore, type Capability } from "../permission/index.js";
 import { loadToolRegistry } from "../registry/index.js";
 import { AuditChain } from "../audit/index.js";
+import { assertBootstrapBearerListenerSafe } from "../guards/index.js";
 import type { TrustAnchor } from "../card/verify.js";
 import type { Control } from "../registry/index.js";
 
@@ -77,14 +78,29 @@ interface CardShape {
 }
 
 async function main() {
+  // T-05: refuse startup when SOA_RUNNER_BOOTSTRAP_BEARER is set AND TLS is
+  // binding a non-loopback host. Full socket separation is M2.
+  // (Current demo bin doesn't actually enable TLS — RUNNER_SIGNING_KEY +
+  // RUNNER_X5C together flip the flag. The guard checks before startRunner.)
+  const tlsEnabled = Boolean(SIGNING_KEY_PATH && CERT_CHAIN_PATH);
+  assertBootstrapBearerListenerSafe({ bearer: BOOTSTRAP_BEARER, tlsEnabled, host: HOST });
+
   const clock = createClock({
     envClock: process.env.RUNNER_TEST_CLOCK,
     nodeEnv: process.env.NODE_ENV,
-    tlsEnabled: false,
+    tlsEnabled,
     host: HOST
   });
 
-  const trust = loadInitialTrust({ path: TRUST_PATH, now: clock() });
+  // T-07: accept either RUNNER_INITIAL_TRUST (canonical) or the legacy
+  // RUNNER_TRUST_PATH. Both map to the §5.3 initial-trust.json source.
+  const trustPath = process.env.RUNNER_INITIAL_TRUST ?? TRUST_PATH;
+  const expectedPublisherKid = process.env.RUNNER_EXPECTED_PUBLISHER_KID;
+  const trust = loadInitialTrust({
+    path: trustPath,
+    now: clock(),
+    ...(expectedPublisherKid !== undefined ? { expectedPublisherKid } : {})
+  });
   const { privateKey, x5c } = await resolveKeyAndX5c(trust.publisher_kid);
 
   // Card source: when RUNNER_CARD_FIXTURE is set, load the pinned conformance
@@ -106,6 +122,29 @@ async function main() {
     card = JSON.parse(readFileSync(CARD_PATH, "utf8")) as CardShape;
   }
   const anchors = card.security?.trustAnchors ?? [];
+
+  // T-06 — RUNNER_CARD_JWS: when set, verify a pre-supplied detached JWS
+  // against the loaded card + anchors at boot. Verification failure aborts
+  // startup with a non-zero exit (HR-12: tampered-card rejection).
+  const CARD_JWS_PATH = process.env.RUNNER_CARD_JWS;
+  if (CARD_JWS_PATH) {
+    const { loadAndVerifyExternalCardJws } = await import("../card/external-jws-loader.js");
+    const { jcsBytes } = await import("@soa-harness/core");
+    try {
+      await loadAndVerifyExternalCardJws({
+        jwsPath: CARD_JWS_PATH,
+        canonicalBody: jcsBytes(card),
+        trustAnchors: anchors
+      });
+      console.log(`[start-runner] RUNNER_CARD_JWS verified against card trust anchors`);
+    } catch (err) {
+      console.error(
+        `[start-runner] FATAL: RUNNER_CARD_JWS verification failed (HR-12 / CardSignatureFailed): `,
+        err
+      );
+      process.exit(1);
+    }
+  }
 
   const crl = new CrlCache({
     fetcher: DEMO_MODE

@@ -21,7 +21,7 @@ export interface InitialTrust {
 export type BootstrapFailReason =
   | "bootstrap-missing"
   | "bootstrap-malformed"
-  | "bootstrap-schema-invalid"
+  | "bootstrap-invalid-schema"
   | "bootstrap-expired"
   | "bootstrap-channel-unsupported";
 

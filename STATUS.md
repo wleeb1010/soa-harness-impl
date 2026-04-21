@@ -1,5 +1,32 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (T-05 + T-06 + T-07 — punch list cleared)
+
+### All seven punch-list items shipped — Week 5 gate opens
+
+**Signal:** T-05, T-06, T-07 all landed. V-09 (HR-12 tampered-card) + V-12 (SV-BOOT-01 negatives) flip SKIP → PASS.
+
+- **T-07 — `RUNNER_INITIAL_TRUST` loader + SV-BOOT-01 negatives**
+  - `loadInitialTrust` now accepts `expectedChannel?` (undefined default — no channel gate) and `expectedPublisherKid?` (SDK-pin match; mismatch → `bootstrap-missing`).
+  - Closed-set failure reason rename: `bootstrap-schema-invalid` → `bootstrap-invalid-schema` (matches the L-20 catalog).
+  - Bin accepts either `RUNNER_INITIAL_TRUST` (canonical) or legacy `RUNNER_TRUST_PATH`; `RUNNER_EXPECTED_PUBLISHER_KID` wires the SDK-pin gate.
+  - 4 new negatives against pinned `test-vectors/initial-trust/*.json`: valid → clean boot; expired → `bootstrap-expired`; channel-mismatch → `bootstrap-invalid-schema`; mismatched-publisher-kid → `bootstrap-missing`.
+
+- **T-06 — `RUNNER_CARD_JWS` loader for HR-12 tampered-card rejection**
+  - New `loadAndVerifyExternalCardJws({jwsPath, canonicalBody, trustAnchors})` reads a pre-supplied detached JWS, verifies against `verifyAgentCardJws`, throws `CardSignatureFailed` on failure.
+  - Bin wires it in: when `RUNNER_CARD_JWS` is set, verifies at boot. Failure → loud log + `process.exit(1)` (HR-12 fail-closed).
+  - 4 tests: tampered fixture rejects, structurally-invalid JWS → `detached-jws-malformed`, missing file → same, happy regression (own-key-signed JWS + matching anchor passes).
+  - Live-verified subprocess: `RUNNER_CARD_JWS=<tampered>` → process aborts with `CardSignatureFailed reason=x5c-missing` + exit non-zero. (Spec fixture's protected header lacks `x5c` so the first failure point is `x5c-missing`, not `signature-invalid`; substantive behavior — refusal to boot — is correct.)
+
+- **T-05 — `SOA_RUNNER_BOOTSTRAP_BEARER` public-listener guard**
+  - New `assertBootstrapBearerListenerSafe({bearer, tlsEnabled, host})` throws `BootstrapBearerOnPublicListener` when the env var is set AND TLS binds a non-loopback host. 0.0.0.0 counts as non-loopback.
+  - Bin calls the guard before `startRunner`. Current demo deployment (no TLS) trips no guard; a production deployment that accidentally combines `SOA_RUNNER_BOOTSTRAP_BEARER` with TLS on a DNS name aborts before the listener binds.
+  - 6 tests: env + TLS + DNS host → throws; + 0.0.0.0 → throws; + 127.0.0.1 → silent; + ::1/localhost → silent; env unset → silent regardless of bind; env + no TLS → silent (per M1 scope).
+
+204 tests green (30 core + 4 schemas + 170 runner across 20 files). Pinned at spec `1971e87`. Eight endpoints live on :7700.
+
+**Punch list cleared.** Week 5 gate now open: 5a hooks + 5b `create-soa-agent` scaffold.
+
 ## 2026-04-20 (T-03 + T-08 parallel — both shipped)
 
 ### `POST /sessions request_decide_scope` live + session.schema activeMode-required pinned

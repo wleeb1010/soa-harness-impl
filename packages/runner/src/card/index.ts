@@ -23,3 +23,8 @@ export {
   type LoadConformanceCardOptions,
   type LoadedConformanceCard
 } from "./conformance-loader.js";
+export {
+  loadAndVerifyExternalCardJws,
+  type LoadExternalCardJwsOptions,
+  type LoadedExternalJws
+} from "./external-jws-loader.js";

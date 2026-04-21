@@ -4,12 +4,24 @@ import { HostHardeningInsufficient, type BootstrapChannel, type InitialTrust } f
 
 export interface LoadInitialTrustOptions {
   path: string;
+  /**
+   * When set, reject the file unless its `channel` matches. Omit to accept any
+   * value from the §5.3 enum (sdk-pinned / operator-bundled / dnssec-txt);
+   * schema validation still runs, so an out-of-enum value still fails with
+   * `bootstrap-invalid-schema`.
+   */
   expectedChannel?: BootstrapChannel;
+  /**
+   * When set, the publisher_kid in the file MUST match this value. Any
+   * mismatch fails with `bootstrap-missing` — the Runner is SDK-pinned to a
+   * specific publisher and the bootstrap file points at a different identity.
+   */
+  expectedPublisherKid?: string;
   now?: Date;
 }
 
 export function loadInitialTrust(opts: LoadInitialTrustOptions): InitialTrust {
-  const { path, expectedChannel = "sdk-pinned", now = new Date() } = opts;
+  const { path, expectedChannel, expectedPublisherKid, now = new Date() } = opts;
 
   if (!existsSync(path)) {
     throw new HostHardeningInsufficient(
@@ -45,7 +57,7 @@ export function loadInitialTrust(opts: LoadInitialTrustOptions): InitialTrust {
       .map((e) => `${e.instancePath || "<root>"} ${e.message ?? ""}`.trim())
       .join("; ");
     throw new HostHardeningInsufficient(
-      "bootstrap-schema-invalid",
+      "bootstrap-invalid-schema",
       `initial-trust.json at ${path} fails initial-trust.schema.json validation`,
       detail || "(no detail from ajv)"
     );
@@ -71,11 +83,19 @@ export function loadInitialTrust(opts: LoadInitialTrustOptions): InitialTrust {
     }
   }
 
-  if (trust.channel !== undefined && trust.channel !== expectedChannel) {
+  if (expectedChannel !== undefined && trust.channel !== undefined && trust.channel !== expectedChannel) {
     throw new HostHardeningInsufficient(
       "bootstrap-channel-unsupported",
       `initial-trust.json declares channel=${trust.channel} but Runner is configured for ${expectedChannel}`,
-      "M1 only supports the SDK-pinned bootstrap channel; operator-bundled and DNSSEC-TXT are deferred."
+      "Only the Runner's configured bootstrap channel is accepted when expectedChannel is pinned."
+    );
+  }
+
+  if (expectedPublisherKid !== undefined && trust.publisher_kid !== expectedPublisherKid) {
+    throw new HostHardeningInsufficient(
+      "bootstrap-missing",
+      `initial-trust.json publisher_kid=${trust.publisher_kid} does not match the pinned ${expectedPublisherKid}`,
+      "SDK-pinned bootstrap MUST match the compile-time publisher identity; mismatch is an attempt to substitute a different trust root."
     );
   }
 

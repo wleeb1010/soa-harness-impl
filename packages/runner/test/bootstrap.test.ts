@@ -72,7 +72,7 @@ describe("loadInitialTrust", () => {
     }
   });
 
-  it("fails with bootstrap-schema-invalid when a required field is missing", () => {
+  it("fails with bootstrap-invalid-schema when a required field is missing", () => {
     const missing = { ...VALID_TRUST };
     delete (missing as Record<string, unknown>).publisher_kid;
     const bad = withTempTrust(JSON.stringify(missing));
@@ -80,7 +80,7 @@ describe("loadInitialTrust", () => {
       loadInitialTrust({ path: bad.path });
     } catch (err) {
       expect(err).toBeInstanceOf(HostHardeningInsufficient);
-      expect((err as HostHardeningInsufficient).reason).toBe("bootstrap-schema-invalid");
+      expect((err as HostHardeningInsufficient).reason).toBe("bootstrap-invalid-schema");
     } finally {
       bad.dispose();
     }
@@ -99,17 +99,19 @@ describe("loadInitialTrust", () => {
     }
   });
 
-  it("fails with bootstrap-channel-unsupported when channel mismatches expected", () => {
+  it("fails with bootstrap-channel-unsupported when expectedChannel is pinned and mismatches", () => {
     const other = { ...VALID_TRUST, channel: "operator-bundled" };
     const bad = withTempTrust(JSON.stringify(other));
     try {
-      loadInitialTrust({ path: bad.path });
+      loadInitialTrust({ path: bad.path, expectedChannel: "sdk-pinned" });
     } catch (err) {
       expect(err).toBeInstanceOf(HostHardeningInsufficient);
       expect((err as HostHardeningInsufficient).reason).toBe("bootstrap-channel-unsupported");
+      return;
     } finally {
       bad.dispose();
     }
+    throw new Error("expected HostHardeningInsufficient");
   });
 
   it("accepts a trust file without a channel field (defaults to expected)", () => {

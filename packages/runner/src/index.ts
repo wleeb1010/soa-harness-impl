@@ -95,3 +95,8 @@ export {
   type CreatedSession,
   type SessionRecord
 } from "./permission/index.js";
+export {
+  assertBootstrapBearerListenerSafe,
+  BootstrapBearerOnPublicListener,
+  type BootstrapBearerGuardInputs
+} from "./guards/index.js";
