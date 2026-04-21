@@ -100,15 +100,12 @@ export async function scanAndResumeInProgressSessions(
         outcomes.push({ session_id: sessionId, status, action: "skipped-terminal" });
         continue;
       }
-      if (!IN_PROGRESS_STATUSES.has(status)) {
-        outcomes.push({
-          session_id: sessionId,
-          status,
-          action: "skipped-unknown-status",
-          detail: `status "${status}" not in §12.1 enum`
-        });
-        continue;
-      }
+      // Any non-terminal value MUST be in the §12.1 IN_PROGRESS enum; an
+      // unknown string is a schema violation. Route through resumeSession
+      // so the post-migration schema check in step 1 catches it as
+      // SessionFormatIncompatible — classified under failed-read so the
+      // bin's scanHasHardFailure trips and refuses to open the listener.
+      // (A bogus status isn't "unknown" — it's invalid.)
 
       try {
         const resumed = await resumeSession(opts.persister, sessionId, opts.resumeCtx);
@@ -119,12 +116,38 @@ export async function scanAndResumeInProgressSessions(
           detail: `${resumed.sideEffects.length} side_effect(s) processed`
         });
       } catch (err) {
+        // SessionFormatIncompatible from step 1 is treated as a format
+        // failure (failed-read reason=<specific>), so scanHasHardFailure
+        // trips; CardVersionDrift / ToolPoolStale stay as failed-resume.
+        if (err instanceof SessionFormatIncompatible) {
+          outcomes.push({
+            session_id: sessionId,
+            status,
+            action: "failed-read",
+            detail: err.reason
+          });
+          continue;
+        }
         outcomes.push({
           session_id: sessionId,
           status,
           action: "failed-resume",
           detail: describeResumeFailure(err)
         });
+        // §12.5 step 2: CardVersionDrift terminates the session. Mark the
+        // file Failed so a subsequent scan treats it as skipped-terminal
+        // rather than retrying the drifted comparison indefinitely. Best-
+        // effort; a write failure is logged via onRefreshError semantics
+        // but doesn't abort the scan.
+        if (err instanceof CardVersionDrift) {
+          try {
+            await markSessionFailedOnDisk(opts.persister, sessionId, clock);
+          } catch (writeErr) {
+            log(
+              `[boot-scan] failed to mark ${sessionId} as Failed post-CardVersionDrift: ${String(writeErr)}`
+            );
+          }
+        }
       }
     } catch (err) {
       if (err instanceof SessionFormatIncompatible) {
@@ -184,6 +207,52 @@ function describeResumeFailure(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
 }
+
+/**
+ * §12.5 step 2 termination: write the drifted session back with
+ * workflow.status="Failed". Uses the lenient read path so a pre-1.0 file
+ * still loads, then migrates + patches + writes. If the read itself fails
+ * (corrupted), the caller's best-effort swallow handles it.
+ */
+async function markSessionFailedOnDisk(
+  persister: SessionPersister,
+  sessionId: string,
+  clock: () => Date
+): Promise<void> {
+  const raw = await persister.readSessionForResume(sessionId);
+  const workflow = raw.workflow as { status?: string } | undefined;
+  if (workflow) {
+    workflow.status = "Failed";
+  } else {
+    (raw as { workflow: unknown }).workflow = {
+      task_id: `bootstrap-${sessionId}`,
+      status: "Failed",
+      side_effects: [],
+      checkpoint: {}
+    };
+  }
+  (raw as { _terminated_at?: string })._terminated_at = clock().toISOString();
+  (raw as { _termination_reason?: string })._termination_reason = "CardVersionDrift";
+  await persister.writeSession(raw);
+}
+
+/**
+ * True when any scan outcome represents a hard format incompatibility that
+ * the operator MUST see before the Runner accepts new traffic. Bin inspects
+ * this post-scan to decide whether to exit non-zero (§12.5 L-29 trigger).
+ */
+export function scanHasHardFailure(outcomes: ScanOutcomeEntry[]): boolean {
+  return outcomes.some(
+    (o) => o.action === "failed-read" && o.detail !== undefined && HARD_FAILURE_REASONS.has(o.detail)
+  );
+}
+
+const HARD_FAILURE_REASONS: ReadonlySet<string> = new Set([
+  "corrupted-json",
+  "partial-write-detected",
+  "schema-violation",
+  "bad-format-version"
+]);
 
 function summarize(outcomes: ScanOutcomeEntry[]): string {
   const counts = new Map<string, number>();

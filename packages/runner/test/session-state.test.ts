@@ -307,6 +307,48 @@ describe("GET /sessions/:session_id/state — §12.5.1", () => {
     }
   });
 
+  it("SV-SESS-09: lazy-hydrate with resumeCtx catches CardVersionDrift → 409", async () => {
+    const dir = tmpSessionDir();
+    const persister = new SessionPersister({ sessionDir: dir });
+    const store = new InMemorySessionStore();
+    const app = fastify();
+    const resumeCtx = {
+      currentCardVersion: "1.1.0",
+      currentToolPoolHash: "sha256:dontcare",
+      toolCompensation: () => ({ canCompensate: false }),
+      replayPending: async () => null,
+      compensate: async () => undefined,
+      cardActiveMode: "WorkspaceWrite" as const,
+      clock: () => FROZEN_NOW
+    };
+    await app.register(sessionStatePlugin, {
+      persister,
+      sessionStore: store,
+      readiness: buildReadiness(null),
+      clock: () => FROZEN_NOW,
+      runnerVersion: RUNNER_VERSION,
+      resumeCtx
+    });
+    try {
+      // Persist a session with card_version 1.0.0. Runtime resumeCtx claims
+      // 1.1.0 — resumeSession step 2 fires CardVersionDrift.
+      await persister.writeSession(fullSession({ card_version: "1.0.0" }));
+      const res = await app.inject({
+        method: "GET",
+        url: `/sessions/${SESSION}/state`,
+        headers: { authorization: `Bearer ${BEARER}` }
+      });
+      expect(res.statusCode).toBe(409);
+      const body = JSON.parse(res.body) as { error: string; expected: string; actual: string };
+      expect(body.error).toBe("card-version-drift");
+      expect(body.expected).toBe("1.1.0");
+      expect(body.actual).toBe("1.0.0");
+    } finally {
+      await app.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("L-29 lazy-hydrate: no session file on disk → 404 unknown-session (unchanged)", async () => {
     const fresh = await newApp({ preRegister: false });
     try {

@@ -145,6 +145,8 @@ export interface BuildRunnerOptions {
     clock: Clock;
     runnerVersion?: string;
     requestsPerMinute?: number;
+    /** L-29 lazy-hydrate calls resume_session when present. */
+    resumeCtx?: import("./session/resume.js").ResumeContext;
   };
   fastifyOptions?: FastifyServerOptions;
 }
@@ -232,7 +234,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       readiness: readiness ?? { check: () => null },
       clock: ss.clock,
       ...(ss.runnerVersion !== undefined ? { runnerVersion: ss.runnerVersion } : {}),
-      ...(ss.requestsPerMinute !== undefined ? { requestsPerMinute: ss.requestsPerMinute } : {})
+      ...(ss.requestsPerMinute !== undefined ? { requestsPerMinute: ss.requestsPerMinute } : {}),
+      ...(ss.resumeCtx !== undefined ? { resumeCtx: ss.resumeCtx } : {})
     });
   }
 

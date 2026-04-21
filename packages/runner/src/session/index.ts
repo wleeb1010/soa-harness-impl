@@ -27,6 +27,7 @@ export {
 
 export {
   scanAndResumeInProgressSessions,
+  scanHasHardFailure,
   IN_PROGRESS_STATUSES,
   TERMINAL_STATUSES,
   type ScanOutcomeEntry,

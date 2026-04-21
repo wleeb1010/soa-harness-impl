@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   SessionPersister,
   scanAndResumeInProgressSessions,
+  scanHasHardFailure,
   IN_PROGRESS_STATUSES,
   TERMINAL_STATUSES,
   type PersistedSession,
@@ -176,12 +177,16 @@ describe("scanAndResumeInProgressSessions — L-29 resume-trigger #1", () => {
     expect(byId.get("ses_mixfixturefail00a1")?.action).toBe("skipped-terminal");
   });
 
-  it("unknown workflow status is recorded as skipped-unknown-status (not crashed)", async () => {
+  it("unknown workflow status (outside §12.1 enum) → failed-read schema-violation (SV-SESS-02)", async () => {
+    // §12.1 workflow.status is a closed enum. A value outside both the
+    // in-progress and terminal sets is a schema violation, NOT a skip —
+    // route it through resume step 1's post-migration schema check.
     const weird = session("ses_unknownfixture00001", "Paused" as unknown as string);
     await persister.writeSession(weird);
     const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
     expect(outcomes).toHaveLength(1);
-    expect(outcomes[0]?.action).toBe("skipped-unknown-status");
+    expect(outcomes[0]?.action).toBe("failed-read");
+    expect(outcomes[0]?.detail).toBe("schema-violation");
   });
 
   it("corrupted session file is recorded as failed-read; does NOT halt scan of other sessions", async () => {
@@ -220,6 +225,82 @@ describe("scanAndResumeInProgressSessions — L-29 resume-trigger #1", () => {
     const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
     expect(outcomes[0]?.action).toBe("failed-resume");
     expect(outcomes[0]?.detail).toContain("CardVersionDrift");
+  });
+
+  it("SV-SESS-02 (resume path): in-progress status with schema-violating fixture throws SessionFormatIncompatible via resume step 1", async () => {
+    const { writeFileSync } = await import("node:fs");
+    // Claim workflow.status is an in-progress value so the scan invokes
+    // resumeSession. Then break a different field (e.g., activeMode
+    // outside the enum) so the post-migration schema check fails.
+    const bad = {
+      session_id: "ses_resumefailfixture001",
+      format_version: "1.0",
+      activeMode: "BogusMode", // violates the activeMode enum
+      messages: [],
+      workflow: {
+        task_id: "task-bad",
+        status: "Executing", // in-progress — routes through resumeSession
+        side_effects: [],
+        checkpoint: {}
+      },
+      counters: {},
+      tool_pool_hash: TOOL_POOL_HASH,
+      card_version: CARD_VERSION
+    };
+    writeFileSync(persister.pathFor("ses_resumefailfixture001"), JSON.stringify(bad));
+    const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
+    expect(outcomes).toHaveLength(1);
+    // SessionFormatIncompatible from resume step 1 is classified as a
+    // format failure (failed-read) so scanHasHardFailure trips.
+    expect(outcomes[0]?.action).toBe("failed-read");
+    expect(outcomes[0]?.detail).toBe("schema-violation");
+  });
+
+  it("scanHasHardFailure: corrupted session file returns true; clean scan returns false", async () => {
+    const { writeFileSync } = await import("node:fs");
+    // Clean + one corrupted file.
+    await persister.writeSession(session("ses_cleanfixture000001aa", "Executing"));
+    writeFileSync(persister.pathFor("ses_corruptfixture00001x"), "{ invalid json");
+    const outcomes = await scanAndResumeInProgressSessions({ persister, resumeCtx: makeCtx() });
+    expect(scanHasHardFailure(outcomes)).toBe(true);
+
+    // Clean-only scan returns false.
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const cleanDir = mkdtempSync(join(require("node:os").tmpdir(), "soa-scan-clean-"));
+    const cleanP = new SessionPersister({ sessionDir: cleanDir });
+    try {
+      await cleanP.writeSession(session("ses_onlyfinefixture0001", "Executing"));
+      const cleanOutcomes = await scanAndResumeInProgressSessions({
+        persister: cleanP,
+        resumeCtx: makeCtx()
+      });
+      expect(scanHasHardFailure(cleanOutcomes)).toBe(false);
+    } finally {
+      rmSync(cleanDir, { recursive: true, force: true });
+    }
+  });
+
+  it("SV-SESS-09: CardVersionDrift terminates the session on disk (workflow.status=Failed)", async () => {
+    const { readFileSync } = await import("node:fs");
+    // Seed a session whose card_version doesn't match the runtime card.
+    await persister.writeSession(
+      session("ses_driftterminate0001a", "Executing", { card_version: "0.9-legacy" })
+    );
+    const outcomes = await scanAndResumeInProgressSessions({
+      persister,
+      resumeCtx: makeCtx(),
+      chain: new AuditChain(() => FROZEN_NOW)
+    });
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]?.action).toBe("failed-resume");
+    expect(outcomes[0]?.detail).toContain("CardVersionDrift");
+
+    // Post-scan, the session file MUST have workflow.status = "Failed".
+    const rewritten = JSON.parse(
+      readFileSync(persister.pathFor("ses_driftterminate0001a"), "utf8")
+    ) as { workflow: { status: string }; _termination_reason?: string };
+    expect(rewritten.workflow.status).toBe("Failed");
+    expect(rewritten._termination_reason).toBe("CardVersionDrift");
   });
 
   it("tool_pool_hash drift: outcome=failed-resume reason=tool-pool-hash-mismatch", async () => {

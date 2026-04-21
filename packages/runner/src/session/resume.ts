@@ -22,6 +22,7 @@
  * Covers HR-04, HR-05, SV-SESS-08, SV-SESS-09, SV-SESS-10.
  */
 
+import { registry as schemaRegistry } from "@soa-harness/schemas";
 import { ToolPoolStale } from "../registry/index.js";
 import { SessionPersister, SessionFormatIncompatible } from "./persist.js";
 import { migratePre1SessionFile, type PersistedSession, type MigratedSession } from "./migrate.js";
@@ -125,6 +126,20 @@ export async function resumeSession(
 
   const migrated = migratePre1SessionFile(raw, ctx.cardActiveMode);
   const kind: ResumeOutcomeKind = migrated._migrated?.from === "pre-1.0" ? "migrated" : "resumed";
+
+  // §12.5 step 1 strictness: post-migration, the file MUST conform to the
+  // pinned session.schema.json. A value outside the §12.1 workflow.status
+  // enum or any other schema drift raises SessionFormatIncompatible. Pre-1.0
+  // migration runs first so files missing activeMode pass this check after
+  // the default has been filled in.
+  const validator = schemaRegistry["session"];
+  if (!validator(migrated)) {
+    throw new SessionFormatIncompatible(
+      persister.pathFor(session_id),
+      "schema-violation",
+      JSON.stringify(validator.errors ?? [])
+    );
+  }
 
   // Step 2 — card_version drift.
   const actualCardVersion = typeof migrated.card_version === "string" ? migrated.card_version : "";

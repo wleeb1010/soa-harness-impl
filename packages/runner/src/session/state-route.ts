@@ -22,6 +22,8 @@ import type { Clock } from "../clock/index.js";
 import type { SessionStore } from "../permission/session-store.js";
 import type { PersistedSession } from "./migrate.js";
 import { SessionPersister, SessionFormatIncompatible } from "./persist.js";
+import { resumeSession, CardVersionDrift, type ResumeContext } from "./resume.js";
+import { ToolPoolStale } from "../registry/index.js";
 
 const SESSION_ID_RE = /^ses_[A-Za-z0-9]{16,}$/;
 const WINDOW_MS = 60_000;
@@ -36,10 +38,44 @@ async function tryLazyHydrate(
   opts: SessionStateRouteOptions,
   sessionId: string,
   bearer: string
-): Promise<boolean> {
+): Promise<boolean | { rejected: true; status: number; body: Record<string, unknown> }> {
   let persisted: PersistedSession;
   try {
-    persisted = await opts.persister.readSession(sessionId);
+    // §12.5 L-29 trigger #2: when a resumeCtx is wired, drive the full
+    // resume algorithm rather than a raw read. This catches CardVersionDrift
+    // at the /state entrypoint for a Phase-A session persisted under card
+    // v1.0 being opened by a process serving card v1.1.
+    if (opts.resumeCtx) {
+      try {
+        const outcome = await resumeSession(opts.persister, sessionId, opts.resumeCtx);
+        persisted = outcome.session;
+      } catch (err) {
+        if (err instanceof SessionFormatIncompatible && err.reason === "file-missing") {
+          return false;
+        }
+        if (err instanceof CardVersionDrift) {
+          return {
+            rejected: true,
+            status: 409,
+            body: {
+              error: "card-version-drift",
+              expected: err.expected,
+              actual: err.actual
+            }
+          };
+        }
+        if (err instanceof ToolPoolStale) {
+          return {
+            rejected: true,
+            status: 409,
+            body: { error: "tool-pool-stale", reason: err.reason }
+          };
+        }
+        throw err;
+      }
+    } else {
+      persisted = await opts.persister.readSession(sessionId);
+    }
   } catch (err) {
     if (err instanceof SessionFormatIncompatible && err.reason === "file-missing") {
       return false;
@@ -82,6 +118,15 @@ export interface SessionStateRouteOptions {
   runnerVersion?: string;
   /** Requests per 60-second window per bearer. §12.5.1 requires 120. */
   requestsPerMinute?: number;
+  /**
+   * L-29 Normative MUST #2 — when present, lazy-hydrate drives the full
+   * §12.5 resume algorithm (card_version + tool_pool_hash checks + phase
+   * replay) rather than a raw readSession. A CardVersionDrift during
+   * lazy-hydrate surfaces as 409 card-version-drift with the expected +
+   * actual versions so the client can re-bootstrap cleanly. Absent →
+   * lazy-hydrate falls back to readSession (test/M2 back-compat).
+   */
+  resumeCtx?: ResumeContext;
 }
 
 class BearerRateLimiter {
@@ -301,8 +346,11 @@ export const sessionStatePlugin: FastifyPluginAsync<SessionStateRouteOptions> = 
       // this process. Subsequent requests with a different bearer → 403.
       if (!opts.sessionStore.exists(sessionId)) {
         const hydrated = await tryLazyHydrate(opts, sessionId, bearer);
-        if (!hydrated) {
+        if (hydrated === false) {
           return reply.code(404).send({ error: "unknown-session" });
+        }
+        if (hydrated !== true && typeof hydrated === "object" && "rejected" in hydrated) {
+          return reply.code(hydrated.status).send(hydrated.body);
         }
       }
       if (!opts.sessionStore.validate(sessionId, bearer)) {

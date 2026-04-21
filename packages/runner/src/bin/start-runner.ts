@@ -19,6 +19,7 @@ import {
 import {
   SessionPersister,
   scanAndResumeInProgressSessions,
+  scanHasHardFailure,
   type ResumeContext,
   type PersistedSideEffect
 } from "../session/index.js";
@@ -289,6 +290,25 @@ async function main() {
     );
   }
 
+  // Build the ResumeContext before startRunner so both the state-route
+  // plugin (lazy-hydrate) and the post-boot scan share the same ctx.
+  const cardVersionForResume =
+    typeof (card as { version?: unknown }).version === "string"
+      ? ((card as { version: string }).version)
+      : "1.0";
+  const toolPoolHashForResume = registry
+    ? `sha256:registry-size-${registry.size()}`
+    : "sha256:no-registry-loaded";
+  const resumeCtx: ResumeContext = {
+    currentCardVersion: cardVersionForResume,
+    currentToolPoolHash: toolPoolHashForResume,
+    toolCompensation: () => ({ canCompensate: false }),
+    replayPending: async (_se: PersistedSideEffect) => null,
+    compensate: async () => undefined,
+    cardActiveMode: activeCapability,
+    clock
+  };
+
   const app = await startRunner({
     trust,
     card,
@@ -356,7 +376,8 @@ async function main() {
       persister,
       sessionStore,
       clock,
-      runnerVersion: "1.0"
+      runnerVersion: "1.0",
+      resumeCtx
     },
     ...(registry
       ? {
@@ -426,37 +447,37 @@ async function main() {
   // L-29 Normative MUST #1 — post-boot / pre-listener resume scan.
   // Walk <sessionDir>, invoke resumeSession for every session whose
   // workflow.status is in {Planning, Executing, Optimizing, Handoff, Blocked}.
-  // Outcomes are audited so operators see the recovery trail.
-  //
-  // The bin's scan uses a no-op replay/compensate context — the §10.3-driven
-  // tool-invocation layer lands in M3. A quiescent session (no pending/inflight
-  // side_effects) passes through step 4 cleanly; a session with real in-flight
-  // work gets its phase advanced via the noop replay (caller responsibility to
-  // supply real replay fns once M3 tool dispatch wires in).
-  const cardVersion =
-    typeof (card as { version?: unknown }).version === "string"
-      ? ((card as { version: string }).version)
-      : "1.0";
-  const toolPoolHash = registry
-    ? `sha256:registry-size-${registry.size()}` // M3 computes real JCS hash
-    : "sha256:no-registry-loaded";
-  const resumeCtx: ResumeContext = {
-    currentCardVersion: cardVersion,
-    currentToolPoolHash: toolPoolHash,
-    toolCompensation: () => ({ canCompensate: false }),
-    replayPending: async (_se: PersistedSideEffect) => null,
-    compensate: async () => undefined,
-    cardActiveMode: activeCapability,
-    clock
-  };
+  // Outcomes are audited so operators see the recovery trail. Uses the
+  // hoisted resumeCtx so lazy-hydrate sees the same card_version +
+  // tool_pool_hash pins.
   try {
-    await scanAndResumeInProgressSessions({
+    const scanOutcomes = await scanAndResumeInProgressSessions({
       persister,
       resumeCtx,
       chain,
       log: (msg) => console.log(msg),
       clock
     });
+    // §12.5 L-29 + SV-SESS-02: if any session file on disk is corrupt or
+    // violates session.schema (including a bad workflow.status), the
+    // Runner MUST NOT accept new traffic silently. Exit non-zero with the
+    // closed-set reason so operators address the bad file before restart.
+    if (scanHasHardFailure(scanOutcomes)) {
+      const hits = scanOutcomes.filter(
+        (o) => o.action === "failed-read" && o.detail !== undefined
+      );
+      console.error(
+        `[start-runner] FATAL: boot scan detected ${hits.length} session file(s) with ` +
+          `SessionFormatIncompatible — refusing to open listener.`
+      );
+      for (const h of hits) {
+        console.error(
+          `  session_id=${h.session_id} reason=${h.detail}`
+        );
+      }
+      await app.close();
+      process.exit(1);
+    }
   } catch (err) {
     console.error(`[start-runner] L-29 boot scan FAILED (non-fatal; listener still opens):`, err);
   }
