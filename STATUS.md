@@ -1,5 +1,87 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (L-31 decisions bracket-persist + markers + idempotency)
+
+### All 7 §12.5.3 markers now fire live on every /permissions/decisions call
+
+**Signal for validator:** Finding H cleared. Pin bumped to `8ccddf2`
+(manifest `dc2771ce…a544`). POST /permissions/decisions now runs the
+full §12.2 bracket-persist protocol and fires every marker in the
+documented order. Validator's V2-04 handlers for HR-04, HR-05,
+SV-SESS-03, SV-SESS-07, SV-SESS-08, SV-SESS-10 flip SKIP → PASS on
+next run. Scoreboard target 22 → 28+.
+
+**Pin bump absorbs:**
+- **L-31** — §12.2 now declares a closed set of significant events:
+  (1) tool invocations, (2) POST /permissions/decisions, (3) handoff
+  events (M5), (4) SI iterations (M5). Spec-side impact: the five
+  dormant markers now have a production hook.
+
+**Impl wire-up (new in `decisions-route.ts`):**
+- `PermissionsDecisionsRouteOptions` gains a bracket-persist bundle:
+  `persister`, `markers`, `toolPoolHash`, `cardVersion`. When present,
+  the route runs the bracket; when absent, M2 behavior preserved
+  (backwards-compat).
+- Per-decision flow:
+  1. Load session from disk (or synthesize Planning-state file when
+     the session file doesn't exist — handles `RUNNER_DEMO_SESSION`
+     fallback).
+  2. Check `Idempotency-Key` HTTP header → if a committed side_effect
+     carries that key, return cached decision body with `cached:true`;
+     no new audit row.
+  3. Mint UUIDv4 if client didn't supply a key.
+  4. Append pending side_effect → atomic write fires
+     `SOA_MARK_PENDING_WRITE_DONE` + `SOA_MARK_DIR_FSYNC_DONE`.
+  5. `SOA_MARK_TOOL_INVOKE_START`.
+  6. Resolver + PDA verify (existing). `pda-malformed` (400) and
+     `pda-decision-mismatch` (403) now roll pending → compensated
+     before returning the 4xx.
+  7. Audit chain append → `SOA_MARK_AUDIT_APPEND_DONE` (already wired
+     in M2-T7).
+  8. `SOA_MARK_TOOL_INVOKE_DONE` result=committed.
+  9. Transition side_effect → committed, stamp result_digest =
+     `sha256:<audit_this_hash>`, cache decision inline for idempotency
+     hits. Atomic write fires `SOA_MARK_COMMITTED_WRITE_DONE` +
+     `SOA_MARK_DIR_FSYNC_DONE`.
+  10. Return 201 with the decision body + `idempotency_key`.
+
+**Why Idempotency-Key as a header?** Pinned
+`permission-decision-request.schema.json` has
+`additionalProperties:false`; extending the body is a spec change.
+Header keeps the wire contract compatible — same as every standard
+REST idempotency pattern.
+
+**Live verified on 127.0.0.1:7700 (restarted with L-31 binary +
+`RUNNER_CRASH_TEST_MARKERS=1`):**
+- First POST /permissions/decisions → `201 {decision:"AutoAllow",
+  audit_record_id:aud_9a2fce4a65f1, idempotency_key:smoke-l31-key-0001}`.
+- stderr carries all 7 markers in order: PENDING → DIR_FSYNC →
+  TOOL_INVOKE_START → AUDIT_APPEND → TOOL_INVOKE_DONE → COMMITTED →
+  DIR_FSYNC (with matching `session_id` + `side_effect=0`).
+- Replay with same Idempotency-Key → `201 {...,
+  audit_record_id:aud_9a2fce4a65f1, cached:true}`. Audit chain length
+  unchanged; response body byte-identical except for `cached`.
+
+**Tests (8 new in `decisions-bracket.test.ts`):**
+- Happy-path marker order (all 7 in documented §12.2 order)
+- side_effect all-6-fields populated post-commit, non-null
+  `result_digest`
+- Cross-endpoint /state visibility after a decision
+- Idempotency-Key replay: cached response, no second audit row
+- Different Idempotency-Keys → distinct side_effects + audit rows
+- No Idempotency-Key → server mints UUIDv4 (RFC 4122 shape)
+- Marker lines include session_id + side_effect index
+- Demo-session fallback: file synthesized on first decision
+
+**Repo scoreboard:** 328 tests green
+(30 core + 4 schemas + 288 runner + 6 create-soa-agent). Pinned at
+spec `8ccddf2`. `pnpm -r build / typecheck / lint / test` all green.
+
+**M2 impl status — feature-complete; all 7 markers live:**
+- All 16 M2 test IDs have impl coverage.
+- Per L-31 commit notes: HR-04, HR-05, SV-SESS-03, SV-SESS-07,
+  SV-SESS-08, SV-SESS-10 flip SKIP → PASS on next V2-04 run.
+
 ## 2026-04-21 (POST /sessions MUST persist before 201 — validator finding fixed)
 
 ### Cross-endpoint session consistency bug closed; `:7700` restarted with the fix
