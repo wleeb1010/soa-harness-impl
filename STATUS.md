@@ -1,5 +1,20 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (L-21 pin bump)
+
+### Pin bumped to `8c10ce9` — conformance card fixture now schema-clean
+
+- **Pin:** `80680cd → 8c10ce9`. `spec_manifest_sha256 = f38ca28f47dbcbe202e38b1452cd559aae749baebe99b3d39e692f80cd3a3a54`. Re-hashed locally, matches.
+- **Impl changes:** two constants in `conformance-loader.ts`:
+  - `PLACEHOLDER_SPKI`: `__IMPL_REPLACES_SPKI_AT_LOAD__…` (ASCII literal) → `16dc826f86941f2b6876f4f0f59d91f0021dacbd4ff17b76bbc9d39685250606` (valid hex64, SHA-256 of a fixture tag per L-21).
+  - `PINNED_CONFORMANCE_CARD_DIGEST`: `87c50683bb01…` → `8f61a2dec98b9e92bcd65ab5ae9acf8352bf6ca8b0dd6b76574257280224344e`.
+- **No loader-logic changes** — placeholder detection is still `anchor.spki_sha256 === PLACEHOLDER_SPKI`. The 6 conformance-loader tests pass against the new fixture bytes with just the constant updates.
+- **Live verified (127.0.0.1:7700):** loader logs `digest 8f61a2dec98b…` and `substituted SPKI cfdb31836c11…` (per-run). `POST /sessions requested_activeMode=DangerFullAccess` returns 201 with the new ephemeral session.
+
+Punch list unchanged: T-02 (priority #1) → T-01 → T-03 → T-08 → T-06 → T-07 → T-05.
+
+160 tests green (30 core + 4 schemas + 126 runner across 14 files). Pinned at spec `8c10ce9`.
+
 ## 2026-04-20 (Week 3 day 3 — T-04 live)
 
 ### T-04 conformance card loader live on :7700 — validator cleared for SV-PERM-01 DFA sweep

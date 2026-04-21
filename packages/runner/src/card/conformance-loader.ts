@@ -11,16 +11,23 @@ import { jcs, sha256Hex } from "@soa-harness/core";
  * Every other field MUST pass through unchanged; tampering raises
  * `conformance-fixture-tampered`.
  */
-export const PLACEHOLDER_SPKI = "__IMPL_REPLACES_SPKI_AT_LOAD__________________________________";
+/**
+ * Per the L-21 spec revision (commit 8c10ce9), the placeholder is now a valid
+ * hex64 SHA-256 value — the bytes are `sha256("soa-harness/v1.0/conformance-card/spki-placeholder")`
+ * or equivalent; the value is cryptographically arbitrary and has no meaning
+ * beyond "the impl MUST rewrite me". The raw fixture now schema-validates
+ * cleanly without the loader's skipSchemaValidation escape hatch.
+ */
+export const PLACEHOLDER_SPKI = "16dc826f86941f2b6876f4f0f59d91f0021dacbd4ff17b76bbc9d39685250606";
 
 /**
- * Pinned SHA-256 of JCS(conformance-card) at spec commit 80680cd76129.
- * From MANIFEST.json.supplementary_artifacts[
+ * Pinned SHA-256 of JCS(conformance-card) at the spec commit in
+ * soa-validate.lock. From MANIFEST.json.supplementary_artifacts[
  *   path="test-vectors/conformance-card/agent-card.json"
  * ].sha256. Bumped manually when the pin moves and the fixture changes.
  */
 export const PINNED_CONFORMANCE_CARD_DIGEST =
-  "87c50683bb01fca6a1e95b9bae7e18e8aad7831e9ecb3e9e61061caf67534e05";
+  "8f61a2dec98b9e92bcd65ab5ae9acf8352bf6ca8b0dd6b76574257280224344e";
 
 export interface LoadConformanceCardOptions {
   fixturePath: string;
