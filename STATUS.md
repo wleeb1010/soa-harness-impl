@@ -1,5 +1,70 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (POST /sessions MUST persist before 201 — validator finding fixed)
+
+### Cross-endpoint session consistency bug closed; `:7700` restarted with the fix
+
+**Signal for validator:** Finding cleared. POST /sessions now writes
+the session file atomically BEFORE returning 201 per §12.6 MUST. The
+three blocked M2 IDs (SV-SESS-03, SV-SESS-04, SV-SESS-STATE-01 for
+fresh sessions) unblock on next run.
+
+**Root cause (diagnostic order #1 from the finding):** the POST
+/sessions handler registered the new session in the in-memory
+`SessionStore` and returned 201 without touching disk. /state's
+`SessionPersister.readSession()` then 404'd on `file-missing` for
+every freshly-minted session. Same in-memory store was visible to
+/permissions/resolve (which reads the store directly) but not to
+/state (which reads disk).
+
+**Fix** (`packages/runner/src/permission/sessions-route.ts`):
+`sessionsBootstrapPlugin` gains optional `persister` +
+`toolPoolHash` + `cardVersion`. When all three are supplied, the
+handler:
+1. Calls `sessionStore.create(...)` as before.
+2. Synthesizes a Planning-state `PersistedSession`:
+   `task_id: "bootstrap-<session_id>"`, `side_effects: []`,
+   `checkpoint: {}`, `counters: {}`, `messages: []`, `activeMode`
+   from the request, `tool_pool_hash` + `card_version` from opts.
+3. Awaits `persister.writeSession(file)` — atomic write per §12.3
+   (same POSIX/Win32 protocol as M2-T1a).
+4. Returns 201 only after the write succeeds.
+
+Persist failure → 503 `persistence-unwritable` with in-memory
+rollback. Misconfiguration (persister without
+`toolPoolHash`/`cardVersion`) → 500 `session-persist-misconfigured`
+before any disk write. Backwards-compat: when `persister` is omitted
+the handler is in-memory-only (existing 13 sessions-bootstrap tests
+pass unchanged).
+
+**Live end-to-end on `:7700` after restart:**
+- `POST /sessions` → `201` with `session_id=ses_9ab383463b005316cd00f019`.
+- Session file present at `<sessionDir>/ses_9ab383463b005316cd00f019.json`.
+- Immediate `GET /sessions/ses_9ab.../state` → `200`.
+
+**Test coverage (4 new in `sessions-persist.test.ts`):**
+- Same-process round-trip: POST → immediate GET /state → 200 with
+  matching `session_id`, `activeMode`, `workflow.status="Planning"`,
+  `side_effects: []`. Asserts file-on-disk at the 201 boundary.
+- Restart-preservation via lazy-hydrate: mint, close app, open NEW
+  app with DIFFERENT `SessionStore` but SAME `sessionDir`, GET
+  /state with original bearer → 200 (L-29 lazy-hydrate reads the
+  on-disk file, registers with the presented bearer).
+- Persist misconfiguration → 500 `session-persist-misconfigured`
+  with SessionStore rollback.
+- Backwards-compat: plugin without `persister` option still returns
+  201 (in-memory only).
+
+**Repo scoreboard:** 320 tests green
+(30 core + 4 schemas + 280 runner + 6 create-soa-agent). Pinned at
+spec `5fb1af9`. `pnpm -r build / typecheck / lint / test` all green.
+
+**M2 impl status — feature-complete + cross-endpoint consistent:**
+All 16 M2 test IDs have impl coverage. The final cross-endpoint
+consistency gap is closed; remaining 5 test IDs
+(SV-SESS-03/04/06/07 + HR-04/05 crash-kill) await validator's V2-04
+harness runs.
+
 ## 2026-04-21 (L-30 dynamic MANIFEST lookup — cross-swap attack closed)
 
 ### Conformance-card loader now resolves the pinned digest per fixture path
