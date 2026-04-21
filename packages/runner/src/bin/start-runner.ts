@@ -18,6 +18,11 @@ import {
 } from "../audit/index.js";
 import { SessionPersister } from "../session/index.js";
 import { composeReadiness } from "../probes/index.js";
+import {
+  MarkerEmitter,
+  parseCrashTestMarkersEnv,
+  assertCrashTestMarkersListenerSafe
+} from "../markers/index.js";
 import { assertBootstrapBearerListenerSafe } from "../guards/index.js";
 import type { TrustAnchor } from "../card/verify.js";
 import type { Control } from "../registry/index.js";
@@ -96,6 +101,14 @@ async function main() {
   // §12.5.2 production guard for the audit-sink failure-mode env hook.
   const AUDIT_SINK_FAILURE_MODE = process.env.SOA_RUNNER_AUDIT_SINK_FAILURE_MODE;
   assertAuditSinkEnvListenerSafe({ envValue: AUDIT_SINK_FAILURE_MODE, host: HOST });
+
+  // §12.5.3 crash-test marker emission + production guard.
+  const markersEnabled = parseCrashTestMarkersEnv(process.env.RUNNER_CRASH_TEST_MARKERS);
+  assertCrashTestMarkersListenerSafe({ enabled: markersEnabled, host: HOST });
+  const markers = new MarkerEmitter({ enabled: markersEnabled });
+  if (markersEnabled) {
+    console.log(`[start-runner] crash-test markers enabled (RUNNER_CRASH_TEST_MARKERS=1)`);
+  }
 
   const clock = createClock({
     envClock: process.env.RUNNER_TEST_CLOCK,
@@ -243,14 +256,14 @@ async function main() {
     }
   }
 
-  const chain = new AuditChain(clock);
+  const chain = new AuditChain(clock, { markers });
   const activeCapability = (card.permissions?.activeMode ?? "ReadOnly") as Capability;
 
   // §12.5.3 RUNNER_SESSION_DIR override (production-safe; tests use it for
   // per-test isolation). Default lives next to the Runner process; operators
   // SHOULD put it on a durable-disk mount in production.
   const sessionDir = process.env.RUNNER_SESSION_DIR ?? "./sessions";
-  const persister = new SessionPersister({ sessionDir });
+  const persister = new SessionPersister({ sessionDir, markers });
 
   // §10.5.1 audit-sink state machine. Env hook (§12.5.2) drives initial
   // state at boot; L-28 F-13 requires exactly one matching AuditSink*
@@ -259,6 +272,7 @@ async function main() {
   const auditSink = new AuditSink({
     sessionDir,
     clock,
+    markers,
     ...(initialSinkState !== null
       ? { initialState: initialSinkState, initialReason: "env-test-hook" as const }
       : {})

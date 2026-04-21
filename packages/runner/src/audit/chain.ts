@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { jcs } from "@soa-harness/core";
 import type { Clock } from "../clock/index.js";
+import { NOOP_EMITTER, type MarkerEmitter } from "../markers/index.js";
 
 export const GENESIS = "GENESIS" as const;
 
@@ -39,8 +40,14 @@ function sha256Hex(bytes: Buffer | Uint8Array | string): string {
 export class AuditChain {
   private readonly records: AuditRecord[] = [];
   private tail: string = GENESIS;
+  private readonly markers: MarkerEmitter;
 
-  constructor(private readonly now: Clock) {}
+  constructor(
+    private readonly now: Clock,
+    opts?: { markers?: MarkerEmitter }
+  ) {
+    this.markers = opts?.markers ?? NOOP_EMITTER;
+  }
 
   /** Append an arbitrary record body; the chain fills in timestamp + prev_hash + this_hash. */
   append(body: Record<string, unknown>): AuditRecord {
@@ -54,6 +61,13 @@ export class AuditChain {
     draft.this_hash = this_hash;
     this.records.push(draft);
     this.tail = this_hash;
+
+    // §12.5.3 — SOA_MARK_AUDIT_APPEND_DONE fires after the hash-chain commit.
+    // (In M2 the chain is in-memory; per-record fsync is M3 scope. The marker
+    // still names the logical append boundary so crash-kill harnesses can
+    // target it once persistence lands.)
+    const recordId = typeof draft["id"] === "string" ? (draft["id"] as string) : draft.this_hash;
+    this.markers.auditAppendDone(recordId);
     return draft;
   }
 

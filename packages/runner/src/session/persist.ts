@@ -33,6 +33,7 @@ import { platform } from "node:os";
 import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { registry as schemaRegistry } from "@soa-harness/schemas";
+import { NOOP_EMITTER, type MarkerEmitter } from "../markers/index.js";
 import type { PersistedSession } from "./migrate.js";
 
 const IS_WIN32 = platform() === "win32";
@@ -67,6 +68,13 @@ export interface SessionPersisterOptions {
    * Tests force the other branch to exercise both write protocols on a single CI leg.
    */
   forceWindowsSequence?: boolean;
+  /**
+   * §12.5.3 marker emitter — fires SOA_MARK_DIR_FSYNC_DONE after each
+   * writeSession completes its atomic-write boundary. Defaults to the shared
+   * no-op emitter; bin injects the active emitter when
+   * RUNNER_CRASH_TEST_MARKERS=1.
+   */
+  markers?: MarkerEmitter;
 }
 
 export interface WriteSessionOptions {
@@ -81,11 +89,23 @@ export interface WriteSessionOptions {
    * and rename — the final file MUST be absent in that window.
    */
   afterFsyncBeforeRename?: () => Promise<void> | void;
+  /**
+   * §12.5.3 phase hint for marker emission. When provided AND markers are
+   * enabled, emit SOA_MARK_PENDING_WRITE_DONE or SOA_MARK_COMMITTED_WRITE_DONE
+   * (keyed to the supplied side_effect index) after the atomic-write boundary.
+   * SOA_MARK_DIR_FSYNC_DONE still fires unconditionally when markers are
+   * enabled (it names the platform-abstracted atomic-write boundary itself).
+   */
+  markerPhase?: {
+    kind: "pending" | "committed";
+    side_effect: number;
+  };
 }
 
 export class SessionPersister {
   private readonly sessionDir: string;
   private readonly windowsSequence: boolean;
+  private readonly markers: MarkerEmitter;
   /** Per-session_id in-process serialization. Two concurrent writeSession
    *  calls for the same session_id chain rather than race — the second waits
    *  for the first. On Win32 this also avoids EPERM from MoveFileExW racing
@@ -95,6 +115,7 @@ export class SessionPersister {
   constructor(opts: SessionPersisterOptions) {
     this.sessionDir = opts.sessionDir;
     this.windowsSequence = opts.forceWindowsSequence ?? IS_WIN32;
+    this.markers = opts.markers ?? NOOP_EMITTER;
   }
 
   /** Absolute path for a given session id. The id pattern is already filename-safe. */
@@ -132,6 +153,18 @@ export class SessionPersister {
     if (opts.afterFsyncBeforeRename) await opts.afterFsyncBeforeRename();
     await fsp.rename(tmp, final);
     await this.finalizeAfterRename(final);
+
+    // §12.5.3 — emit markers AFTER the atomic-write boundary so crash-kill
+    // harnesses can target the post-fsync state. markerPhase drives the
+    // phase-specific marker; DIR_FSYNC_DONE always fires when markers are on.
+    if (opts.markerPhase) {
+      if (opts.markerPhase.kind === "pending") {
+        this.markers.pendingWriteDone(file.session_id, opts.markerPhase.side_effect);
+      } else {
+        this.markers.committedWriteDone(file.session_id, opts.markerPhase.side_effect);
+      }
+    }
+    this.markers.dirFsyncDone(file.session_id);
   }
 
   /**

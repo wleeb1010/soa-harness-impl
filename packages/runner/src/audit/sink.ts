@@ -34,6 +34,7 @@ import { platform } from "node:os";
 import type { Clock } from "../clock/index.js";
 import type { RiskClass } from "../registry/types.js";
 import type { AuditRecord } from "./chain.js";
+import { NOOP_EMITTER, type MarkerEmitter } from "../markers/index.js";
 
 const IS_WIN32 = platform() === "win32";
 
@@ -70,6 +71,8 @@ export interface AuditSinkOptions {
    * initial event's detail for operator visibility. Has no behavioral effect.
    */
   initialReason?: "env-test-hook" | "boot";
+  /** §12.5.3 crash-test marker emitter. Defaults to no-op. */
+  markers?: MarkerEmitter;
 }
 
 /** Production guard — refuse startup when the env hook is active on a public listener. */
@@ -94,12 +97,14 @@ export class AuditSink {
   private readonly buffer: AuditRecord[] = [];
   private readonly sessionDir: string;
   private readonly clock: Clock;
+  private readonly markers: MarkerEmitter;
   private firstFailedAt: string | null = null;
   private unreachableSince: string | null = null;
 
   constructor(opts: AuditSinkOptions) {
     this.sessionDir = opts.sessionDir;
     this.clock = opts.clock;
+    this.markers = opts.markers ?? NOOP_EMITTER;
     this.state = "healthy";
     if (opts.initialState && opts.initialState !== "healthy") {
       this.transitionTo(opts.initialState, opts.initialReason ?? "boot");
@@ -144,6 +149,9 @@ export class AuditSink {
     if (this.state === "healthy") return;
     this.buffer.push(record);
     await this.writeBufferedRecord(record);
+    // §12.5.3 — SOA_MARK_AUDIT_BUFFER_WRITE_DONE after the fsync-backed write.
+    const recordId = typeof record["id"] === "string" ? (record["id"] as string) : record.this_hash;
+    this.markers.auditBufferWriteDone(recordId);
   }
 
   /**
