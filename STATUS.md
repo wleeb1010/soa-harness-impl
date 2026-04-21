@@ -1,5 +1,109 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M2 Week 2 complete — T-4 + T-4b + T-7 all shipped)
+
+### Audit-sink three-state + /audit/sink-events + crash markers all live
+
+**Signal for validator:** Week 2 track closed. All three parallel
+tracks shipped in one day: T-4 (three-state degradation + concrete
+side effects), T-4b (`/audit/sink-events` endpoint), and T-7 (§12.5.3
+marker primitive + instrumentation + Linux/macOS/Windows CI smoke).
+SV-PERM-19 and SV-AUDIT-SINK-EVENTS-01 have full impl-side coverage;
+validator handlers flip those SKIPs on next run. Week 3
+crash-recovery assertions (HR-04/05 + SV-SESS-03/04/06/07/10) unblock
+once validator's V2-04 crash-kill harness consumes the markers.
+
+**M2-T4 — Audit-sink §10.5.1 state machine:**
+- `AuditSink` class with `healthy / degraded-buffering / unreachable-halt`.
+- `SOA_RUNNER_AUDIT_SINK_FAILURE_MODE` env hook drives state
+  deterministically with CONCRETE side effects per L-28 F-10:
+  - `degraded-buffering` → fsync-backed writes to
+    `<sessionDir>/audit/pending/<this_hash>.json` using the same
+    atomic-write protocol as T-1a; `AuditSinkDegraded` event emitted
+    once; `/ready` stays 200.
+  - `unreachable-halt` → `shouldRefuseMutating()` returns true for
+    `Mutating`/`Destructive`; `POST /permissions/decisions` returns
+    `403 PermissionDenied reason=audit-sink-unreachable` BEFORE the
+    resolver runs; `ReadOnly`/`Egress` continue;
+    `readinessReason()` propagates via composite readiness to
+    `/ready=503 audit-sink-unreachable`; `AuditSinkUnreachable`
+    event emitted.
+- L-28 F-13 fresh-boot semantics: `new AuditSink({initialState})` with
+  a non-healthy state emits exactly one matching event at construction.
+  Bin reads the env var, logs the initial event count.
+- Recovery path: `flushAndRecover(shipFn)` drains in order, clears
+  pending dir, emits `AuditSinkRecovered` with pre-drain
+  `flushed_records` count.
+- §12.5.2 production guard: env set + non-loopback host →
+  `AuditSinkOnPublicListener`. Bin calls the guard pre-bind.
+
+**M2-T4b — `GET /audit/sink-events` endpoint §12.5.4:**
+- `audit:read` scope (any session bearer qualifies), 60 rpm, same
+  pagination as `/audit/records`: `after=<event_id>&limit=<n>` →
+  `{events, next_after, has_more, runner_version, generated_at}`.
+- Body validated against pinned
+  `audit-sink-events-response.schema.json` before reply — drift →
+  500 `response-schema-violation`.
+- Byte-identity excludes `generated_at` (L-28 F-01 rule applies).
+- 401 / 403 / 404 unknown-after-id / 429 / 503 taxonomy.
+
+**M2-T7 — Crash-test markers §12.5.3:**
+- `MarkerEmitter` class with the seven closed-enum marker names.
+  `enabled=false` makes every call a no-op (default); `enabled=true`
+  writes LF-terminated lines in fixed key order to stderr.
+- Cross-platform identity: same format on Linux/macOS/Windows —
+  no CRLF, no platform-specific fields. `SOA_MARK_DIR_FSYNC_DONE`
+  abstracts POSIX dir-fsync vs Win32 `MoveFileExW`+final-file flush.
+- `RUNNER_CRASH_TEST_MARKERS=1` parser + production guard
+  (`assertCrashTestMarkersListenerSafe`) — refuses startup when
+  enabled on non-loopback. Bin calls the guard pre-bind.
+- Instrumentation wired into three entry points:
+  - `SessionPersister.writeSession` → fires `DIR_FSYNC_DONE`
+    unconditionally; optional `markerPhase` hint emits
+    `PENDING_WRITE_DONE` / `COMMITTED_WRITE_DONE` per side_effect.
+  - `AuditChain.append` → fires `AUDIT_APPEND_DONE` keyed to
+    `record.id` (fallback `this_hash`).
+  - `AuditSink.recordAuditRow` → fires `AUDIT_BUFFER_WRITE_DONE`
+    after fsync in degraded-buffering / unreachable-halt states.
+- `RUNNER_SESSION_DIR` env already wired in T-1a; no T-7 change
+  needed there.
+
+**CI — `.github/workflows/crash-markers-smoke.yml`:**
+- Linux/macOS/Windows matrix.
+- Launches Runner with `RUNNER_CRASH_TEST_MARKERS=1` + demo fixtures.
+- Polls `/ready` until 200, drives a permission-decision POST.
+- Greps stderr for `SOA_MARK_AUDIT_APPEND_DONE` + checks no-CR
+  cross-platform identity.
+- Uploads stdout/stderr logs as per-platform artifacts.
+- **Deferred:** Week-1 100-iteration Windows reliability test runs
+  post-validator-harness-wiring to determine v1.1 escape hatch need.
+
+**Repo scoreboard:** 296 tests green
+(30 core + 4 schemas + 256 runner + 6 create-soa-agent).
+`pnpm -r build / typecheck / lint / test` all green.
+Pinned at spec `507eeb1`. **Ten endpoints live on :7700** (adds
+`/audit/sink-events` to the nine from Week 1 Day 3).
+
+**Live verified on 127.0.0.1 with env hooks:**
+- `degraded-buffering` → `/ready=200` + `/audit/sink-events` →
+  200 with one `AuditSinkDegraded` event.
+- `unreachable-halt` → `/ready=503 audit-sink-unreachable` (with
+  `POST /permissions/decisions` for Mutating tools returning
+  `403 PermissionDenied reason=audit-sink-unreachable`).
+- `RUNNER_CRASH_TEST_MARKERS=1` → stderr carries
+  `SOA_MARK_AUDIT_APPEND_DONE audit_record_id=aud_<12hex>` on
+  every decision POST.
+
+**Week 2 exit gate:**
+- SV-PERM-19 ✅ (T-4 impl coverage + validator handler wired)
+- SV-AUDIT-SINK-EVENTS-01 ✅ (T-4b impl coverage)
+
+**Next — Week 3 starts:** validator's V2-04 crash-kill harness
+consumes the `SOA_MARK_*` markers to exercise HR-04, HR-05,
+SV-SESS-03, SV-SESS-04, SV-SESS-06, SV-SESS-07, SV-SESS-10.
+Impl side is feature-complete for M2 — any Week 3 deltas come
+from validator findings.
+
 ## 2026-04-21 (M2 Week 1 Day 3 — T-2 live + CRL auto-refresh fix)
 
 ### Two follow-ups from validator findings + M2-T2 resume algorithm
