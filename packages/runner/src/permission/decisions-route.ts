@@ -118,7 +118,10 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       return reply.code(503).send({ status: "not-ready", reason: notReady });
     }
 
-    // Auth: session bearer
+    // Auth: session bearer. Per §10.3.2 L-22 closed enum, a bearer scoped to
+    // a different session returns 403 session-bearer-mismatch (surfaced via
+    // sessionStore.validate below); a bearer missing the decide scope returns
+    // 403 insufficient-scope.
     const bearer = extractBearer(request);
     if (!bearer) {
       return reply.code(401).send({ error: "missing-or-invalid-bearer" });
@@ -148,12 +151,12 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       return reply.code(404).send({ error: "unknown-session" });
     }
     if (!opts.sessionStore.validate(sessionId, bearer)) {
-      return reply.code(403).send({ error: "bearer-not-authorized-for-session" });
+      return reply.code(403).send({ error: "session-bearer-mismatch" });
     }
     const sessionRecord = opts.sessionStore.getRecord(sessionId);
     if (!sessionRecord?.canDecide) {
       return reply.code(403).send({
-        error: "missing-scope",
+        error: "insufficient-scope",
         detail: `bearer lacks permissions:decide:${sessionId} scope (grant via request_decide_scope:true on POST /sessions)`
       });
     }
@@ -222,7 +225,7 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           // Per §10.3.2: PDA crypto failure → coerce to Deny, handler_accepted=false,
           // audit the attempt.
           if (err.reason === "jws-malformed" || err.reason === "header-malformed" || err.reason === "payload-malformed") {
-            return reply.code(400).send({ error: "malformed-pda", detail: err.reason });
+            return reply.code(400).send({ error: "pda-malformed", detail: err.reason });
           }
           handlerAccepted = false;
           finalDecision = "Deny";

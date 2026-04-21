@@ -1,5 +1,28 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (L-22 rename + validator handoff)
+
+### Runner back up with agreed bootstrap bearer + pre-enrolled decide session
+
+**Signal for validator V-07:** Runner restarted on `127.0.0.1:7700` with BOTH the conformance bootstrap bearer and a pre-enrolled session carrying `canDecide=true`. `POST /permissions/decisions` answers 201 immediately — V-07 audit-record driver unblocked independent of T-03.
+
+- `SOA_RUNNER_BOOTSTRAP_BEARER = soa-conformance-week3-test-bearer`
+- `RUNNER_DEMO_SESSION = ses_demoWeek3Conformance01:soa-conformance-week3-decide-bearer:DangerFullAccess` (pre-enrolled with `canDecide=true` and activeMode=DangerFullAccess)
+
+**L-22 rename shipped** — §10.3.2 403 reasons now use the pinned closed enum:
+- `insufficient-scope` (was `missing-scope`) — bearer lacks `permissions:decide:<sid>`
+- `session-bearer-mismatch` (was `bearer-not-authorized-for-session`) — bearer scoped to a different session
+- `pda-decision-mismatch` (unchanged) — PDA decision disagrees with resolver output
+- `pda-malformed` (was `malformed-pda`) — PDA not a parseable compact JWS
+
+**Pin:** `8c10ce9 → 9ae1825`. `spec_manifest_sha256 = 0e84c2c4…`, re-hashed locally and matched.
+
+**Live end-to-end confirmed:**
+- `POST /permissions/decisions` with the pre-enrolled session → `201 {decision:"AutoAllow", resolved_capability:"DangerFullAccess", audit_record_id:"aud_e2cdc48794cf", audit_this_hash:"d34aa739666e…", handler_accepted:true, recorded_at:…}`
+- `GET /audit/tail` → `{this_hash:"d34aa739666e…", record_count:1, last_record_timestamp:…}` — `audit_this_hash` in the decision response matches the tail exactly.
+
+170 tests green (30 core + 4 schemas + 136 runner across 15 files). Pinned at spec `9ae1825`.
+
 ## 2026-04-20 (T-02 live — audit-chain chokepoint open)
 
 ### `POST /permissions/decisions` live on :7700 — audit-chain accumulation path unblocked

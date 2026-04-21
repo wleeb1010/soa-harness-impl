@@ -187,7 +187,7 @@ describe("POST /permissions/decisions — §10.3.2", () => {
       })
     });
     expect(res.statusCode).toBe(403);
-    expect(JSON.parse(res.body).error).toBe("missing-scope");
+    expect(JSON.parse(res.body).error).toBe("insufficient-scope");
     await app.close();
   });
 
