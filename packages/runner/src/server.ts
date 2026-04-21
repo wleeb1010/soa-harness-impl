@@ -113,6 +113,11 @@ export interface BuildRunnerOptions {
     runnerVersion?: string;
     requestsPerMinute?: number;
     sink?: AuditSink;
+    /** §12.2 L-31 bracket-persist bundle — all four required together. */
+    persister?: SessionPersister;
+    markers?: import("./markers/index.js").MarkerEmitter;
+    toolPoolHash?: string;
+    cardVersion?: string;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/sink-events
@@ -246,7 +251,11 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.isPdaKidRevoked !== undefined ? { isPdaKidRevoked: pd.isPdaKidRevoked } : {}),
       ...(pd.runnerVersion !== undefined ? { runnerVersion: pd.runnerVersion } : {}),
       ...(pd.requestsPerMinute !== undefined ? { requestsPerMinute: pd.requestsPerMinute } : {}),
-      ...(pd.sink !== undefined ? { sink: pd.sink } : {})
+      ...(pd.sink !== undefined ? { sink: pd.sink } : {}),
+      ...(pd.persister !== undefined ? { persister: pd.persister } : {}),
+      ...(pd.markers !== undefined ? { markers: pd.markers } : {}),
+      ...(pd.toolPoolHash !== undefined ? { toolPoolHash: pd.toolPoolHash } : {}),
+      ...(pd.cardVersion !== undefined ? { cardVersion: pd.cardVersion } : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
   }

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { registry as schemaRegistry } from "@soa-harness/schemas";
 import type { AuditChain, AuditSink } from "../audit/index.js";
@@ -6,6 +6,13 @@ import type { Clock } from "../clock/index.js";
 import type { ReadinessProbe } from "../probes/index.js";
 import type { ToolRegistry } from "../registry/index.js";
 import type { Control } from "../registry/types.js";
+import type { MarkerEmitter } from "../markers/index.js";
+import {
+  SessionPersister,
+  SessionFormatIncompatible,
+  type PersistedSession,
+  type PersistedSideEffect
+} from "../session/index.js";
 import {
   verifyPda,
   PdaVerifyFailed,
@@ -43,6 +50,29 @@ export interface PermissionsDecisionsRouteOptions {
    * Omit to preserve M1 behavior (no sink integration).
    */
   sink?: AuditSink;
+  /**
+   * §12.2 L-31 bracket-persist bundle. When all four are set, each
+   * /permissions/decisions call goes through the full bracket-persist
+   * protocol: read session → append pending side_effect → write (with
+   * PENDING_WRITE_DONE marker) → dispatch (TOOL_INVOKE_START/DONE
+   * markers) → audit (AUDIT_APPEND_DONE via chain.markers) → transition
+   * committed + write (COMMITTED_WRITE_DONE marker).
+   *
+   * Idempotency: a client-supplied `idempotency_key` in the request body
+   * that matches an already-committed side_effect on the same session
+   * returns the cached decision + audit_record_id without appending a
+   * second audit row.
+   *
+   * Absent → backwards-compat M2 behavior (in-memory chain only; no
+   * side_effect row; no bracket markers). Existing decision tests keep
+   * passing unchanged.
+   */
+  persister?: SessionPersister;
+  markers?: MarkerEmitter;
+  /** Tool pool hash embedded when synthesizing a missing session file. */
+  toolPoolHash?: string;
+  /** Card version embedded when synthesizing a missing session file. */
+  cardVersion?: string;
 }
 
 const WINDOW_MS = 60_000;
@@ -111,6 +141,69 @@ interface DecisionRequestBody {
   session_id: unknown;
   args_digest: unknown;
   pda?: unknown;
+}
+
+/**
+ * §12.2 L-31 client-supplied idempotency key. Passed via the `Idempotency-Key`
+ * HTTP header (standard REST convention) rather than a body field — the
+ * pinned permission-decision-request.schema.json enforces
+ * additionalProperties:false on the body, so extending the body is a spec
+ * change. Re-submit with the same session_id + Idempotency-Key returns the
+ * cached decision + audit_record_id without appending a second audit row.
+ */
+function extractIdempotencyKey(request: FastifyRequest): string | undefined {
+  const hdr = request.headers["idempotency-key"];
+  if (typeof hdr !== "string") return undefined;
+  const trimmed = hdr.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/** Non-normative cache fields embedded on a side_effect for idempotency lookup. */
+interface CachedDecisionFields {
+  _audit_record_id: string;
+  _audit_this_hash: string;
+  _decision: string;
+  _resolved_capability: string;
+  _resolved_control: string;
+  _reason: string;
+  _handler_accepted: boolean;
+  _recorded_at: string;
+}
+
+type CachedSideEffect = PersistedSideEffect & Partial<CachedDecisionFields>;
+
+async function loadOrSynthesizeSession(
+  persister: SessionPersister,
+  sessionId: string,
+  sessionRecord: { activeMode: Capability },
+  toolPoolHash: string,
+  cardVersion: string,
+  clock: Clock
+): Promise<PersistedSession> {
+  try {
+    return await persister.readSession(sessionId);
+  } catch (err) {
+    if (err instanceof SessionFormatIncompatible && err.reason === "file-missing") {
+      const nowIso = clock().toISOString();
+      return {
+        session_id: sessionId,
+        format_version: "1.0",
+        activeMode: sessionRecord.activeMode,
+        created_at: nowIso,
+        messages: [],
+        workflow: {
+          task_id: `bootstrap-${sessionId}`,
+          status: "Planning",
+          side_effects: [],
+          checkpoint: {}
+        },
+        counters: {},
+        tool_pool_hash: toolPoolHash,
+        card_version: cardVersion
+      } as PersistedSession;
+    }
+    throw err;
+  }
 }
 
 export const permissionsDecisionsPlugin: FastifyPluginAsync<
@@ -190,6 +283,77 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       });
     }
 
+    // §12.2 L-31 bracket-persist: when the persister bundle is wired, read
+    // the session file + check for an idempotency cache hit before running
+    // the decision pipeline. Cache hits return the original decision +
+    // audit_record_id without appending a second audit row.
+    const bracketWired =
+      opts.persister !== undefined &&
+      opts.markers !== undefined &&
+      opts.toolPoolHash !== undefined &&
+      opts.cardVersion !== undefined;
+
+    let bracketSession: PersistedSession | null = null;
+    let sideEffectIndex = -1;
+    let bracketIdempotencyKey: string | undefined;
+
+    const clientIdempotencyKey = extractIdempotencyKey(request);
+
+    if (bracketWired) {
+      bracketSession = await loadOrSynthesizeSession(
+        opts.persister!,
+        sessionId,
+        sessionRecord,
+        opts.toolPoolHash!,
+        opts.cardVersion!,
+        opts.clock
+      );
+      if (clientIdempotencyKey !== undefined) {
+        const workflow = bracketSession.workflow as { side_effects?: CachedSideEffect[] } | undefined;
+        const ses = Array.isArray(workflow?.side_effects) ? workflow!.side_effects! : [];
+        const hit = ses.find(
+          (se) => se.idempotency_key === clientIdempotencyKey && se.phase === "committed" && typeof se._audit_record_id === "string"
+        );
+        if (hit) {
+          return reply.code(201).send({
+            decision: hit._decision,
+            resolved_capability: hit._resolved_capability,
+            resolved_control: hit._resolved_control,
+            reason: hit._reason,
+            audit_record_id: hit._audit_record_id,
+            audit_this_hash: hit._audit_this_hash,
+            handler_accepted: hit._handler_accepted,
+            runner_version: runnerVersion,
+            recorded_at: hit._recorded_at,
+            idempotency_key: hit.idempotency_key,
+            cached: true
+          });
+        }
+      }
+      bracketIdempotencyKey = clientIdempotencyKey ?? randomUUID();
+
+      // Append pending side_effect + atomic write with PENDING_WRITE_DONE marker.
+      const workflow = bracketSession.workflow as {
+        side_effects: PersistedSideEffect[];
+        [k: string]: unknown;
+      };
+      if (!Array.isArray(workflow.side_effects)) workflow.side_effects = [];
+      const nowIso = opts.clock().toISOString();
+      sideEffectIndex = workflow.side_effects.length;
+      workflow.side_effects.push({
+        tool: toolEntry.name,
+        idempotency_key: bracketIdempotencyKey,
+        phase: "pending",
+        args_digest: argsDigest,
+        first_attempted_at: nowIso,
+        last_phase_transition_at: nowIso
+      });
+      await opts.persister!.writeSession(bracketSession, {
+        markerPhase: { kind: "pending", side_effect: sideEffectIndex }
+      });
+      opts.markers!.toolInvokeStart(sessionId, sideEffectIndex);
+    }
+
     // Resolver (§10.3 steps 1-4) — forgery-resistant source of decision.
     // MUST use session.activeMode, not the Agent Card's, per Week 3 day 2 rule.
     const resolverResponse = resolvePermissionForQuery({
@@ -241,6 +405,14 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
         // allow/deny freely; for other resolver outputs the PDA can't override.
         const expected = resolverImpliesPdaDecision(resolverDecision);
         if (expected !== "either" && verified.decision.decision !== expected) {
+          await compensatePendingSideEffect(
+            bracketSession,
+            sideEffectIndex,
+            opts.persister,
+            opts.markers,
+            opts.clock,
+            sessionId
+          );
           return reply.code(403).send({
             error: "pda-decision-mismatch",
             detail: `resolver decision ${resolverDecision} implies pda.decision=${expected}, got ${verified.decision.decision}`
@@ -256,6 +428,14 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           // Per §10.3.2: PDA crypto failure → coerce to Deny, handler_accepted=false,
           // audit the attempt.
           if (err.reason === "jws-malformed" || err.reason === "header-malformed" || err.reason === "payload-malformed") {
+            await compensatePendingSideEffect(
+              bracketSession,
+              sideEffectIndex,
+              opts.persister,
+              opts.markers,
+              opts.clock,
+              sessionId
+            );
             return reply.code(400).send({ error: "pda-malformed", detail: err.reason });
           }
           handlerAccepted = false;
@@ -294,6 +474,39 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     // (can't silently drop a record when the sink is known-degraded).
     if (opts.sink) await opts.sink.recordAuditRow(written);
 
+    // §12.2 L-31 — TOOL_INVOKE_DONE + transition pending → committed with
+    // cached decision fields inline so the next idempotent submission can
+    // short-circuit. The committed-phase fsync fires COMMITTED_WRITE_DONE.
+    if (bracketWired && bracketSession && sideEffectIndex >= 0 && bracketIdempotencyKey !== undefined) {
+      opts.markers!.toolInvokeDone(sessionId, sideEffectIndex, "committed");
+      const workflow = bracketSession.workflow as {
+        side_effects: CachedSideEffect[];
+        [k: string]: unknown;
+      };
+      const se = workflow.side_effects[sideEffectIndex];
+      if (se) {
+        se.phase = "committed";
+        se.last_phase_transition_at = opts.clock().toISOString();
+        // Embed result_digest as the audit this_hash (a stable digest of the
+        // decision outcome) so /state's result_digest shows something
+        // meaningful for decision side_effects even before real tool
+        // invocation wires in M3.
+        se.result_digest = `sha256:${written.this_hash}`;
+        // Cache the full response body inline for future idempotency hits.
+        se._audit_record_id = recordId;
+        se._audit_this_hash = written.this_hash;
+        se._decision = finalDecision;
+        se._resolved_capability = resolverResponse.resolved_capability;
+        se._resolved_control = resolverResponse.resolved_control;
+        se._reason = finalReason;
+        se._handler_accepted = handlerAccepted;
+        se._recorded_at = recordedAt;
+      }
+      await opts.persister!.writeSession(bracketSession, {
+        markerPhase: { kind: "committed", side_effect: sideEffectIndex }
+      });
+    }
+
     return reply.code(201).send({
       decision: finalDecision,
       resolved_capability: resolverResponse.resolved_capability,
@@ -303,7 +516,38 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       audit_this_hash: written.this_hash,
       handler_accepted: handlerAccepted,
       runner_version: runnerVersion,
-      recorded_at: recordedAt
+      recorded_at: recordedAt,
+      ...(bracketIdempotencyKey !== undefined ? { idempotency_key: bracketIdempotencyKey } : {})
     });
   });
 };
+
+/**
+ * Roll a pending side_effect forward to `compensated` when dispatch fails
+ * with a classified error (pda-malformed, pda-decision-mismatch). Best-
+ * effort: a failure to persist the compensation leaves the pending row on
+ * disk; the caller still returns the 4xx to the client — the resume
+ * algorithm's §12.5 step 4 will mark it compensated with a
+ * ResumeCompensationGap note on next boot.
+ */
+async function compensatePendingSideEffect(
+  bracketSession: PersistedSession | null,
+  sideEffectIndex: number,
+  persister: SessionPersister | undefined,
+  markers: MarkerEmitter | undefined,
+  clock: Clock,
+  sessionId: string
+): Promise<void> {
+  if (!bracketSession || !persister || sideEffectIndex < 0) return;
+  try {
+    const workflow = bracketSession.workflow as { side_effects: PersistedSideEffect[] };
+    const se = workflow.side_effects[sideEffectIndex];
+    if (!se) return;
+    se.phase = "compensated";
+    se.last_phase_transition_at = clock().toISOString();
+    await persister.writeSession(bracketSession);
+    markers?.toolInvokeDone(sessionId, sideEffectIndex, "compensated");
+  } catch {
+    // Swallow — the 4xx return is the primary signal to the client.
+  }
+}

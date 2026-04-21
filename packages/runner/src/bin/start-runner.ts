@@ -379,7 +379,15 @@ async function main() {
                 }
               : {}),
             runnerVersion: "1.0",
-            sink: auditSink
+            sink: auditSink,
+            // §12.2 L-31 bracket-persist bundle.
+            persister,
+            markers,
+            toolPoolHash: `sha256:registry-size-${registry.size()}`,
+            cardVersion:
+              typeof (card as { version?: unknown }).version === "string"
+                ? (card as { version: string }).version
+                : "1.0"
           }
         }
       : {}),
