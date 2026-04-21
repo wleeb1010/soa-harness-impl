@@ -1,5 +1,58 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (L-30 dynamic MANIFEST lookup — cross-swap attack closed)
+
+### Conformance-card loader now resolves the pinned digest per fixture path
+
+**Signal for validator:** One small impl fix shipped. The L-21 loader
+pinned against a single hardcoded digest, which silently accepted
+v1.0 bytes at the v1.1 path once L-30 shipped two fixtures. The loader
+now looks up `MANIFEST.json.artifacts.supplementary_artifacts[].sha256`
+keyed by the fixture's path relative to the spec repo root. Both
+v1.0 and v1.1 paths load clean; cross-swap attacks refuse. Six new
+tests cover every branch. Scoreboard: **316 tests green** (+6).
+
+- **Loader logic** (`packages/runner/src/card/conformance-loader.ts`):
+  `loadConformanceCard` now resolves the expected digest dynamically.
+  `opts.expectedDigest` is a preserved escape hatch (tests +
+  operators pinning out-of-band). Otherwise, `opts.specRoot` OR
+  auto-detect walks up from `fixturePath` until `MANIFEST.json`
+  appears (≤ 8 levels). The lookup keys on the fixture path
+  relative to spec root with POSIX separators normalized — the
+  v1.0 path pins against the v1.0 digest, v1.1 path against v1.1.
+  Constants `PINNED_CONFORMANCE_CARD_DIGEST` +
+  `PLACEHOLDER_SPKI` retained (exported) for back-compat +
+  archaeology; the loader no longer reads the constant at runtime.
+- **Cross-swap protection:** serving v1.0 bytes at the v1.1 path
+  pins against v1.1's digest → `digest-mismatch`. Attacker can't
+  launder an older card through a newer path.
+- **New `ConformanceFixtureTampered` reasons:** `manifest-missing`,
+  `manifest-path-not-found`, `manifest-malformed`. Existing
+  reasons (`digest-mismatch`, `missing-placeholder`,
+  `read-failure`) unchanged.
+- **Tests (6 new):** v1.0 auto-resolve loads; v1.1 auto-resolve
+  loads (asserts `card.version === "1.1.0"`); cross-swap attack
+  refuses with `digest-mismatch`; path-not-in-MANIFEST throws
+  `manifest-path-not-found`; no MANIFEST reachable throws
+  `manifest-missing`; `expectedDigest` escape hatch bypasses
+  lookup (back-compat regression guard).
+
+**Repo scoreboard:** 316 tests green
+(30 core + 4 schemas + 276 runner + 6 create-soa-agent). Pinned at
+spec `5fb1af9`. `pnpm -r build / typecheck / lint / test` all
+green.
+
+**Operator ask still open:** **Please restart the long-running
+`:7700` instance.** The CRL periodic-refresh fix (commit `4a780dd`)
+is code-complete but the running process predates it. Single
+restart clears Finding B and lets the 5 M1 regression tests +
+SV-SESS-STATE-01 flip clean without any further impl change.
+
+**M2 impl status — feature-complete again:**
+- All 16 M2 test IDs have impl coverage (unchanged from prior STATUS).
+- L-30 gap closed: v1.0 and v1.1 cards both pass MANIFEST-based
+  digest verification at load time.
+
 ## 2026-04-21 (L-29 resume trigger points + L-30 v1.1 fixture + pin bump)
 
 ### Pin bumped to `5fb1af9`; resume-scan + lazy-hydrate wired; M2 impl feature-complete
