@@ -30,8 +30,19 @@ export interface ToolsFile {
   tools: ToolEntry[];
 }
 
-/** Closed-set reason enum for ToolPoolStale rejections. §12.2 currently defines one. */
-export type ToolPoolStaleReason = "idempotency-retention-insufficient";
+/**
+ * Closed-set reason enum for ToolPoolStale rejections.
+ *   - `idempotency-retention-insufficient` — §12.2 load-time classification
+ *     rule (tool declaring `< 3600` retention without Destructive+Prompt).
+ *   - `tool-pool-hash-mismatch` — §12.5 step 3 resume check: the session's
+ *     persisted `tool_pool_hash` no longer matches the currently-resolved
+ *     registry. A mismatch here means the Runner's tool surface changed
+ *     between the last bracket-persist and the resume — replaying against
+ *     a drifted pool could invoke a different tool under the same name.
+ */
+export type ToolPoolStaleReason =
+  | "idempotency-retention-insufficient"
+  | "tool-pool-hash-mismatch";
 
 /**
  * Raised by `new ToolRegistry(...)` / `loadToolRegistry(...)` when a tool entry

@@ -72,7 +72,6 @@ export class BootOrchestrator implements ReadinessProbe {
     this.onRefreshError =
       opts.onRefreshError ??
       ((uri, err) => {
-        // eslint-disable-next-line no-console
         console.warn(`[boot] CRL auto-refresh failed for ${uri}: ${String(err)}`);
       });
   }

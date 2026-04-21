@@ -178,6 +178,62 @@ export class SessionPersister {
     return this.parseAndValidate(path, bytes);
   }
 
+  /**
+   * Lenient read path for §12.5 resume. Enforces only the format_version
+   * and partial-write / corruption checks — does NOT run the full
+   * session.schema.json validation. The resume algorithm accepts pre-1.0
+   * session files (missing `activeMode` per L-20) and migrates them before
+   * re-validating; strict validation at read time would reject those files
+   * before migration can run.
+   */
+  async readSessionForResume(session_id: string): Promise<PersistedSession> {
+    const path = this.pathFor(session_id);
+    let bytes: Buffer;
+    try {
+      bytes = await fsp.readFile(path);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new SessionFormatIncompatible(path, "file-missing");
+      }
+      throw err;
+    }
+    return this.parseLenient(path, bytes);
+  }
+
+  /** Shared lenient parse — shape + format_version only, no session.schema run. */
+  parseLenient(path: string, bytes: Buffer): PersistedSession {
+    if (bytes.length === 0) {
+      throw new SessionFormatIncompatible(path, "partial-write-detected", "empty-file");
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bytes.toString("utf8"));
+    } catch (err) {
+      const trimmed = bytes.toString("utf8").trimEnd();
+      const looksTruncated = !trimmed.endsWith("}") && !trimmed.endsWith("]");
+      throw new SessionFormatIncompatible(
+        path,
+        looksTruncated ? "partial-write-detected" : "corrupted-json",
+        (err as Error).message
+      );
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new SessionFormatIncompatible(path, "schema-violation", "top-level not an object");
+    }
+    const maybe = parsed as { format_version?: unknown };
+    if (maybe.format_version !== "1.0") {
+      // §12.5 step 1 — strict format_version match. Missing or drifted
+      // values trip SessionFormatIncompatible (NOT bad-format-version —
+      // resume treats any departure from "1.0" as incompatibility).
+      throw new SessionFormatIncompatible(
+        path,
+        "bad-format-version",
+        `got=${JSON.stringify(maybe.format_version)}`
+      );
+    }
+    return parsed as PersistedSession;
+  }
+
   /** Parse + validate bytes without touching the filesystem. Shared by read + tests. */
   parseAndValidate(path: string, bytes: Buffer): PersistedSession {
     if (bytes.length === 0) {

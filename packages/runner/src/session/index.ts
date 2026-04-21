@@ -13,3 +13,14 @@ export {
 } from "./persist.js";
 
 export { sessionStatePlugin, type SessionStateRouteOptions } from "./state-route.js";
+
+export {
+  resumeSession,
+  CardVersionDrift,
+  type ResumeContext,
+  type ResumeOutcome,
+  type ResumeOutcomeKind,
+  type ResumedSideEffect,
+  type PersistedSideEffect,
+  type ToolCompensationSupport
+} from "./resume.js";
