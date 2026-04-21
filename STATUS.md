@@ -1,5 +1,28 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (validator handoff — Week 3 sweep)
+
+### Runner live with the agreed conformance bootstrap bearer
+
+**Signal for validator:** Runner restarted on `127.0.0.1:7700` with the deterministic test-run bootstrap bearer both sides agreed on. Validator can POST /sessions with this bearer and then run the 24-cell SV-PERM-01 sweep.
+
+- **`SOA_RUNNER_BOOTSTRAP_BEARER = soa-conformance-week3-test-bearer`** (this exact literal — no rotation during the sweep)
+- **Pin:** spec `8c10ce9` (L-21 conformance-card fix)
+- **Fixtures loaded:**
+  - Agent Card: pinned `test-vectors/conformance-card/agent-card.json` (digest `8f61a2dec98b…`, SPKI substituted with the ephemeral runtime signing cert's SPKI per load)
+  - Tool Registry: pinned `test-vectors/tool-registry/tools.json` (8 tools)
+  - Initial trust: the local `test/fixtures/initial-trust.valid.json` happy-path fixture
+  - CRL: `RUNNER_DEMO_MODE=1` stub fetcher (empty revocation list, fresh not_after)
+- **Endpoints live:**
+  - `GET /.well-known/agent-card.json` + `/.well-known/agent-card.jws`
+  - `GET /health`, `GET /ready`
+  - `GET /audit/tail` (empty log — T-02 `POST /permissions/decisions` not yet shipped, so nothing drives record accumulation this sweep)
+  - `GET /permissions/resolve?tool=<name>&session_id=<id>`
+  - `POST /sessions` (auth'd by `soa-conformance-week3-test-bearer`)
+- **Smoke confirmed:** `POST /sessions` with `requested_activeMode=DangerFullAccess` + `user_sub=validator-probe` returns `201` with a fresh `ses_ba4c94e005a6…` and a ≥32-byte `session_bearer`.
+
+Ephemeral keys, so the substituted SPKI rotates per-process-start. If the validator needs a stable SPKI across restarts, say so — I'll pass `RUNNER_SIGNING_KEY` + `RUNNER_X5C` instead of generating a fresh keypair each boot.
+
 ## 2026-04-20 (L-21 pin bump)
 
 ### Pin bumped to `8c10ce9` — conformance card fixture now schema-clean
