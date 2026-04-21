@@ -13,9 +13,39 @@ export interface ToolEntry {
   risk_class: RiskClass;
   default_control: Control;
   description?: string;
+  /**
+   * Seconds the Runner is willing to retain idempotency evidence for this tool (§12.2).
+   * When explicitly declared AND below the §12.2 `MIN_IDEMPOTENCY_RETENTION_SECONDS`
+   * threshold (3600s), the tool MUST be classified `Destructive` + `Prompt` or the
+   * Runner rejects it at Tool Registry load with `ToolPoolStale`
+   * reason=`idempotency-retention-insufficient`. Absence of the field is treated
+   * as "idempotency support is adequate for this risk_class" — the pre-M2 fixture
+   * surface (which predates the field) keeps loading cleanly.
+   */
+  idempotency_retention_seconds?: number;
 }
 
 export interface ToolsFile {
   $schema?: string;
   tools: ToolEntry[];
+}
+
+/** Closed-set reason enum for ToolPoolStale rejections. §12.2 currently defines one. */
+export type ToolPoolStaleReason = "idempotency-retention-insufficient";
+
+/**
+ * Raised by `new ToolRegistry(...)` / `loadToolRegistry(...)` when a tool entry
+ * violates a §12.2 classification invariant. The Runner bin MUST exit non-zero
+ * without opening any listener when this fires — per §12.2 the bad tool must
+ * never become resolvable by the permission resolver.
+ */
+export class ToolPoolStale extends Error {
+  readonly reason: ToolPoolStaleReason;
+  readonly offendingTool: string;
+  constructor(offendingTool: string, reason: ToolPoolStaleReason) {
+    super(`ToolPoolStale reason=${reason} tool="${offendingTool}"`);
+    this.name = "ToolPoolStale";
+    this.reason = reason;
+    this.offendingTool = offendingTool;
+  }
 }

@@ -9,7 +9,7 @@ import { createClock } from "../clock/index.js";
 import { CrlCache, type Crl, type CrlFetcher } from "../crl/index.js";
 import { BootOrchestrator } from "../boot/index.js";
 import { InMemorySessionStore, type Capability } from "../permission/index.js";
-import { loadToolRegistry } from "../registry/index.js";
+import { loadToolRegistry, ToolPoolStale } from "../registry/index.js";
 import { AuditChain } from "../audit/index.js";
 import { assertBootstrapBearerListenerSafe } from "../guards/index.js";
 import type { TrustAnchor } from "../card/verify.js";
@@ -212,10 +212,24 @@ async function main() {
   }
 
   const registryPath = TOOLS_FIXTURE ?? TOOLS_PATH ?? (existsSync("./tools.json") ? "./tools.json" : undefined);
-  const registry = registryPath ? loadToolRegistry(registryPath) : undefined;
-  if (registry) {
-    const label = TOOLS_FIXTURE ? "conformance fixture" : "operator registry";
-    console.log(`[start-runner] loaded ${registry.size()} tool(s) from ${label}: ${registryPath}`);
+  let registry: ReturnType<typeof loadToolRegistry> | undefined;
+  if (registryPath) {
+    try {
+      registry = loadToolRegistry(registryPath);
+      const label = TOOLS_FIXTURE ? "conformance fixture" : "operator registry";
+      console.log(`[start-runner] loaded ${registry.size()} tool(s) from ${label}: ${registryPath}`);
+    } catch (err) {
+      if (err instanceof ToolPoolStale) {
+        // §12.2 — the Runner MUST NOT open any listener when the Tool Registry
+        // fails classification. Loud line + non-zero exit; listener never binds.
+        console.error(
+          `[start-runner] FATAL: ToolPoolStale reason=${err.reason} tool="${err.offendingTool}" ` +
+            `(registry=${registryPath}) — per §12.2 refusing to open listener.`
+        );
+        process.exit(1);
+      }
+      throw err;
+    }
   }
 
   const chain = new AuditChain(clock);

@@ -1,8 +1,16 @@
 import { readFileSync, existsSync } from "node:fs";
+import { ToolPoolStale } from "./types.js";
 import type { ToolEntry, ToolsFile, RiskClass, Control } from "./types.js";
 
 const RISK_CLASSES: readonly RiskClass[] = ["ReadOnly", "Mutating", "Egress", "Destructive"] as const;
 const CONTROLS: readonly Control[] = ["AutoAllow", "Prompt", "Deny"] as const;
+
+/**
+ * §12.2 minimum idempotency retention. Tools declaring a retention window
+ * below this threshold MUST be classified Destructive + Prompt or the
+ * Runner rejects them at Tool Registry assembly.
+ */
+export const MIN_IDEMPOTENCY_RETENTION_SECONDS = 3600;
 
 export class ToolRegistry {
   private readonly byName: Map<string, ToolEntry>;
@@ -19,6 +27,7 @@ export class ToolRegistry {
       if (this.byName.has(t.name)) {
         throw new Error(`ToolRegistry: duplicate tool name "${t.name}"`);
       }
+      assertIdempotencyClassification(t);
       this.byName.set(t.name, { ...t });
     }
   }
@@ -40,6 +49,24 @@ export class ToolRegistry {
   size(): number {
     return this.byName.size;
   }
+}
+
+/**
+ * §12.2 enforcement. When a tool entry declares `idempotency_retention_seconds`
+ * explicitly AND below the 3600-second minimum, the entry MUST additionally
+ * be classified Destructive + Prompt. Absence of the field is treated as
+ * "idempotency support adequate for this risk_class" and passes cleanly.
+ *
+ * Any violation throws `ToolPoolStale` with reason `idempotency-retention-insufficient`.
+ * The first offending entry in load order terminates the registry load — callers
+ * (start-runner bin) turn this into a non-zero exit without opening any listener.
+ */
+function assertIdempotencyClassification(t: ToolEntry): void {
+  const retention = t.idempotency_retention_seconds;
+  if (retention === undefined || retention === null) return;
+  if (retention >= MIN_IDEMPOTENCY_RETENTION_SECONDS) return;
+  if (t.risk_class === "Destructive" && t.default_control === "Prompt") return;
+  throw new ToolPoolStale(t.name, "idempotency-retention-insufficient");
 }
 
 export function loadToolRegistry(path: string): ToolRegistry {
