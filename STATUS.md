@@ -1,5 +1,21 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (T-01 live — `/audit/records` paginated)
+
+### `GET /audit/records` live on :7700 — V-06 + V-10 unblocked
+
+**Signal:** T-01 shipped. Validator can fire V-06 (SV-AUDIT-RECORDS-01/02) and V-10 (HR-14 chain-tamper) end-to-end against the same hash chain V-07 has been writing into.
+
+- Route: `GET /audit/records?after=<record_id>&limit=<n>` (default 100, max 1000); body per pinned `audit-records-response.schema.json`; pagination via `next_after` + `has_more`; records returned in chain order (earliest first).
+- Audit rows now schema-conformant (14 fields exactly): `id`, `timestamp`, `session_id`, `subject_id` ("none" in M1), `tool`, `args_digest`, `capability`, `control`, `handler` ("Interactive" in M1), `decision`, `reason`, `signer_key_id` ("" when no PDA), `prev_hash`, `this_hash`. Internal fields (`handler_accepted` etc.) moved out of the audit row and stay only in the 201 decisions-response body.
+- Gates: `audit:read` bearer (any session bearer carries it); 401 missing, 403 not-tied-to-session; 429 at 60 rpm with Retry-After; 503 on `/ready`; 404 when `after=` references an unknown id.
+- Live end-to-end: a single `POST /permissions/decisions` → `audit_record_id=aud_f7122b60a4e9`; `GET /audit/records` returned that exact record with decision=AutoAllow, `has_more=false`.
+- 8 new tests covering empty page, single-record page, multi-page traversal with `next_after`/`has_more` transitions, 404 unknown-after, 403 non-session-bearer, 429 rate limit, not-a-side-effect regression, 503 readiness.
+
+179 tests green (30 core + 4 schemas + 145 runner across 16 files). Eight endpoints live on :7700.
+
+Punch list: T-03 (`request_decide_scope`) + T-08 (session.schema refresh) parallel next. Then T-06 / T-07 / T-05.
+
 ## 2026-04-20 (L-22 rename + validator handoff)
 
 ### Runner back up with agreed bootstrap bearer + pre-enrolled decide session
