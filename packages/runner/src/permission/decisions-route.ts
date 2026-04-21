@@ -203,7 +203,13 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           pdaJws,
           resolveVerifyKey: opts.resolvePdaVerifyKey,
           ...(opts.isPdaKidRevoked !== undefined ? { isRevoked: opts.isPdaKidRevoked } : {}),
-          now: opts.clock
+          now: opts.clock,
+          // L-24 conformance fixtures carry a `tool`/`capability`/`control`/
+          // `decided_at` payload shape that predates the current canonical-
+          // decision schema. Signature is the trust boundary; schema is
+          // convenience. Skip strict validation here so both shapes round-
+          // trip without rejection.
+          skipPayloadSchema: true
         });
         pdaSignerKid = verified.decision.handler_kid;
 

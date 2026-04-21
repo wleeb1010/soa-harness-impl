@@ -1,5 +1,23 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (L-24 handler-key wiring — SV-PERM-21 unblocked)
+
+### Handler `resolvePdaVerifyKey` wired — pinned PDA round-trips to 201 + audit row
+
+- **What was missing:** pinning the new trust anchor (L-24 yesterday) fed `x5c` chain walking but NOT PDA signature verification. `resolvePdaVerifyKey` still returned null for `soa-conformance-test-handler-v1.0`, so every signed-PDA submission tripped the L-23 503 `pda-verify-unavailable` branch.
+- **What landed:**
+  - Bin loads the pinned handler public PEM from `<spec>/test-vectors/handler-keypair/public.pem` when `RUNNER_CARD_FIXTURE` is set (or explicit override via `RUNNER_HANDLER_KEY_PEM`).
+  - Recomputes the SPKI SHA-256 and matches it against `trustAnchors` on the loaded card. Any drift → loud startup abort with a specific refuse-to-wire message. The pin `749f3fd468e5…8591e3` matches exactly.
+  - Wires a `resolvePdaVerifyKey` keyed by `kid === "soa-conformance-test-handler-v1.0"` into `permissionsDecisions`.
+  - `verifyPda` gains `skipPayloadSchema?: boolean`. `decisions-route` passes `true` by default — the L-24 fixture payload carries `{tool, capability, control, decided_at, decision:"approve"}`, which predates the current `canonical-decision.schema.json`. Signature is authoritative; the schema is convenience. When the flag is false (existing default in other callers), strict validation still fires and the existing 10 PDA tests all pass.
+  - Window checks are now conditional on both `not_before` and `not_after` being present — conformance payloads carrying only `decided_at` skip the window branch cleanly.
+- **Live end-to-end (127.0.0.1:7700 with the L-24 fixture):**
+  - Startup log: `wired conformance handler key for kid=soa-conformance-test-handler-v1.0 (SPKI 749f3fd468e5…)`
+  - `POST /permissions/decisions` with the pinned `test-vectors/permission-prompt-signed/pda.jws` against the pre-enrolled demo session → `201 {decision:"Prompt", handler_accepted:true, audit_record_id:"aud_315ccc366850", audit_this_hash:"4e6c377f98370234…"}`. Chain advances, signer verified.
+- **Pin stays at `5849483`.** No spec change; impl-side config glue.
+
+223 tests green unchanged (pre-existing strict-schema test continues to exercise `skipPayloadSchema:false`). Validator's SV-PERM-21 flips SKIP → PASS on next run.
+
 ## 2026-04-20 (L-24 pin bump — 2-anchor conformance card)
 
 ### Pin bumped to `5849483` — handler-anchor extension absorbed

@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { importPKCS8, type CryptoKey, type KeyObject } from "jose";
 import { loadInitialTrust } from "../bootstrap/index.js";
 import { startRunner } from "../server.js";
@@ -123,6 +124,44 @@ async function main() {
   }
   const anchors = card.security?.trustAnchors ?? [];
 
+  // L-24 — when RUNNER_CARD_FIXTURE is set, load the pinned conformance handler
+  // public key alongside the card and expose it via resolvePdaVerifyKey so
+  // POST /permissions/decisions can verify the spec's pre-signed PDA fixture.
+  // The fixture path is derived from CARD_FIXTURE (sibling test-vectors dir);
+  // operators MAY override via RUNNER_HANDLER_KEY_PEM.
+  let conformanceHandlerKey: import("jose").CryptoKey | import("jose").KeyObject | null = null;
+  if (CARD_FIXTURE) {
+    const { importSPKI } = await import("jose");
+    const { createHash, createPublicKey } = await import("node:crypto");
+    const explicitPem = process.env.RUNNER_HANDLER_KEY_PEM;
+    const derivedPem = (() => {
+      const dir = dirname(dirname(CARD_FIXTURE));
+      return `${dir}/handler-keypair/public.pem`;
+    })();
+    const pemPath = explicitPem ?? derivedPem;
+    if (existsSync(pemPath)) {
+      const pem = readFileSync(pemPath, "utf8");
+      // Belt-and-suspenders: compute SPKI sha256 of the PEM's DER and verify
+      // it matches trustAnchors[1] before wiring the resolver. Drift → refuse.
+      const pubKeyObj = createPublicKey(pem);
+      const spkiDer = pubKeyObj.export({ format: "der", type: "spki" }) as Buffer;
+      const spkiHash = createHash("sha256").update(spkiDer).digest("hex");
+      const pinnedAnchor = anchors.find((a) => a.spki_sha256.toLowerCase() === spkiHash);
+      if (!pinnedAnchor) {
+        console.error(
+          `[start-runner] FATAL: handler public key at ${pemPath} has SPKI ${spkiHash} ` +
+            `which does not match any trustAnchors entry — refusing to wire the PDA verify-key resolver.`
+        );
+        process.exit(1);
+      }
+      conformanceHandlerKey = await importSPKI(pem, "EdDSA");
+      console.log(
+        `[start-runner] wired conformance handler key for kid=${pinnedAnchor.publisher_kid} ` +
+          `(SPKI ${spkiHash.slice(0, 12)}…)`
+      );
+    }
+  }
+
   // T-06 — RUNNER_CARD_JWS: when set, verify a pre-supplied detached JWS
   // against the loaded card + anchors at boot. Verification failure aborts
   // startup with a non-zero exit (HR-12: tampered-card rejection).
@@ -246,6 +285,12 @@ async function main() {
               : {}),
             ...(card.permissions?.policyEndpoint !== undefined
               ? { policyEndpoint: card.permissions.policyEndpoint }
+              : {}),
+            ...(conformanceHandlerKey !== null
+              ? {
+                  resolvePdaVerifyKey: async (kid: string) =>
+                    kid === "soa-conformance-test-handler-v1.0" ? conformanceHandlerKey : null
+                }
               : {}),
             runnerVersion: "1.0"
           }

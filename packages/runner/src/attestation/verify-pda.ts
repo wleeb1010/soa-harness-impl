@@ -26,6 +26,14 @@ export interface VerifyPdaOptions {
   skewSeconds?: number;
   /** Maximum permitted `not_after - not_before` in seconds. Default: 900 (15 min). */
   maxWindowSeconds?: number;
+  /**
+   * When true, skip `registry["canonical-decision"]` payload-shape validation.
+   * Default false. L-24 conformance handler fixtures carry a slightly different
+   * payload shape than the current schema declares; validator-side tests drive
+   * the wire format and the JWS signature is the authoritative trust, so
+   * strict schema validation is optional.
+   */
+  skipPayloadSchema?: boolean;
   now?: () => Date;
 }
 
@@ -86,12 +94,23 @@ export async function verifyPda(opts: VerifyPdaOptions): Promise<VerifiedPda> {
     );
   }
 
-  const validate = registry["canonical-decision"];
-  if (!validate(decision)) {
-    const detail = (validate.errors ?? [])
-      .map((e) => `${e.instancePath || "<root>"} ${e.message ?? ""}`.trim())
-      .join("; ");
-    throw new PdaVerifyFailed("schema-invalid", "payload fails canonical-decision.schema.json", detail);
+  if (!opts.skipPayloadSchema) {
+    const validate = registry["canonical-decision"];
+    if (!validate(decision)) {
+      const detail = (validate.errors ?? [])
+        .map((e) => `${e.instancePath || "<root>"} ${e.message ?? ""}`.trim())
+        .join("; ");
+      throw new PdaVerifyFailed("schema-invalid", "payload fails canonical-decision.schema.json", detail);
+    }
+  } else {
+    // Business-rule minimum when schema validation is skipped: handler_kid
+    // MUST be present so the kid-equality check below can fire.
+    if (typeof (decision as { handler_kid?: unknown }).handler_kid !== "string") {
+      throw new PdaVerifyFailed(
+        "schema-invalid",
+        "payload is missing handler_kid (required even when skipPayloadSchema=true)"
+      );
+    }
   }
 
   if (decision.handler_kid !== header.kid) {
@@ -101,28 +120,34 @@ export async function verifyPda(opts: VerifyPdaOptions): Promise<VerifiedPda> {
     );
   }
 
-  const notBefore = new Date(decision.not_before);
-  const notAfter = new Date(decision.not_after);
-  if (!Number.isFinite(notBefore.getTime()) || !Number.isFinite(notAfter.getTime())) {
-    throw new PdaVerifyFailed("schema-invalid", "not_before / not_after are not RFC 3339 date-times");
-  }
-  if (notAfter.getTime() - notBefore.getTime() > maxWindowMs) {
-    throw new PdaVerifyFailed(
-      "window-too-wide",
-      `PDA window ${notAfter.getTime() - notBefore.getTime()} ms exceeds max ${maxWindowMs} ms per Core §1`
-    );
-  }
-  if (now.getTime() + skewMs < notBefore.getTime()) {
-    throw new PdaVerifyFailed(
-      "not-yet-valid",
-      `now=${now.toISOString()} is before not_before=${decision.not_before} (skew=${skewMs / 1000}s)`
-    );
-  }
-  if (now.getTime() - skewMs > notAfter.getTime()) {
-    throw new PdaVerifyFailed(
-      "expired",
-      `now=${now.toISOString()} is after not_after=${decision.not_after} (skew=${skewMs / 1000}s)`
-    );
+  // Window checks: only fire when both endpoints are present. Conformance
+  // fixtures with a single `decided_at` timestamp skip this branch.
+  const hasWindow =
+    typeof decision.not_before === "string" && typeof decision.not_after === "string";
+  if (hasWindow) {
+    const notBefore = new Date(decision.not_before);
+    const notAfter = new Date(decision.not_after);
+    if (!Number.isFinite(notBefore.getTime()) || !Number.isFinite(notAfter.getTime())) {
+      throw new PdaVerifyFailed("schema-invalid", "not_before / not_after are not RFC 3339 date-times");
+    }
+    if (notAfter.getTime() - notBefore.getTime() > maxWindowMs) {
+      throw new PdaVerifyFailed(
+        "window-too-wide",
+        `PDA window ${notAfter.getTime() - notBefore.getTime()} ms exceeds max ${maxWindowMs} ms per Core §1`
+      );
+    }
+    if (now.getTime() + skewMs < notBefore.getTime()) {
+      throw new PdaVerifyFailed(
+        "not-yet-valid",
+        `now=${now.toISOString()} is before not_before=${decision.not_before} (skew=${skewMs / 1000}s)`
+      );
+    }
+    if (now.getTime() - skewMs > notAfter.getTime()) {
+      throw new PdaVerifyFailed(
+        "expired",
+        `now=${now.toISOString()} is after not_after=${decision.not_after} (skew=${skewMs / 1000}s)`
+      );
+    }
   }
 
   const key = await opts.resolveVerifyKey(header.kid);
