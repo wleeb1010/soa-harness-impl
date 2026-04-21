@@ -211,7 +211,7 @@ describe("POST /permissions/decisions — §12.2 L-31 bracket-persist", () => {
       expect(first.statusCode).toBe(201);
       const firstBody = JSON.parse(first.body);
       expect(firstBody.idempotency_key).toBe(key);
-      expect(firstBody.cached).toBeUndefined();
+      expect(firstBody.replayed).toBeUndefined();
       const chainLenAfterFirst = chain.snapshot().length;
       expect(chainLenAfterFirst).toBe(1);
 
@@ -231,7 +231,7 @@ describe("POST /permissions/decisions — §12.2 L-31 bracket-persist", () => {
       });
       expect(second.statusCode).toBe(201);
       const secondBody = JSON.parse(second.body);
-      expect(secondBody.cached).toBe(true);
+      expect(secondBody.replayed).toBe(true);
       expect(secondBody.audit_record_id).toBe(firstBody.audit_record_id);
       expect(secondBody.audit_this_hash).toBe(firstBody.audit_this_hash);
       expect(secondBody.decision).toBe(firstBody.decision);

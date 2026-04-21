@@ -326,7 +326,7 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
             runner_version: runnerVersion,
             recorded_at: hit._recorded_at,
             idempotency_key: hit.idempotency_key,
-            cached: true
+            replayed: true
           });
         }
       }
