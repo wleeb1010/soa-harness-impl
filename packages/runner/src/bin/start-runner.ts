@@ -379,6 +379,22 @@ async function main() {
       runnerVersion: "1.0",
       resumeCtx
     },
+    budgetProjection: {
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
+    },
+    ...(registry
+      ? {
+          toolsRegistered: {
+            registry,
+            sessionStore,
+            clock,
+            runnerVersion: "1.0",
+            registeredAt: clock()
+          }
+        }
+      : {}),
     ...(registry
       ? {
           permissionsDecisions: {
@@ -431,6 +447,8 @@ async function main() {
   console.log(`  GET http://${HOST}:${PORT}/audit/records?after=<id>&limit=<n>`);
   console.log(`  GET http://${HOST}:${PORT}/sessions/<session_id>/state`);
   console.log(`  GET http://${HOST}:${PORT}/audit/sink-events?after=<id>&limit=<n>`);
+  console.log(`  GET http://${HOST}:${PORT}/budget/projection/<session_id>`);
+  if (registry) console.log(`  GET http://${HOST}:${PORT}/tools/registered`);
   if (registry) {
     console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
     console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);

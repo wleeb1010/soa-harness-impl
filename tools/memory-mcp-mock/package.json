@@ -1,0 +1,23 @@
+{
+  "name": "@soa-harness-tools/memory-mcp-mock",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Minimum-viable Memory MCP server implementing the §8.1 three-tool protocol for M3 SV-MEM-01..08 + HR-17 conformance tests.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "soa-memory-mcp-mock": "./dist/bin/start-mock.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "mcp-mock": "node dist/bin/start-mock.js"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0"
+  }
+}

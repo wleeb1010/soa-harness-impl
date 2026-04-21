@@ -24,6 +24,7 @@ import {
   AuditSink
 } from "./audit/index.js";
 import { sessionStatePlugin, SessionPersister } from "./session/index.js";
+import { budgetProjectionPlugin, toolsRegisteredPlugin } from "./observability/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -148,6 +149,23 @@ export interface BuildRunnerOptions {
     /** L-29 lazy-hydrate calls resume_session when present. */
     resumeCtx?: import("./session/resume.js").ResumeContext;
   };
+  /** M3-T3 scaffold: GET /budget/projection (§13.5) — placeholder body. */
+  budgetProjection?: {
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    defaultMaxTokensPerRun?: number;
+  };
+  /** M3-T3 scaffold: GET /tools/registered (§11.4) — static-fixture only. */
+  toolsRegistered?: {
+    registry: ToolRegistry;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    registeredAt?: Date;
+  };
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -236,6 +254,33 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(ss.runnerVersion !== undefined ? { runnerVersion: ss.runnerVersion } : {}),
       ...(ss.requestsPerMinute !== undefined ? { requestsPerMinute: ss.requestsPerMinute } : {}),
       ...(ss.resumeCtx !== undefined ? { resumeCtx: ss.resumeCtx } : {})
+    });
+  }
+
+  if (opts.budgetProjection !== undefined) {
+    const bp = opts.budgetProjection;
+    await app.register(budgetProjectionPlugin, {
+      sessionStore: bp.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: bp.clock,
+      ...(bp.runnerVersion !== undefined ? { runnerVersion: bp.runnerVersion } : {}),
+      ...(bp.requestsPerMinute !== undefined ? { requestsPerMinute: bp.requestsPerMinute } : {}),
+      ...(bp.defaultMaxTokensPerRun !== undefined
+        ? { defaultMaxTokensPerRun: bp.defaultMaxTokensPerRun }
+        : {})
+    });
+  }
+
+  if (opts.toolsRegistered !== undefined) {
+    const tr = opts.toolsRegistered;
+    await app.register(toolsRegisteredPlugin, {
+      registry: tr.registry,
+      sessionStore: tr.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: tr.clock,
+      ...(tr.runnerVersion !== undefined ? { runnerVersion: tr.runnerVersion } : {}),
+      ...(tr.requestsPerMinute !== undefined ? { requestsPerMinute: tr.requestsPerMinute } : {}),
+      ...(tr.registeredAt !== undefined ? { registeredAt: tr.registeredAt } : {})
     });
   }
 
