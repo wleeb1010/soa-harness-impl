@@ -247,6 +247,28 @@ describe("POST /permissions/decisions — §10.3.2", () => {
     await app.close();
   });
 
+  it("(6b) §10.3.2 L-23: PDA supplied but resolvePdaVerifyKey unconfigured → 503 pda-verify-unavailable", async () => {
+    // Build an app WITHOUT resolvePdaVerifyKey — the L-23 server-state branch.
+    const { app, store } = await buildTestApp({ activeCapability: "DangerFullAccess" });
+    store.register("ses_gggggggggggggggg", BEARER, { activeMode: "DangerFullAccess", canDecide: true });
+    const res = await app.inject({
+      method: "POST",
+      url: "/permissions/decisions",
+      headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+      payload: JSON.stringify({
+        tool: "fs__write_file",
+        session_id: "ses_gggggggggggggggg",
+        args_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        pda: "header.payload.signature"
+      })
+    });
+    expect(res.statusCode).toBe(503);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe("pda-verify-unavailable");
+    expect(body.reason).toBe("pda-verify-unavailable");
+    await app.close();
+  });
+
   it("(7) 429 when rate limit exhausted", async () => {
     const { app, store } = await buildTestApp({ requestsPerMinute: 2 });
     store.register("ses_1111111111111111", BEARER, { activeMode: "DangerFullAccess", canDecide: true });

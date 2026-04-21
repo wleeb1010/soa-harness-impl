@@ -188,11 +188,13 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     let pdaSignerKid: string | undefined;
 
     if (pdaJws !== null && pdaJws !== undefined) {
-      // Verify PDA crypto first. Malformed → 400.
+      // §10.3.2 L-23: when the deployment has no PDA verify configuration but
+      // a PDA-bearing request arrives, that's a server-state issue, NOT a
+      // client error — 503, not 400.
       if (!opts.resolvePdaVerifyKey) {
-        return reply.code(400).send({
-          error: "pda-verify-not-configured",
-          detail: "Runner was not started with resolvePdaVerifyKey; cannot verify a PDA"
+        return reply.code(503).send({
+          error: "pda-verify-unavailable",
+          reason: "pda-verify-unavailable"
         });
       }
 
