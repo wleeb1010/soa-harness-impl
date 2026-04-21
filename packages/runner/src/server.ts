@@ -65,6 +65,10 @@ export interface BuildRunnerOptions {
     maxTtlSeconds?: number;
     runnerVersion?: string;
     requestsPerMinute?: number;
+    /** §12.6 MUST — session file is persisted before POST /sessions 201. */
+    persister?: SessionPersister;
+    toolPoolHash?: string;
+    cardVersion?: string;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -182,7 +186,10 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.defaultTtlSeconds !== undefined ? { defaultTtlSeconds: sb.defaultTtlSeconds } : {}),
       ...(sb.maxTtlSeconds !== undefined ? { maxTtlSeconds: sb.maxTtlSeconds } : {}),
       ...(sb.runnerVersion !== undefined ? { runnerVersion: sb.runnerVersion } : {}),
-      ...(sb.requestsPerMinute !== undefined ? { requestsPerMinute: sb.requestsPerMinute } : {})
+      ...(sb.requestsPerMinute !== undefined ? { requestsPerMinute: sb.requestsPerMinute } : {}),
+      ...(sb.persister !== undefined ? { persister: sb.persister } : {}),
+      ...(sb.toolPoolHash !== undefined ? { toolPoolHash: sb.toolPoolHash } : {}),
+      ...(sb.cardVersion !== undefined ? { cardVersion: sb.cardVersion } : {})
     });
   }
 

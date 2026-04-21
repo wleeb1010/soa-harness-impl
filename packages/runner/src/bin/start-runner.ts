@@ -327,7 +327,16 @@ async function main() {
             clock,
             cardActiveMode: activeCapability,
             bootstrapBearer: BOOTSTRAP_BEARER,
-            runnerVersion: "1.0"
+            runnerVersion: "1.0",
+            // §12.6 MUST — POST /sessions persists the file before 201.
+            persister,
+            toolPoolHash: registry
+              ? `sha256:registry-size-${registry.size()}` // M3: real JCS hash
+              : "sha256:no-registry-loaded",
+            cardVersion:
+              typeof (card as { version?: unknown }).version === "string"
+                ? (card as { version: string }).version
+                : "1.0"
           }
         }
       : {}),

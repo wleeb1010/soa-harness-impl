@@ -3,6 +3,7 @@ import type { Clock } from "../clock/index.js";
 import type { ReadinessProbe } from "../probes/index.js";
 import { CAPABILITY_PERMITS, type Capability } from "./types.js";
 import { InMemorySessionStore } from "./session-store.js";
+import type { SessionPersister, PersistedSession } from "../session/index.js";
 
 export interface SessionsRouteOptions {
   sessionStore: InMemorySessionStore;
@@ -17,6 +18,31 @@ export interface SessionsRouteOptions {
   maxTtlSeconds?: number;
   runnerVersion?: string;
   requestsPerMinute?: number;
+  /**
+   * §12.6 Normative MUST — "The Runner MUST persist the session file (§12.1)
+   * before returning 201." The handler synthesizes a Planning-state session
+   * file from the request and writes it atomically via SessionPersister
+   * BEFORE the 201 body is sent. A persist failure surfaces as 503
+   * persistence-unwritable — the client can retry, but the spec MUST
+   * requires that 201 implies on-disk existence.
+   *
+   * Not optional in production — but left optional here so unit tests that
+   * exercise the in-memory-only flow (e.g., malformed-request branches that
+   * never reach the persist step) can omit it.
+   */
+  persister?: SessionPersister;
+  /**
+   * Tool pool hash to embed in the session file (§12.1 tool_pool_hash).
+   * Required when `persister` is set. The bin passes the current Tool
+   * Registry's hash so §12.5 step 3 can detect registry drift at resume.
+   */
+  toolPoolHash?: string;
+  /**
+   * Agent Card version to embed in the session file (§12.1 card_version).
+   * Required when `persister` is set. The bin passes card.version so
+   * §12.5 step 2 can detect card drift at resume.
+   */
+  cardVersion?: string;
 }
 
 const WINDOW_MS = 60_000;
@@ -128,6 +154,59 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
       now: opts.clock(),
       canDecide
     });
+
+    // §12.6 MUST — persist the session file BEFORE returning 201. A 201
+    // response implies the session exists on disk and will survive a
+    // Runner crash between POST and the client's next call. Without this,
+    // /sessions/:id/state 404s on disk-read even though the session is
+    // in-memory — the cross-endpoint consistency bug validators surface.
+    if (opts.persister) {
+      const toolPoolHash = opts.toolPoolHash;
+      const cardVersion = opts.cardVersion;
+      if (toolPoolHash === undefined || cardVersion === undefined) {
+        // Operator configuration error — surface loudly rather than ship a
+        // schema-violating session file to disk.
+        opts.sessionStore.revoke(created.session_id);
+        return reply.code(500).send({
+          error: "session-persist-misconfigured",
+          detail: "persister supplied without toolPoolHash or cardVersion"
+        });
+      }
+      const nowIso = opts.clock().toISOString();
+      const file: PersistedSession = {
+        session_id: created.session_id,
+        format_version: "1.0",
+        activeMode: created.record.activeMode,
+        created_at: nowIso,
+        messages: [],
+        workflow: {
+          // Placeholder task_id — the actual task arrives with the first
+          // tool invocation (§12.2 bracket-persist). session.schema.json
+          // requires the field; using the session_id keeps it unique and
+          // grep-friendly for operators inspecting the pending queue.
+          task_id: `bootstrap-${created.session_id}`,
+          status: "Planning",
+          side_effects: [],
+          checkpoint: {}
+        },
+        counters: {},
+        tool_pool_hash: toolPoolHash,
+        card_version: cardVersion
+      } as PersistedSession;
+      try {
+        await opts.persister.writeSession(file);
+      } catch (err) {
+        // Persist failure → the session doesn't survive a crash, so §12.6
+        // MUST is violated. Roll back the in-memory registration and
+        // surface 503 persistence-unwritable. Client MAY retry.
+        opts.sessionStore.revoke(created.session_id);
+        return reply.code(503).send({
+          status: "not-ready",
+          reason: "persistence-unwritable",
+          detail: err instanceof Error ? err.message : String(err)
+        });
+      }
+    }
 
     return reply.code(201).send({
       session_id: created.session_id,
