@@ -350,6 +350,7 @@ async function main() {
 
   const shutdown = async (sig: string) => {
     console.log(`[start-runner] received ${sig}, closing`);
+    boot.stop();
     await app.close();
     process.exit(0);
   };
