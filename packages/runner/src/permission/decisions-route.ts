@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { registry as schemaRegistry } from "@soa-harness/schemas";
-import type { AuditChain } from "../audit/index.js";
+import type { AuditChain, AuditSink } from "../audit/index.js";
 import type { Clock } from "../clock/index.js";
 import type { ReadinessProbe } from "../probes/index.js";
 import type { ToolRegistry } from "../registry/index.js";
@@ -32,6 +32,17 @@ export interface PermissionsDecisionsRouteOptions {
   runnerVersion?: string;
   /** §10.3.2 rate limit — 30 rpm per bearer. */
   requestsPerMinute?: number;
+  /**
+   * Optional §10.5.1 audit-sink state machine. When present, the route:
+   *   - refuses Mutating/Destructive tools with 403 PermissionDenied
+   *     reason=audit-sink-unreachable in `unreachable-halt` (ReadOnly
+   *     traffic continues);
+   *   - calls `sink.recordAuditRow(written)` after every hash-chain append
+   *     so the row is buffered to `<sessionDir>/audit/pending/` in
+   *     `degraded-buffering` / `unreachable-halt`.
+   * Omit to preserve M1 behavior (no sink integration).
+   */
+  sink?: AuditSink;
 }
 
 const WINDOW_MS = 60_000;
@@ -167,6 +178,18 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       return reply.code(404).send({ error: "unknown-tool" });
     }
 
+    // §10.5.1 — audit sink unreachable-halt: refuse Mutating/Destructive tool
+    // invocations BEFORE the resolver runs. ReadOnly continues. The refusal
+    // itself is not audited (there is nowhere durable to write the record;
+    // that's the whole premise of the halt state). Orchestrators observe
+    // the transition via /audit/sink-events + /ready=503.
+    if (opts.sink?.shouldRefuseMutating(toolEntry.risk_class)) {
+      return reply.code(403).send({
+        error: "PermissionDenied",
+        reason: "audit-sink-unreachable"
+      });
+    }
+
     // Resolver (§10.3 steps 1-4) — forgery-resistant source of decision.
     // MUST use session.activeMode, not the Agent Card's, per Week 3 day 2 rule.
     const resolverResponse = resolvePermissionForQuery({
@@ -264,6 +287,12 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       reason: finalReason,
       signer_key_id: pdaSignerKid ?? ""
     });
+
+    // §10.5.1 — degraded-buffering / unreachable-halt: persist the just-
+    // appended row to the fsync-backed local queue. In healthy this is a
+    // no-op. Awaited so a buffer-write failure surfaces to the caller
+    // (can't silently drop a record when the sink is known-degraded).
+    if (opts.sink) await opts.sink.recordAuditRow(written);
 
     return reply.code(201).send({
       decision: finalDecision,

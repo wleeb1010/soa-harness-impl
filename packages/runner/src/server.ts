@@ -16,7 +16,13 @@ import type { ToolRegistry } from "./registry/index.js";
 import type { Capability } from "./permission/index.js";
 import type { Control } from "./registry/index.js";
 import type { Clock } from "./clock/index.js";
-import { AuditChain, auditTailPlugin, auditRecordsPlugin } from "./audit/index.js";
+import {
+  AuditChain,
+  auditTailPlugin,
+  auditRecordsPlugin,
+  auditSinkEventsPlugin,
+  AuditSink
+} from "./audit/index.js";
 import { sessionStatePlugin, SessionPersister } from "./session/index.js";
 
 export interface BuildRunnerOptions {
@@ -102,6 +108,22 @@ export interface BuildRunnerOptions {
     isPdaKidRevoked?: KidRevokedCheck;
     runnerVersion?: string;
     requestsPerMinute?: number;
+    sink?: AuditSink;
+  };
+  /**
+   * Optional — when present the Runner exposes GET /audit/sink-events
+   * per Core §12.5.4. Shares the AuditSink instance with
+   * permissionsDecisions so state transitions produced by the decision
+   * path are observable on the channel.
+   */
+  auditSinkEvents?: {
+    sink: AuditSink;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    defaultLimit?: number;
+    maxLimit?: number;
   };
   /**
    * Optional — when present the Runner exposes GET /sessions/<session_id>/state
@@ -216,9 +238,24 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.resolvePdaVerifyKey !== undefined ? { resolvePdaVerifyKey: pd.resolvePdaVerifyKey } : {}),
       ...(pd.isPdaKidRevoked !== undefined ? { isPdaKidRevoked: pd.isPdaKidRevoked } : {}),
       ...(pd.runnerVersion !== undefined ? { runnerVersion: pd.runnerVersion } : {}),
-      ...(pd.requestsPerMinute !== undefined ? { requestsPerMinute: pd.requestsPerMinute } : {})
+      ...(pd.requestsPerMinute !== undefined ? { requestsPerMinute: pd.requestsPerMinute } : {}),
+      ...(pd.sink !== undefined ? { sink: pd.sink } : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
+  }
+
+  if (opts.auditSinkEvents !== undefined) {
+    const se = opts.auditSinkEvents;
+    await app.register(auditSinkEventsPlugin, {
+      sink: se.sink,
+      sessionStore: se.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: se.clock,
+      ...(se.runnerVersion !== undefined ? { runnerVersion: se.runnerVersion } : {}),
+      ...(se.requestsPerMinute !== undefined ? { requestsPerMinute: se.requestsPerMinute } : {}),
+      ...(se.defaultLimit !== undefined ? { defaultLimit: se.defaultLimit } : {}),
+      ...(se.maxLimit !== undefined ? { maxLimit: se.maxLimit } : {})
+    });
   }
 
   return app;

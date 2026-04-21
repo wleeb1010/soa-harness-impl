@@ -10,8 +10,14 @@ import { CrlCache, type Crl, type CrlFetcher } from "../crl/index.js";
 import { BootOrchestrator } from "../boot/index.js";
 import { InMemorySessionStore, type Capability } from "../permission/index.js";
 import { loadToolRegistry, ToolPoolStale } from "../registry/index.js";
-import { AuditChain } from "../audit/index.js";
+import {
+  AuditChain,
+  AuditSink,
+  parseAuditSinkFailureModeEnv,
+  assertAuditSinkEnvListenerSafe
+} from "../audit/index.js";
 import { SessionPersister } from "../session/index.js";
+import { composeReadiness } from "../probes/index.js";
 import { assertBootstrapBearerListenerSafe } from "../guards/index.js";
 import type { TrustAnchor } from "../card/verify.js";
 import type { Control } from "../registry/index.js";
@@ -86,6 +92,10 @@ async function main() {
   // RUNNER_X5C together flip the flag. The guard checks before startRunner.)
   const tlsEnabled = Boolean(SIGNING_KEY_PATH && CERT_CHAIN_PATH);
   assertBootstrapBearerListenerSafe({ bearer: BOOTSTRAP_BEARER, tlsEnabled, host: HOST });
+
+  // §12.5.2 production guard for the audit-sink failure-mode env hook.
+  const AUDIT_SINK_FAILURE_MODE = process.env.SOA_RUNNER_AUDIT_SINK_FAILURE_MODE;
+  assertAuditSinkEnvListenerSafe({ envValue: AUDIT_SINK_FAILURE_MODE, host: HOST });
 
   const clock = createClock({
     envClock: process.env.RUNNER_TEST_CLOCK,
@@ -242,6 +252,24 @@ async function main() {
   const sessionDir = process.env.RUNNER_SESSION_DIR ?? "./sessions";
   const persister = new SessionPersister({ sessionDir });
 
+  // §10.5.1 audit-sink state machine. Env hook (§12.5.2) drives initial
+  // state at boot; L-28 F-13 requires exactly one matching AuditSink*
+  // event for a fresh process with the env set.
+  const initialSinkState = parseAuditSinkFailureModeEnv(AUDIT_SINK_FAILURE_MODE);
+  const auditSink = new AuditSink({
+    sessionDir,
+    clock,
+    ...(initialSinkState !== null
+      ? { initialState: initialSinkState, initialReason: "env-test-hook" as const }
+      : {})
+  });
+  if (initialSinkState !== null && initialSinkState !== "healthy") {
+    console.log(
+      `[start-runner] AuditSink booted in ${initialSinkState} state (env hook); ` +
+        `emitted ${auditSink.snapshotEvents().length} event(s)`
+    );
+  }
+
   const app = await startRunner({
     trust,
     card,
@@ -250,7 +278,10 @@ async function main() {
     privateKey,
     x5c,
     ...(skipCardSchemaValidation ? { skipCardSchemaValidation: true } : {}),
-    readiness: boot,
+    readiness: composeReadiness(boot, {
+      // §10.5.1 unreachable-halt → /ready flips 503 audit-sink-unreachable.
+      check: () => auditSink.readinessReason()
+    }),
     host: HOST,
     port: PORT,
     ...(registry
@@ -319,10 +350,17 @@ async function main() {
                     kid === "soa-conformance-test-handler-v1.0" ? conformanceHandlerKey : null
                 }
               : {}),
-            runnerVersion: "1.0"
+            runnerVersion: "1.0",
+            sink: auditSink
           }
         }
-      : {})
+      : {}),
+    auditSinkEvents: {
+      sink: auditSink,
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
+    }
   });
 
   const addr = app.server.address();
@@ -335,6 +373,7 @@ async function main() {
   console.log(`  GET http://${HOST}:${PORT}/audit/tail`);
   console.log(`  GET http://${HOST}:${PORT}/audit/records?after=<id>&limit=<n>`);
   console.log(`  GET http://${HOST}:${PORT}/sessions/<session_id>/state`);
+  console.log(`  GET http://${HOST}:${PORT}/audit/sink-events?after=<id>&limit=<n>`);
   if (registry) {
     console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
     console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);
