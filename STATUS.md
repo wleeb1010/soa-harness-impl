@@ -1,5 +1,78 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (SV-SESS-02 + SV-SESS-09: resume_session wired at both triggers)
+
+### Both L-29 triggers now invoke the full §12.5 algorithm — target 30/0/2
+
+**Signal for validator:** Finding K cleared. The two remaining residuals
+(SV-SESS-02 corrupted-session-at-boot, SV-SESS-09 card-version-drift)
+flip SKIP → PASS on next V2-04 run. Final M2 scoreboard should land at
+**30 pass / 0 fail / 2 skip** (HR-02 M3-deferred, SV-SESS-06 Windows
+platform guard).
+
+**Root cause** (diagnosed precisely by the validator):
+- Boot scan routed non-terminal unknown-status values to a
+  `skipped-unknown-status` branch BEFORE `resumeSession` could see them
+  — so schema-violating fixtures were silently accepted.
+- Lazy-hydrate used raw `readSession` instead of `resumeSession` — so
+  /state against a v1.0-card session under a v1.1-card runtime never
+  tripped CardVersionDrift.
+
+**Fix:**
+1. `resumeSession` step 1 now runs post-migration schema validation
+   against the pinned `session.schema.json`. Bad `workflow.status` (or
+   any schema drift) throws `SessionFormatIncompatible`
+   reason=`schema-violation`. Pre-1.0 migration runs first so files
+   missing `activeMode` still pass after the default is filled in.
+2. Boot scan drops the `skipped-unknown-status` branch. Any
+   non-terminal status routes through `resumeSession`; step 1 classifies
+   it. `SessionFormatIncompatible` records as `failed-read` (not
+   `failed-resume`); `scanHasHardFailure()` returns true on any
+   failed-read carrying `{corrupted-json, partial-write-detected,
+   schema-violation, bad-format-version}`.
+3. Bin inspects `scanHasHardFailure(outcomes)` post-scan. On true, logs
+   FATAL + per-session reasons, `app.close()`, `process.exit(1)`. The
+   listener never opens — matches validator's SV-SESS-02 expectation.
+4. CardVersionDrift-terminated sessions are marked `Failed` on disk
+   with `_termination_reason="CardVersionDrift"`. A subsequent scan
+   finds them `skipped-terminal`. Matches §12.5 step 2's "session is
+   terminated" language.
+5. `state-route.tryLazyHydrate` switches to `resumeSession` when
+   `resumeCtx` is provided. `CardVersionDrift` → 409
+   `card-version-drift` with `expected` + `actual`; `ToolPoolStale` →
+   409 `tool-pool-stale`. Back-compat: when `resumeCtx` is absent,
+   falls back to `readSession` (existing tests unchanged).
+6. Bin hoists `resumeCtx` before `startRunner` so both lazy-hydrate
+   and post-boot scan share the same `currentCardVersion` +
+   `currentToolPoolHash`.
+
+**Live verified on 127.0.0.1:7700:**
+- Seed a session file with `workflow.status="CompletelyBogusStatus"`
+  → `[boot-scan] scan complete: failed-read=1 (total=1)` → `FATAL:
+  boot scan detected 1 session file(s) with SessionFormatIncompatible
+  — refusing to open listener. session_id=ses_corruptfixtureboot01
+  reason=schema-violation` → listener never binds, process exits 1.
+- Restart with a clean session dir → `/ready=200`.
+
+**Tests (4 new + 1 updated):**
+- `unknown workflow status` updated: now asserts `failed-read` /
+  `schema-violation` (was `skipped-unknown-status`).
+- SV-SESS-02 resume-path test: in-progress status + schema-violating
+  activeMode → `failed-read` / `schema-violation`.
+- `scanHasHardFailure` helper: true on corrupted file, false on clean.
+- SV-SESS-09 boot-scan: drifted card_version → session file rewritten
+  with `workflow.status="Failed"` + `_termination_reason="CardVersionDrift"`.
+- SV-SESS-09 lazy-hydrate: /state returns `409 card-version-drift`
+  with `{expected:"1.1.0", actual:"1.0.0"}`.
+
+**Repo scoreboard:** 332 tests green
+(30 core + 4 schemas + 292 runner + 6 create-soa-agent). Pinned at
+spec `0f031dc`. `pnpm -r build / typecheck / lint / test` all green.
+
+**M2 impl status — feature-complete, all L-29 triggers fully live:**
+All 16 M2 test IDs have impl coverage. Any remaining skips on the
+validator scoreboard are spec-expected deferrals.
+
 ## 2026-04-21 (L-31 decisions bracket-persist + markers + idempotency)
 
 ### All 7 §12.5.3 markers now fire live on every /permissions/decisions call
