@@ -1,5 +1,29 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (Week 3 day 3 — T-04 live)
+
+### T-04 conformance card loader live on :7700 — validator cleared for SV-PERM-01 DFA sweep
+
+**Signal:** `RUNNER_CARD_FIXTURE` wired; the pinned DangerFullAccess conformance card is loaded, digest-verified, SPKI-substituted, and served at `/.well-known/agent-card.{json,jws}`. Validator can now run the 24-cell (3 activeModes × 8 tools) SV-PERM-01 live sweep in one pass.
+
+- **Pin:** `e7580b9 → 80680cd`. `spec_manifest_sha256` regenerated and re-hashed locally as `3fc46237…`. Schemas registry now loads 20 validators (new: `audit-records-response`, `permission-decision-request`, `permission-decision-response`).
+- **T-04 loader (`packages/runner/src/card/conformance-loader.ts`):**
+  - Reads fixture raw bytes; parses to JSON; JCS-canonicalizes; SHA-256's the canonical bytes; asserts match with `PINNED_CONFORMANCE_CARD_DIGEST = 87c50683bb01…` (pulled from `MANIFEST.supplementary_artifacts[path=test-vectors/conformance-card/agent-card.json].sha256`). Any non-placeholder tamper → `ConformanceFixtureTampered("digest-mismatch")`.
+  - Walks `security.trustAnchors[*]` and replaces every entry whose `spki_sha256 === PLACEHOLDER_SPKI` with the runtime signing cert's actual SPKI hash. Zero placeholders → `ConformanceFixtureTampered("missing-placeholder")`.
+  - Missing file → `ConformanceFixtureTampered("read-failure")`.
+- **Plugin opt-out:** `CardPluginOptions.skipSchemaValidation` — the pinned conformance fixture ships with `self_improvement.max_iterations: 0` which violates `agent-card.schema.json` (`minimum: 1`). The fixture is trusted by spec digest, not by schema. BuildRunnerOptions carries `skipCardSchemaValidation` through.
+- **Bin:** `RUNNER_CARD_FIXTURE=<path>` overrides `RUNNER_CARD_PATH` and forces the conformance loader path (which also sets `skipCardSchemaValidation`).
+- **6 new tests** (`conformance-card.test.ts`) — happy-path substitution + determinism, digest-mismatch on non-placeholder tamper, missing-placeholder on pre-substituted fixture, read-failure on missing file, end-to-end plugin serves with `skipSchemaValidation`.
+- **Live 24-cell sweep (127.0.0.1:7700 against the DFA card + 8-tool fixture):**
+  - `[ReadOnly]` fs__read_file → AutoAllow; fs__write_file → CapabilityDenied; fs__delete_file → CapabilityDenied
+  - `[WorkspaceWrite]` fs__read_file → AutoAllow; fs__write_file → Prompt; fs__delete_file → CapabilityDenied
+  - `[DangerFullAccess]` fs__read_file → AutoAllow; fs__write_file → Prompt; fs__delete_file → Prompt
+  - Session tightening from DFA card works at all three levels via `POST /sessions`.
+
+**Remaining Week 3 day 3+ tasks (per plan rev 2):** T-01 (`/audit/records` paginated), T-02 (`POST /permissions/decisions` — the missing piece for audit-chain accumulation), T-03 (`request_decide_scope` on session bootstrap), T-05 (bootstrap-bearer-on-public-listener guard), T-06 (`RUNNER_CARD_JWS` for tampered-card rejection), T-07 (`RUNNER_INITIAL_TRUST` negatives), T-08 (`session.schema.json` refresh for activeMode-required).
+
+176 tests green (30 core + 4 schemas + 142 runner across 14 files). Pinned at spec `80680cd`.
+
 ## 2026-04-20 (Week 3 day 2)
 
 ### Full Week 3 impl surface live on :7700 — validator cleared for full sweep

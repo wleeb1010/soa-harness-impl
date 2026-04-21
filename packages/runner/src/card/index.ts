@@ -15,3 +15,11 @@ export {
   type VerifyAgentCardOptions,
   type VerifiedCard
 } from "./verify.js";
+export {
+  loadConformanceCard,
+  ConformanceFixtureTampered,
+  PLACEHOLDER_SPKI,
+  PINNED_CONFORMANCE_CARD_DIGEST,
+  type LoadConformanceCardOptions,
+  type LoadedConformanceCard
+} from "./conformance-loader.js";

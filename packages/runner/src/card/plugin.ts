@@ -5,20 +5,28 @@ import { signAgentCard, type CardSignOptions, type SignedCard } from "./signer.j
 export interface CardPluginOptions extends CardSignOptions {
   /** Optional override — defaults to `/.well-known/agent-card.json`. */
   jsonPath?: string;
-  /** Optional override — defaults to `/.well-known/agent-card.json.jws`. */
+  /** Optional override — defaults to `/.well-known/agent-card.jws`. */
   jwsPath?: string;
+  /**
+   * Skip boot-time schema validation of the card body. Used when loading
+   * pinned conformance fixtures whose shape is trusted by spec digest
+   * rather than by agent-card.schema.json. Default false.
+   */
+  skipSchemaValidation?: boolean;
 }
 
 const DEFAULT_JSON_PATH = "/.well-known/agent-card.json";
 const DEFAULT_JWS_PATH = "/.well-known/agent-card.jws";
 
 export const cardPlugin: FastifyPluginAsync<CardPluginOptions> = async (app, opts) => {
-  const validate = registry["agent-card"];
-  if (!validate(opts.card)) {
-    const detail = (validate.errors ?? [])
-      .map((e) => `${e.instancePath || "<root>"} ${e.message ?? ""}`.trim())
-      .join("; ");
-    throw new Error(`cardPlugin: card fails agent-card.schema.json (${detail || "no detail"})`);
+  if (!opts.skipSchemaValidation) {
+    const validate = registry["agent-card"];
+    if (!validate(opts.card)) {
+      const detail = (validate.errors ?? [])
+        .map((e) => `${e.instancePath || "<root>"} ${e.message ?? ""}`.trim())
+        .join("; ");
+      throw new Error(`cardPlugin: card fails agent-card.schema.json (${detail || "no detail"})`);
+    }
   }
 
   const signed: SignedCard = await signAgentCard(opts);

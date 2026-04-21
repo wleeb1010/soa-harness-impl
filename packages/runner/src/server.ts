@@ -22,6 +22,8 @@ export interface BuildRunnerOptions {
   kid: string;
   privateKey: PrivateKeyLike;
   x5c: string[];
+  /** When true, cardPlugin skips boot-time agent-card schema validation — used for pinned conformance fixtures. */
+  skipCardSchemaValidation?: boolean;
   /** Readiness aggregator. Default: alwaysReady. Real checks wire in per component as they land. */
   readiness?: ReadinessProbe;
   /**
@@ -75,7 +77,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
     alg: opts.alg,
     kid: opts.kid,
     privateKey: opts.privateKey,
-    x5c: opts.x5c
+    x5c: opts.x5c,
+    ...(opts.skipCardSchemaValidation ? { skipSchemaValidation: true } : {})
   });
 
   const readiness = opts.readiness;

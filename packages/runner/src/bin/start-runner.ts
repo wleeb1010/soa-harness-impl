@@ -3,6 +3,7 @@ import { importPKCS8, type CryptoKey, type KeyObject } from "jose";
 import { loadInitialTrust } from "../bootstrap/index.js";
 import { startRunner } from "../server.js";
 import { generateEd25519KeyPair, generateSelfSignedEd25519Cert } from "../card/cert.js";
+import { loadConformanceCard } from "../card/conformance-loader.js";
 import { createClock } from "../clock/index.js";
 import { CrlCache, type Crl, type CrlFetcher } from "../crl/index.js";
 import { BootOrchestrator } from "../boot/index.js";
@@ -14,6 +15,7 @@ import type { Control } from "../registry/index.js";
 
 const TRUST_PATH = process.env.RUNNER_TRUST_PATH ?? "./initial-trust.json";
 const CARD_PATH = process.env.RUNNER_CARD_PATH ?? "./agent-card.json";
+const CARD_FIXTURE = process.env.RUNNER_CARD_FIXTURE;
 const TOOLS_PATH = process.env.RUNNER_TOOLS_PATH;
 const TOOLS_FIXTURE = process.env.RUNNER_TOOLS_FIXTURE;
 const PORT = Number.parseInt(process.env.RUNNER_PORT ?? "7700", 10);
@@ -83,9 +85,27 @@ async function main() {
   });
 
   const trust = loadInitialTrust({ path: TRUST_PATH, now: clock() });
-  const card = JSON.parse(readFileSync(CARD_PATH, "utf8")) as CardShape;
-  const anchors = card.security?.trustAnchors ?? [];
   const { privateKey, x5c } = await resolveKeyAndX5c(trust.publisher_kid);
+
+  // Card source: when RUNNER_CARD_FIXTURE is set, load the pinned conformance
+  // fixture (T-04) and substitute the placeholder SPKI with the runtime key's
+  // actual SPKI. Otherwise fall back to the operator-supplied RUNNER_CARD_PATH.
+  let card: CardShape;
+  let skipCardSchemaValidation = false;
+  if (CARD_FIXTURE) {
+    const leafDer = x5c[0];
+    if (!leafDer) throw new Error("conformance-fixture: runtime signing cert chain is empty");
+    const loaded = await loadConformanceCard({ fixturePath: CARD_FIXTURE, leafCertDerBase64: leafDer });
+    card = loaded.card as CardShape;
+    skipCardSchemaValidation = true; // fixture is trusted by spec digest, not by schema
+    console.log(
+      `[start-runner] loaded conformance card (digest ${loaded.fixtureDigest.slice(0, 12)}…); ` +
+        `substituted SPKI ${loaded.substitutedSpki.slice(0, 12)}…`
+    );
+  } else {
+    card = JSON.parse(readFileSync(CARD_PATH, "utf8")) as CardShape;
+  }
+  const anchors = card.security?.trustAnchors ?? [];
 
   const crl = new CrlCache({
     fetcher: DEMO_MODE
@@ -128,6 +148,7 @@ async function main() {
     kid: trust.publisher_kid,
     privateKey,
     x5c,
+    ...(skipCardSchemaValidation ? { skipCardSchemaValidation: true } : {}),
     readiness: boot,
     host: HOST,
     port: PORT,
