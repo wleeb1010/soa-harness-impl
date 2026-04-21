@@ -1,5 +1,23 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (T-02 live — audit-chain chokepoint open)
+
+### `POST /permissions/decisions` live on :7700 — audit-chain accumulation path unblocked
+
+**Signal:** T-02 shipped — `POST /permissions/decisions` (§10.3.2) runs the §10.3 pipeline, writes a hash-chained audit row, enforces forgery resistance (resolver output is authoritative; PDAs cannot override), and returns a schema-valid response. V-07 audit-record driver can fire; V-05 / V-06 / V-08 / V-10 unblock on it.
+
+- Auth: session bearer; 401 missing, 403 wrong session, 403 `missing-scope` when the session lacks `permissions:decide:<session_id>` (grant via T-03 `request_decide_scope:true`).
+- Rate limit 30 rpm per bearer with Retry-After; 503 inherits `/ready` gate.
+- Resolver: `resolvePermissionForQuery(tool, session.activeMode)` — forgery resistance, decision mirrors `/permissions/resolve` output.
+- PDA: verified via injected `resolvePdaVerifyKey`. Crypto failure → coerced to Deny + `handler_accepted=false` + reason `pda-verify-failed`, **with audit row still written**. `pda.decision` disagreeing with resolver's implied decision → 403 `pda-decision-mismatch` (no audit row).
+- Audit row: single `AuditChain.append` with `audit_record_id` (`aud_<12 hex>`), kind `permission-decision`, full resolved state, plus `pda_signer_kid` when present. Shared chain with `/audit/tail`.
+- Live on 127.0.0.1:7700: endpoint listed in the startup banner; a session bootstrapped via `POST /sessions` correctly 403s with the T-03 hint until `request_decide_scope` lands. Validator's pre-enrolled sessions (or local tests with canDecide=true) drive the happy path.
+- 10 new tests covering every branch, including schema conformance against `permission-decision-response.schema.json`.
+
+170 tests green (30 core + 4 schemas + 136 runner across 15 files). Pinned at spec `8c10ce9`. Seven endpoints live on :7700.
+
+Punch list after T-02: T-03 (`request_decide_scope`) / T-01 (`/audit/records`) / T-08 (session schema refresh) — all parallel. Then T-06 / T-07 / T-05.
+
 ## 2026-04-20 (validator handoff — Week 3 sweep)
 
 ### Runner live with the agreed conformance bootstrap bearer
