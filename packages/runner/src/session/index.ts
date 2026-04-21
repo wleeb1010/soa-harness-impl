@@ -11,3 +11,5 @@ export {
   type WriteSessionOptions,
   type SessionFormatIncompatibleReason
 } from "./persist.js";
+
+export { sessionStatePlugin, type SessionStateRouteOptions } from "./state-route.js";

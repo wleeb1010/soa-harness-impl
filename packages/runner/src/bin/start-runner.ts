@@ -11,6 +11,7 @@ import { BootOrchestrator } from "../boot/index.js";
 import { InMemorySessionStore, type Capability } from "../permission/index.js";
 import { loadToolRegistry, ToolPoolStale } from "../registry/index.js";
 import { AuditChain } from "../audit/index.js";
+import { SessionPersister } from "../session/index.js";
 import { assertBootstrapBearerListenerSafe } from "../guards/index.js";
 import type { TrustAnchor } from "../card/verify.js";
 import type { Control } from "../registry/index.js";
@@ -235,6 +236,12 @@ async function main() {
   const chain = new AuditChain(clock);
   const activeCapability = (card.permissions?.activeMode ?? "ReadOnly") as Capability;
 
+  // §12.5.3 RUNNER_SESSION_DIR override (production-safe; tests use it for
+  // per-test isolation). Default lives next to the Runner process; operators
+  // SHOULD put it on a durable-disk mount in production.
+  const sessionDir = process.env.RUNNER_SESSION_DIR ?? "./sessions";
+  const persister = new SessionPersister({ sessionDir });
+
   const app = await startRunner({
     trust,
     card,
@@ -286,6 +293,12 @@ async function main() {
       clock,
       runnerVersion: "1.0"
     },
+    sessionState: {
+      persister,
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
+    },
     ...(registry
       ? {
           permissionsDecisions: {
@@ -321,6 +334,7 @@ async function main() {
   console.log(`  GET http://${HOST}:${PORT}/ready`);
   console.log(`  GET http://${HOST}:${PORT}/audit/tail`);
   console.log(`  GET http://${HOST}:${PORT}/audit/records?after=<id>&limit=<n>`);
+  console.log(`  GET http://${HOST}:${PORT}/sessions/<session_id>/state`);
   if (registry) {
     console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
     console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);

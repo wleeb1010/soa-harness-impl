@@ -17,6 +17,7 @@ import type { Capability } from "./permission/index.js";
 import type { Control } from "./registry/index.js";
 import type { Clock } from "./clock/index.js";
 import { AuditChain, auditTailPlugin, auditRecordsPlugin } from "./audit/index.js";
+import { sessionStatePlugin, SessionPersister } from "./session/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -102,6 +103,18 @@ export interface BuildRunnerOptions {
     runnerVersion?: string;
     requestsPerMinute?: number;
   };
+  /**
+   * Optional — when present the Runner exposes GET /sessions/<session_id>/state
+   * per Core §12.5.1. Requires a SessionPersister (reads persisted session
+   * state from disk) and a SessionStore (bearer auth).
+   */
+  sessionState?: {
+    persister: SessionPersister;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+  };
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -174,6 +187,18 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(ar.requestsPerMinute !== undefined ? { requestsPerMinute: ar.requestsPerMinute } : {}),
       ...(ar.defaultLimit !== undefined ? { defaultLimit: ar.defaultLimit } : {}),
       ...(ar.maxLimit !== undefined ? { maxLimit: ar.maxLimit } : {})
+    });
+  }
+
+  if (opts.sessionState !== undefined) {
+    const ss = opts.sessionState;
+    await app.register(sessionStatePlugin, {
+      persister: ss.persister,
+      sessionStore: ss.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: ss.clock,
+      ...(ss.runnerVersion !== undefined ? { runnerVersion: ss.runnerVersion } : {}),
+      ...(ss.requestsPerMinute !== undefined ? { requestsPerMinute: ss.requestsPerMinute } : {})
     });
   }
 
