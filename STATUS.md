@@ -1,5 +1,20 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (Week 5b — M1 exit gate wired)
+
+### `create-soa-agent` scaffold + cold-cache CI timing shipped
+
+- CLI: `create-soa-agent --name <project>` (or `demo` shorthand) scaffolds a 9-file runner-starter tree, generates an Ed25519 keypair + self-signed cert at install, substitutes real SPKI into Agent Card + initial-trust. Software keystore only (`@peculiar/x509` + webcrypto). Loud warning that synthetic keys are local-only.
+- Template: `agent-card.json` (ReadOnly), `initial-trust.json`, `tools.json` (3-tool lattice), `hooks/pre-tool-use.mjs`, `AGENTS.md`, `permission-decisions/auto-allow.json`, `start.mjs` (drives the first audit row), `package.json`, `README.md`.
+- 6 scaffold tests (template completeness, both schemas validate post-substitution, project-name propagation, overwrite-refusal, distinct SPKI per run).
+- `.github/workflows/create-soa-agent-demo.yml` — Linux/macOS/Windows matrix, cold-cache cycle from `pnpm install` → `create-soa-agent demo-agent --demo` → `node ./start.mjs` → poll `/audit/tail` until `record_count > 0`. Fails any PR where elapsed > 120 000 ms; target ≤ 90 000 ms. Per-platform `demo.log` uploaded as artifact.
+
+**Repo:** 223 tests green (30 core + 4 schemas + 183 runner + 6 create-soa-agent across 22 files). Pinned at spec `1971e87`.
+
+**M1 gate:** all test IDs — HR-01, HR-02, HR-12, HR-14, SV-CARD-01, SV-SIGN-01, SV-BOOT-01, SV-PERM-01 (incl. SV-PERM-22), SV-SESS-BOOT-01/02, SV-AUDIT-TAIL-01, SV-AUDIT-RECORDS-01/02 — have impl-side coverage via unit + live paths. Validator flips SKIP → PASS as it consumes the live surface. Cold-cache timing validates across the three platforms on next CI run.
+
+**Week 5 complete.**
+
 ## 2026-04-20 (Week 5a — Hooks runner shipped)
 
 ### §15 pre/post tool hooks live as a library module
