@@ -1,5 +1,14 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (L-24 pin bump — 2-anchor conformance card)
+
+### Pin bumped to `5849483` — handler-anchor extension absorbed
+
+- **Pin:** `1971e87 → 5849483`. `spec_manifest_sha256 = d21345726b04d85fe2b4b9079d251468fab3b3213c5fa8d8247282fc1ecf8cd1` — recomputed locally, matches.
+- **Constant update:** `PINNED_CONFORMANCE_CARD_DIGEST` bumped from `8f61a2de…` → `d29be989…` (new fixture's JCS digest). Same loader logic — it already iterated every trustAnchor entry.
+- **Live verified:** conformance card now serves 2 trust anchors — `anchor[0]` carries the runtime SPKI (`d26eb9f3fedd…`, substituted per-process-start), `anchor[1]` carries the static L-24 handler anchor (`spki_sha256 = 749f3fd468e5a7e7e6604b71c812b66b45793228b557a44e25388ed07a8591e3`, `publisher_kid = soa-conformance-test-handler-v1.0`). Validator's SV-PERM-21 flips green once both sides are pinned to `5849483`.
+- **Tests:** 223 green unchanged; the digest-pinning tests pick up the new value automatically via the constant.
+
 ## 2026-04-20 (Week 5b — M1 exit gate wired)
 
 ### `create-soa-agent` scaffold + cold-cache CI timing shipped

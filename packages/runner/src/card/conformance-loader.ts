@@ -27,7 +27,7 @@ export const PLACEHOLDER_SPKI = "16dc826f86941f2b6876f4f0f59d91f0021dacbd4ff17b7
  * ].sha256. Bumped manually when the pin moves and the fixture changes.
  */
 export const PINNED_CONFORMANCE_CARD_DIGEST =
-  "8f61a2dec98b9e92bcd65ab5ae9acf8352bf6ca8b0dd6b76574257280224344e";
+  "d29be9897b1faa7a8bebda10adda5d01f9243529dcb0f30de68f59c0248741ab";
 
 export interface LoadConformanceCardOptions {
   fixturePath: string;
