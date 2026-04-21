@@ -1,5 +1,101 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (L-29 resume trigger points + L-30 v1.1 fixture + pin bump)
+
+### Pin bumped to `5fb1af9`; resume-scan + lazy-hydrate wired; M2 impl feature-complete
+
+**Signal for validator:** All four Week-2 follow-ups are cleared.
+Pin at `5fb1af9` (manifest `4f4fddcd…1ec3`, re-hashed locally). Boot
+scan and lazy-hydrate both live with 14 new tests. L-30 v1.1 fixture
+needs no code change — the existing `RUNNER_CARD_FIXTURE` loader
+handles per-path MANIFEST lookup. **Operators: please restart the
+long-running `:7700` instance** to pick up the CRL periodic-refresh
+fix from commit `4a780dd` — that single restart clears Finding B and
+lets the 5 M1 regression tests + SV-SESS-STATE-01 flip clean without
+any further impl change.
+
+**Pin bump absorbs:**
+- **L-29** — §12.5 resume-trigger points (two normative MUSTs):
+  (1) Runner startup scan after trust bootstrap + before public
+  listener open; (2) `/stream/v1/<sid>` or `/sessions/<sid>/state`
+  against an on-disk-but-not-in-memory session invokes
+  `resume_session` before serving.
+- **L-30** — v1.1 conformance card fixture at
+  `test-vectors/conformance-card-v1_1/agent-card.json` (version
+  1.1.0; all other fields byte-identical to v1.0). Pinned in
+  MANIFEST with its own digest. Zero impl code change — the
+  loader digest-checks whichever path `RUNNER_CARD_FIXTURE` points
+  at.
+
+**L-29 Normative MUST #1 — Runner startup scan
+(`scanAndResumeInProgressSessions`):**
+- Enumerates `<sessionDir>/ses_*.json` after `boot()` succeeds,
+  **before the listener opens**. For every session whose
+  `workflow.status` is in `{Planning, Executing, Optimizing,
+  Handoff, Blocked}`, invokes `resumeSession`. Terminals
+  (`Succeeded`, `Failed`, `Cancelled`) are skipped.
+- Failure containment: one corrupted file or one `CardVersionDrift`
+  / `ToolPoolStale` does NOT halt the scan — each outcome is
+  captured in a closed-enum `ScanOutcomeEntry.action` set
+  `{resumed, migrated, skipped-terminal, skipped-unknown-status,
+  failed-read, failed-resume}` and logged per-session.
+- When an `AuditChain` is supplied, every outcome appends a
+  `kind: "session-resume"` row — operators see the full recovery
+  trail on `/audit/records` after restart.
+- The bin's `resumeCtx` uses no-op `replayPending` / `compensate`
+  (tool-invocation dispatch lands with M3). Quiescent sessions
+  pass through step 4 with zero calls; sessions with real
+  in-flight work get phase transitions via the noop replay
+  pending M3 wiring.
+
+**L-29 Normative MUST #2 — Lazy-hydrate in `/state`:**
+- When `GET /sessions/<sid>/state` is called for a session NOT in
+  the in-memory store but WITH a matching on-disk file, the
+  handler registers the session on demand with the presented
+  bearer. `user_sub: "lazy-hydrated"`; `canDecide: false`;
+  `activeMode` sourced from the persisted file.
+- First-bearer-wins — subsequent callers with a different bearer
+  hit the normal `sessionStore.validate()` gate and receive 403
+  `session-bearer-mismatch`. Clean client-reconnect-after-restart
+  semantics without any new auth surface.
+
+**Live verified on 127.0.0.1 with a seeded `<sessionDir>`:**
+- 3 seeded files (1 Executing, 1 Succeeded, 1 Planning).
+- Boot log:
+  `[boot-scan] discovered 3 persisted session(s); scanning for
+  in-progress work`
+  `[boot-scan] scan complete: resumed=2, skipped-terminal=1
+  (total=3)`
+
+**Repo scoreboard:** 310 tests green
+(30 core + 4 schemas + 270 runner + 6 create-soa-agent). Was 296
+at M2 Week 2 close (+14 for L-29: 11 boot-scan + 3 lazy-hydrate).
+`pnpm -r build / typecheck / lint / test` all green. Pinned at
+spec `5fb1af9`.
+
+**M2 impl-side status — feature-complete:**
+- All 16 M2 test IDs have impl coverage:
+  - `HR-04` ✅ (T-2 resume + L-29 auto-resume trigger)
+  - `HR-05` ✅ (T-2 + L-29 cross-restart idempotency)
+  - `SV-SESS-01` ✅ · `SV-SESS-02` ✅ · `SV-SESS-03` ⏳ validator
+  - `SV-SESS-04` ⏳ validator · `SV-SESS-05` ✅ · `SV-SESS-06` ⏳
+    validator · `SV-SESS-07` ⏳ validator
+  - `SV-SESS-08` ✅ · `SV-SESS-09` ✅ · `SV-SESS-10` ✅
+  - `SV-SESS-11` ✅ · `SV-PERM-19` ✅
+  - `SV-SESS-STATE-01` ✅ · `SV-AUDIT-SINK-EVENTS-01` ✅
+- Ten endpoints on `:7700`. Three env hooks
+  (`SOA_RUNNER_AUDIT_SINK_FAILURE_MODE` / `RUNNER_CRASH_TEST_MARKERS` /
+  `RUNNER_SESSION_DIR`) wired. All production guards in place.
+
+**Operator ask:** Please **restart the long-running `:7700`
+instance**. The CRL periodic-refresh fix from commit `4a780dd` is
+code-complete but won't apply to the running process. A single
+restart clears Finding B and flips the 5 M1 regression tests +
+SV-SESS-STATE-01 without any further work.
+
+**Next:** Await validator V2-04 crash-kill harness runs against
+the §12.5.3 markers. Any deltas come from validator findings.
+
 ## 2026-04-21 (M2 Week 2 complete — T-4 + T-4b + T-7 all shipped)
 
 ### Audit-sink three-state + /audit/sink-events + crash markers all live
