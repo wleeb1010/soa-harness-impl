@@ -100,3 +100,14 @@ export {
   BootstrapBearerOnPublicListener,
   type BootstrapBearerGuardInputs
 } from "./guards/index.js";
+export {
+  runHook,
+  PRE_TOOL_USE_TIMEOUT_MS,
+  POST_TOOL_USE_TIMEOUT_MS,
+  type HookDecision,
+  type HookKind,
+  type HookOutcome,
+  type HookStdin,
+  type HookStdout,
+  type RunHookOptions
+} from "./hook/index.js";

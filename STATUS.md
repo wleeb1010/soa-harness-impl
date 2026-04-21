@@ -1,5 +1,24 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (Week 5a — Hooks runner shipped)
+
+### §15 pre/post tool hooks live as a library module
+
+**Signal:** Week 5a — the `runHook` primitive ships. Validator can wire HR-01 live against a Runner that exercises PreToolUse/PostToolUse via the `packages/runner/src/hook/` module. The §10.3 step-5 integration (wrapping `POST /permissions/decisions` with Pre/Post hooks) lands with Week 5b so the create-soa-agent scaffold's PreToolUse example exercises the full path.
+
+- **`packages/runner/src/hook/runner.ts`** — `runHook({command, stdin, timeoutMs?, cwd?, env?})` spawns a child process via `node:child_process.spawn`, writes the §15.2 stdin JSON, and reads stdout + stderr + exit code. Returns a `HookOutcome` with the closed-set `{decision, exitCode, stdout, stderrSample, timedOut, crashed, reason?}` shape.
+- **Exit-code routing per §15.3:**
+  - PreToolUse: 0 → Allow, 1 → Deny, 2 → Deny, 3 → Prompt, other → Deny + `hook-nonzero-exit`.
+  - PostToolUse: 0 → Allow (Acknowledge), 2 → Allow (force retry; M1 treats equivalent), 1 → Deny, other → Deny + `hook-nonzero-exit`.
+- **Timeouts:** defaults `PRE_TOOL_USE_TIMEOUT_MS = 5_000` and `POST_TOOL_USE_TIMEOUT_MS = 10_000`. Timeout → `SIGKILL` child + return `{decision:"Deny", reason:"hook-timeout"}`. Override via `timeoutMs`.
+- **Stdout contract (§15.3):** empty stdout accepted; single-line JSON parsed into `HookStdout.{reason?, replace_args?, replace_result?}`; multi-line stdout returns `reason:"hook-stdout-invalid"` but the exit code still dominates the decision.
+- **Failure modes:** spawn error / missing executable → `{decision:"Deny", crashed:true, reason:"hook-crashed"}`.
+- **13 new tests** covering the full exit-code matrix (PreToolUse 0/1/3/42), PostToolUse variants (0/1/2), timeout SIGKILL path, crashed child, missing executable, stdin-reaches-hook round-trip, stdout JSON parse, stdout multi-line rejection. Hook fixtures are portable `.mjs` scripts spawned via `process.execPath` so they run identically on Linux / macOS / Windows.
+
+217 tests green (30 core + 4 schemas + 183 runner across 21 files). Pinned at spec `1971e87`. Eight endpoints live on :7700.
+
+**Pending:** Week 5b — `create-soa-agent` scaffold (starter templates, software keystore, cold-cache CI budget). Landing that is the M1 exit gate.
+
 ## 2026-04-20 (T-05 + T-06 + T-07 — punch list cleared)
 
 ### All seven punch-list items shipped — Week 5 gate opens
