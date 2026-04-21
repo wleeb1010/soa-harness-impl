@@ -2,9 +2,9 @@
   "schema": "https://soa-harness.org/schemas/v1.0/pin-lock.schema.json",
   "description": "Pins this implementation to a specific SOA-Harness specification commit. Bumping this pin is a deliberate, reviewable action — see CONTRIBUTING.md pin-bump protocol. Never bump silently.",
   "spec_repo": "https://github.com/wleeb1010/soa-harness-specification",
-  "spec_commit_sha": "2eccf6e6fc4c4c55da0afdcff315f50c4f0e9f82",
+  "spec_commit_sha": "e7580b93e5d14911d427556b11b99f5457611188",
   "spec_commit_date": "2026-04-20",
-  "spec_manifest_sha256": "838cacbc76e4c7b651374caa299f03720404f34e81ebae78a711f854f40b8770",
+  "spec_manifest_sha256": "7d4406165ff7d7d80004321b7c056c19916ec88aa437b626a1a867b4f2af2dc0",
   "spec_manifest_status": "placeholder",
   "pin_history": [
     {"sha": "559dec8588441bc29639190870e4541146242b90", "bumped_to": "a9a92827ec26a472fc6ead653718982710890152", "reason": "adopt JCS parity vectors (commit 2e0a3fc) + license split (commit 2a66ddf) + regenerated MANIFEST (commit a9a9282). Coordinated lockstep bump with sibling soa-validate."},
@@ -15,7 +15,8 @@
     {"sha": "6c1bc9916472f23dcf237f5634f3ff33baff45e9", "bumped_to": "1f72bf623ff4c026e505af95445da488b2bc07ed", "reason": "adopt URL-shorthand clarification (commit 1f72bf6); no normative change, no MANIFEST regen — readability fix surfaced by first live end-to-end run."},
     {"sha": "1f72bf623ff4c026e505af95445da488b2bc07ed", "bumped_to": "9d251631ac6cb4b0c423483f540ced69d5b83fa8", "reason": "adopt HR-01 initial-trust + HR-02 CRL state-machine vectors (commit 9d25163). Impl does not consume these directly; lockstep pin hygiene with soa-validate. MANIFEST regen: 63 → 71 supplementary_artifacts."},
     {"sha": "9d251631ac6cb4b0c423483f540ced69d5b83fa8", "bumped_to": "fe74d3931e50f52697d8fab0c07336a9f3bb099e", "reason": "adopt L-01 clock injectability note at §10.6.1 (commit fe74d39) — spec now defines the testability hook this Runner must accept."},
-    {"sha": "fe74d3931e50f52697d8fab0c07336a9f3bb099e", "bumped_to": "2eccf6e6fc4c4c55da0afdcff315f50c4f0e9f82", "reason": "adopt §10.3.1 Permission Decision Observability endpoint + permissions-resolve-response schema (commit 2eccf6e). Root-cause fix for Week 2 SV-PERM-01 live-path gap."}
+    {"sha": "fe74d3931e50f52697d8fab0c07336a9f3bb099e", "bumped_to": "2eccf6e6fc4c4c55da0afdcff315f50c4f0e9f82", "reason": "adopt §10.3.1 Permission Decision Observability endpoint + permissions-resolve-response schema (commit 2eccf6e). Root-cause fix for Week 2 SV-PERM-01 live-path gap."},
+    {"sha": "2eccf6e6fc4c4c55da0afdcff315f50c4f0e9f82", "bumped_to": "e7580b93e5d14911d427556b11b99f5457611188", "reason": "adopt §10.5.2 /audit/tail + §12.6 POST /sessions + pinned Tool Registry fixture (commit e7580b9). Closes SV-PERM-01 live-path end-to-end."}
   ],
   "pinned_artifacts": {
     "soa-validate-must-map.json": "pinned at spec commit; no digest yet (MANIFEST placeholder)",
