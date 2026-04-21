@@ -75,3 +75,18 @@ export {
   type ClockFactoryInputs
 } from "./clock/index.js";
 export { BootOrchestrator, type BootOrchestratorOptions } from "./boot/index.js";
+export {
+  AuditChain,
+  auditTailPlugin,
+  GENESIS,
+  type AuditRecord,
+  type AuditRecordCore,
+  type AuditTailRouteOptions
+} from "./audit/index.js";
+export {
+  sessionsBootstrapPlugin,
+  type SessionsRouteOptions,
+  type CreateSessionInput,
+  type CreatedSession,
+  type SessionRecord
+} from "./permission/index.js";

@@ -4,13 +4,16 @@ import { cardPlugin, type JwsAlg, type PrivateKeyLike } from "./card/index.js";
 import { probesPlugin, type ReadinessProbe } from "./probes/index.js";
 import {
   permissionsResolvePlugin,
+  sessionsBootstrapPlugin,
   type PermissionsResolveRouteOptions,
-  type SessionStore
+  type SessionStore,
+  InMemorySessionStore
 } from "./permission/index.js";
 import type { ToolRegistry } from "./registry/index.js";
 import type { Capability } from "./permission/index.js";
 import type { Control } from "./registry/index.js";
 import type { Clock } from "./clock/index.js";
+import { AuditChain, auditTailPlugin } from "./audit/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -33,6 +36,31 @@ export interface BuildRunnerOptions {
     activeCapability: Capability;
     toolRequirements?: Record<string, Control>;
     policyEndpoint?: string;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+  };
+  /**
+   * Optional — when present the Runner exposes POST /sessions per Core §12.6.
+   * Requires a bootstrap bearer (from env in production) and an
+   * InMemorySessionStore.
+   */
+  sessionsBootstrap?: {
+    sessionStore: InMemorySessionStore;
+    clock: Clock;
+    cardActiveMode: Capability;
+    bootstrapBearer: string;
+    defaultTtlSeconds?: number;
+    maxTtlSeconds?: number;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+  };
+  /**
+   * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
+   */
+  auditTail?: {
+    chain: AuditChain;
+    sessionStore: SessionStore;
+    clock: Clock;
     runnerVersion?: string;
     requestsPerMinute?: number;
   };
@@ -67,6 +95,33 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pr.requestsPerMinute !== undefined ? { requestsPerMinute: pr.requestsPerMinute } : {})
     };
     await app.register(permissionsResolvePlugin, routeOpts);
+  }
+
+  if (opts.sessionsBootstrap !== undefined) {
+    const sb = opts.sessionsBootstrap;
+    await app.register(sessionsBootstrapPlugin, {
+      sessionStore: sb.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: sb.clock,
+      cardActiveMode: sb.cardActiveMode,
+      bootstrapBearer: sb.bootstrapBearer,
+      ...(sb.defaultTtlSeconds !== undefined ? { defaultTtlSeconds: sb.defaultTtlSeconds } : {}),
+      ...(sb.maxTtlSeconds !== undefined ? { maxTtlSeconds: sb.maxTtlSeconds } : {}),
+      ...(sb.runnerVersion !== undefined ? { runnerVersion: sb.runnerVersion } : {}),
+      ...(sb.requestsPerMinute !== undefined ? { requestsPerMinute: sb.requestsPerMinute } : {})
+    });
+  }
+
+  if (opts.auditTail !== undefined) {
+    const at = opts.auditTail;
+    await app.register(auditTailPlugin, {
+      chain: at.chain,
+      sessionStore: at.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: at.clock,
+      ...(at.runnerVersion !== undefined ? { runnerVersion: at.runnerVersion } : {}),
+      ...(at.requestsPerMinute !== undefined ? { requestsPerMinute: at.requestsPerMinute } : {})
+    });
   }
 
   return app;

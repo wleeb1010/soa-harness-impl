@@ -1,0 +1,76 @@
+import { createHash } from "node:crypto";
+import { jcs } from "@soa-harness/core";
+import type { Clock } from "../clock/index.js";
+
+export const GENESIS = "GENESIS" as const;
+
+export interface AuditRecordCore {
+  timestamp: string;
+  prev_hash: string;
+  this_hash: string;
+}
+
+/**
+ * Hash-chained audit record. For M1 we keep the structural minimum — later
+ * milestones extend with the full §10.5 record body (subject_id, decision,
+ * args_digest, handler_kid, etc.). The chain invariant is:
+ *
+ *   this_hash = SHA-256(prev_hash || canonical_json_of_record_without_this_hash)
+ *
+ * where canonical_json is §1 JCS of the record with `this_hash` removed.
+ * First record's prev_hash is the literal "GENESIS".
+ */
+export interface AuditRecord extends AuditRecordCore {
+  [extraField: string]: unknown;
+}
+
+function sha256Hex(bytes: Buffer | Uint8Array | string): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/**
+ * Minimal in-memory audit chain that backs /audit/tail. Real persistence to
+ * `/audit/permissions.log` + WAL + external WORM sink lands in M2 per §10.5 +
+ * §10.5.1. The tail-read surface is defined independently of persistence —
+ * §10.5.2 only requires that a reader observes the authoritative tail state
+ * WITHOUT producing a meta-record, and that the body's `this_hash` matches
+ * the chain invariant.
+ */
+export class AuditChain {
+  private readonly records: AuditRecord[] = [];
+  private tail: string = GENESIS;
+
+  constructor(private readonly now: Clock) {}
+
+  /** Append an arbitrary record body; the chain fills in timestamp + prev_hash + this_hash. */
+  append(body: Record<string, unknown>): AuditRecord {
+    const timestamp = this.now().toISOString();
+    const prev_hash = this.tail;
+    const draft: AuditRecord = { ...body, timestamp, prev_hash, this_hash: "" };
+    // Canonical form is the full record minus the this_hash placeholder.
+    const withoutHash = { ...draft } as Record<string, unknown>;
+    delete withoutHash["this_hash"];
+    const this_hash = sha256Hex(Buffer.concat([Buffer.from(prev_hash, "utf8"), Buffer.from(jcs(withoutHash), "utf8")]));
+    draft.this_hash = this_hash;
+    this.records.push(draft);
+    this.tail = this_hash;
+    return draft;
+  }
+
+  tailHash(): string {
+    return this.tail;
+  }
+
+  recordCount(): number {
+    return this.records.length;
+  }
+
+  lastRecordTimestamp(): string | undefined {
+    return this.records.at(-1)?.timestamp;
+  }
+
+  /** Test / operator-tool helper. Reading the chain MUST NOT mutate it. */
+  snapshot(): readonly AuditRecord[] {
+    return this.records.slice();
+  }
+}

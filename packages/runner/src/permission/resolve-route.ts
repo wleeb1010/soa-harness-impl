@@ -113,7 +113,10 @@ export const permissionsResolvePlugin: FastifyPluginAsync<PermissionsResolveRout
     // Resolve §10.3 steps 1–4 — no side effects.
     const response = resolvePermissionForQuery({
       tool,
-      capability: opts.activeCapability,
+      // §10.3 step 1 (post-§12.6 update): capability comes from the session's
+      // granted_activeMode, not the Agent Card's. The Card's value gated
+      // session creation; the session's is what constrains this request.
+      capability: opts.sessionStore.getRecord(sessionId)?.activeMode ?? opts.activeCapability,
       ...(opts.toolRequirements?.[tool.name] !== undefined
         ? { toolRequirement: opts.toolRequirements[tool.name] as Control }
         : {}),

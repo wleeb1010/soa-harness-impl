@@ -1,36 +1,106 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import type { Capability } from "./types.js";
 
-/** Minimal interface for the /permissions/resolve bearer gate. Expanded as §12.3 lands. */
+/** Minimal interface for the /permissions/resolve bearer gate. Expanded as §12 lands. */
 export interface SessionStore {
   /** True if session_id has been registered. */
   exists(session_id: string): boolean;
   /** True if session_id exists AND the presented bearer hashes to the enrolled value. */
   validate(session_id: string, bearer: string): boolean;
+  /** Full record lookup for resolvers that need the session's activeMode. */
+  getRecord(session_id: string): SessionRecord | undefined;
+  /** True when the bearer matches any registered session — used by /audit/tail. */
+  anySession(bearer: string): boolean;
+}
+
+export interface SessionRecord {
+  session_id: string;
+  activeMode: Capability;
+  user_sub: string;
+  created_at: Date;
+  expires_at: Date;
+}
+
+export interface CreateSessionInput {
+  activeMode: Capability;
+  user_sub: string;
+  ttlSeconds: number;
+  now: Date;
+  /** Optional explicit bearer (for tests). When omitted, the store mints a random one. */
+  bearer?: string;
+}
+
+export interface CreatedSession {
+  session_id: string;
+  session_bearer: string;
+  record: SessionRecord;
 }
 
 /**
- * In-memory session store for M1 — real session lifecycle lands with §12 in M2.
- * The store hashes the bearer so we never retain the cleartext token.
+ * In-memory session store for M1. Real §12 session lifecycle + persistence
+ * to `/sessions/<id>.json` lands in M2. The store hashes bearers (sha256)
+ * rather than retaining cleartext.
  */
 export class InMemorySessionStore implements SessionStore {
-  private readonly byId = new Map<string, string>();
+  private readonly records = new Map<string, { rec: SessionRecord; bearerHash: string }>();
 
-  register(session_id: string, bearer: string): void {
-    this.byId.set(session_id, this.hash(bearer));
+  /** Legacy test helper — bearer + session_id known up front. Defaults to WorkspaceWrite. */
+  register(
+    session_id: string,
+    bearer: string,
+    opts?: { activeMode?: Capability; user_sub?: string; expires_at?: Date; created_at?: Date }
+  ): void {
+    const created_at = opts?.created_at ?? new Date();
+    const expires_at = opts?.expires_at ?? new Date(created_at.getTime() + 60 * 60 * 1000);
+    const rec: SessionRecord = {
+      session_id,
+      activeMode: opts?.activeMode ?? "WorkspaceWrite",
+      user_sub: opts?.user_sub ?? "test-user",
+      created_at,
+      expires_at
+    };
+    this.records.set(session_id, { rec, bearerHash: this.hash(bearer) });
+  }
+
+  /** Mint a new session + opaque bearer. Used by POST /sessions (§12.6). */
+  create(input: CreateSessionInput): CreatedSession {
+    const session_id = `ses_${randomBytes(12).toString("hex")}`; // 24 hex chars → matches ^ses_[A-Za-z0-9]{16,}$
+    const session_bearer = input.bearer ?? randomBytes(32).toString("base64url");
+    const rec: SessionRecord = {
+      session_id,
+      activeMode: input.activeMode,
+      user_sub: input.user_sub,
+      created_at: input.now,
+      expires_at: new Date(input.now.getTime() + input.ttlSeconds * 1000)
+    };
+    this.records.set(session_id, { rec, bearerHash: this.hash(session_bearer) });
+    return { session_id, session_bearer, record: rec };
   }
 
   revoke(session_id: string): void {
-    this.byId.delete(session_id);
+    this.records.delete(session_id);
   }
 
   exists(session_id: string): boolean {
-    return this.byId.has(session_id);
+    return this.records.has(session_id);
   }
 
   validate(session_id: string, bearer: string): boolean {
-    const expected = this.byId.get(session_id);
-    if (!expected) return false;
-    return this.hash(bearer) === expected;
+    const entry = this.records.get(session_id);
+    if (!entry) return false;
+    return this.hash(bearer) === entry.bearerHash;
+  }
+
+  getRecord(session_id: string): SessionRecord | undefined {
+    return this.records.get(session_id)?.rec;
+  }
+
+  anySession(bearer: string): boolean {
+    const probe = this.hash(bearer);
+    for (const entry of this.records.values()) {
+      if (entry.bearerHash === probe) return true;
+    }
+    return false;
   }
 
   private hash(bearer: string): string {

@@ -18,8 +18,15 @@ export {
   type TraceResult,
   type ResolveForQueryOptions
 } from "./resolve-for-query.js";
-export { InMemorySessionStore, type SessionStore } from "./session-store.js";
+export {
+  InMemorySessionStore,
+  type CreateSessionInput,
+  type CreatedSession,
+  type SessionRecord,
+  type SessionStore
+} from "./session-store.js";
 export {
   permissionsResolvePlugin,
   type PermissionsResolveRouteOptions
 } from "./resolve-route.js";
+export { sessionsBootstrapPlugin, type SessionsRouteOptions } from "./sessions-route.js";

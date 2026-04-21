@@ -8,19 +8,22 @@ import { CrlCache, type Crl, type CrlFetcher } from "../crl/index.js";
 import { BootOrchestrator } from "../boot/index.js";
 import { InMemorySessionStore, type Capability } from "../permission/index.js";
 import { loadToolRegistry } from "../registry/index.js";
+import { AuditChain } from "../audit/index.js";
 import type { TrustAnchor } from "../card/verify.js";
 import type { Control } from "../registry/index.js";
 
 const TRUST_PATH = process.env.RUNNER_TRUST_PATH ?? "./initial-trust.json";
 const CARD_PATH = process.env.RUNNER_CARD_PATH ?? "./agent-card.json";
 const TOOLS_PATH = process.env.RUNNER_TOOLS_PATH;
+const TOOLS_FIXTURE = process.env.RUNNER_TOOLS_FIXTURE;
 const PORT = Number.parseInt(process.env.RUNNER_PORT ?? "7700", 10);
 const HOST = process.env.RUNNER_HOST ?? "0.0.0.0";
 const SIGNING_KEY_PATH = process.env.RUNNER_SIGNING_KEY;
 const SIGNING_ALG = (process.env.RUNNER_SIGNING_ALG as "EdDSA" | "ES256" | undefined) ?? "EdDSA";
 const CERT_CHAIN_PATH = process.env.RUNNER_X5C;
 const DEMO_MODE = process.env.RUNNER_DEMO_MODE === "1";
-const DEMO_SESSION_SPEC = process.env.RUNNER_DEMO_SESSION; // "<session_id>:<bearer>"
+const DEMO_SESSION_SPEC = process.env.RUNNER_DEMO_SESSION;
+const BOOTSTRAP_BEARER = process.env.SOA_RUNNER_BOOTSTRAP_BEARER;
 
 function pemCertChainToX5c(pem: string): string[] {
   const matches = pem.matchAll(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/g);
@@ -30,9 +33,7 @@ function pemCertChainToX5c(pem: string): string[] {
     if (!body) continue;
     out.push(body.replace(/\s+/g, ""));
   }
-  if (out.length === 0) {
-    throw new Error(`RUNNER_X5C=${CERT_CHAIN_PATH} contained no PEM certificates`);
-  }
+  if (out.length === 0) throw new Error(`RUNNER_X5C=${CERT_CHAIN_PATH} contained no PEM certificates`);
   return out;
 }
 
@@ -40,23 +41,17 @@ async function resolveKeyAndX5c(
   kid: string
 ): Promise<{ privateKey: CryptoKey | KeyObject | Uint8Array; x5c: string[] }> {
   if (SIGNING_KEY_PATH && CERT_CHAIN_PATH) {
-    const pem = readFileSync(SIGNING_KEY_PATH, "utf8");
-    const privateKey = await importPKCS8(pem, SIGNING_ALG);
-    const x5c = pemCertChainToX5c(readFileSync(CERT_CHAIN_PATH, "utf8"));
-    return { privateKey, x5c };
+    const privateKey = await importPKCS8(readFileSync(SIGNING_KEY_PATH, "utf8"), SIGNING_ALG);
+    return { privateKey, x5c: pemCertChainToX5c(readFileSync(CERT_CHAIN_PATH, "utf8")) };
   }
-
   if (SIGNING_KEY_PATH || CERT_CHAIN_PATH) {
     throw new Error("RUNNER_SIGNING_KEY and RUNNER_X5C must be set together.");
   }
-  if (SIGNING_ALG !== "EdDSA") {
-    throw new Error(`Ephemeral-key demo only supports EdDSA, got ${SIGNING_ALG}.`);
-  }
+  if (SIGNING_ALG !== "EdDSA") throw new Error(`Ephemeral-key demo only supports EdDSA, got ${SIGNING_ALG}.`);
   const keys = await generateEd25519KeyPair();
   const cert = await generateSelfSignedEd25519Cert({ keys, subject: `CN=${kid},O=SOA-Harness-Demo` });
   console.warn(
-    "[start-runner] WARNING: no RUNNER_SIGNING_KEY / RUNNER_X5C — generated an ephemeral Ed25519 " +
-      "keypair + self-signed cert. Production: operator-issued chain anchored in trustAnchors."
+    "[start-runner] WARNING: no RUNNER_SIGNING_KEY / RUNNER_X5C — ephemeral Ed25519 keypair + self-signed cert."
   );
   return { privateKey: keys.privateKey, x5c: [cert] };
 }
@@ -64,25 +59,19 @@ async function resolveKeyAndX5c(
 function demoCrlFetcher(now: () => Date): CrlFetcher {
   return async (anchorUri) => {
     const issuedAt = now();
-    const notAfter = new Date(issuedAt.getTime() + 24 * 60 * 60 * 1000);
     const crl: Crl = {
       issuer: `CN=Demo CA for ${anchorUri}`,
       issued_at: issuedAt.toISOString(),
-      not_after: notAfter.toISOString(),
+      not_after: new Date(issuedAt.getTime() + 24 * 60 * 60 * 1000).toISOString(),
       revoked_kids: []
     };
     return crl;
   };
 }
 
-interface CardPermissions {
-  activeMode?: Capability;
-  toolRequirements?: Record<string, Control>;
-  policyEndpoint?: string;
-}
 interface CardShape {
   security?: { trustAnchors?: TrustAnchor[] };
-  permissions?: CardPermissions;
+  permissions?: { activeMode?: Capability; toolRequirements?: Record<string, Control>; policyEndpoint?: string };
 }
 
 async function main() {
@@ -110,20 +99,29 @@ async function main() {
 
   const sessionStore = new InMemorySessionStore();
   if (DEMO_SESSION_SPEC) {
-    const [sid, bearer] = DEMO_SESSION_SPEC.split(":", 2);
-    if (!sid || !bearer) {
-      throw new Error(`RUNNER_DEMO_SESSION must be "<session_id>:<bearer>", got "${DEMO_SESSION_SPEC}"`);
-    }
-    sessionStore.register(sid, bearer);
-    console.log(`[start-runner] pre-registered demo session ${sid}`);
+    const parts = DEMO_SESSION_SPEC.split(":");
+    const sid = parts[0];
+    const bearer = parts[1];
+    const mode = parts[2];
+    if (!sid || !bearer) throw new Error(`RUNNER_DEMO_SESSION must be "<sid>:<bearer>[:<activeMode>]"`);
+    const activeMode = (mode && ["ReadOnly", "WorkspaceWrite", "DangerFullAccess"].includes(mode)
+      ? mode
+      : "WorkspaceWrite") as Capability;
+    sessionStore.register(sid, bearer, { activeMode });
+    console.log(`[start-runner] pre-registered demo session ${sid} (activeMode=${activeMode})`);
   }
 
-  const toolsPath = TOOLS_PATH ?? (existsSync("./tools.json") ? "./tools.json" : undefined);
-  const registry = toolsPath ? loadToolRegistry(toolsPath) : undefined;
+  const registryPath = TOOLS_FIXTURE ?? TOOLS_PATH ?? (existsSync("./tools.json") ? "./tools.json" : undefined);
+  const registry = registryPath ? loadToolRegistry(registryPath) : undefined;
+  if (registry) {
+    const label = TOOLS_FIXTURE ? "conformance fixture" : "operator registry";
+    console.log(`[start-runner] loaded ${registry.size()} tool(s) from ${label}: ${registryPath}`);
+  }
 
+  const chain = new AuditChain(clock);
   const activeCapability = (card.permissions?.activeMode ?? "ReadOnly") as Capability;
 
-  const buildOpts = {
+  const app = await startRunner({
     trust,
     card,
     alg: SIGNING_ALG as "EdDSA" | "ES256",
@@ -149,21 +147,36 @@ async function main() {
             runnerVersion: "1.0"
           }
         }
-      : {})
-  };
-  const app = await startRunner(buildOpts);
+      : {}),
+    ...(BOOTSTRAP_BEARER
+      ? {
+          sessionsBootstrap: {
+            sessionStore,
+            clock,
+            cardActiveMode: activeCapability,
+            bootstrapBearer: BOOTSTRAP_BEARER,
+            runnerVersion: "1.0"
+          }
+        }
+      : {}),
+    auditTail: {
+      chain,
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
+    }
+  });
 
   const addr = app.server.address();
   const bound = typeof addr === "string" ? addr : `${addr?.address}:${addr?.port}`;
-  console.log(`[start-runner] Agent Card endpoint live at ${bound}`);
-  console.log(`[start-runner]   GET http://${HOST}:${PORT}/.well-known/agent-card.json`);
-  console.log(`[start-runner]   GET http://${HOST}:${PORT}/.well-known/agent-card.jws`);
-  console.log(`[start-runner]   GET http://${HOST}:${PORT}/health`);
-  console.log(`[start-runner]   GET http://${HOST}:${PORT}/ready  (503 until boot completes)`);
-  if (registry) {
-    console.log(`[start-runner]   GET http://${HOST}:${PORT}/permissions/resolve?tool=<name>&session_id=<id>`);
-    console.log(`[start-runner]     (${registry.size()} tool(s) registered)`);
-  }
+  console.log(`[start-runner] Runner live at ${bound}`);
+  console.log(`  GET http://${HOST}:${PORT}/.well-known/agent-card.json`);
+  console.log(`  GET http://${HOST}:${PORT}/.well-known/agent-card.jws`);
+  console.log(`  GET http://${HOST}:${PORT}/health`);
+  console.log(`  GET http://${HOST}:${PORT}/ready`);
+  console.log(`  GET http://${HOST}:${PORT}/audit/tail`);
+  if (registry) console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
+  if (BOOTSTRAP_BEARER) console.log(`  POST http://${HOST}:${PORT}/sessions   (bootstrap bearer via SOA_RUNNER_BOOTSTRAP_BEARER)`);
 
   try {
     await boot.boot();

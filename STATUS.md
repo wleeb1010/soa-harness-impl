@@ -1,5 +1,27 @@
 # Status — soa-harness-impl
 
+## 2026-04-20 (Week 3 day 2)
+
+### Full Week 3 impl surface live on :7700 — validator cleared for full sweep
+
+**Signal:** Six endpoints now answering on :7700. Pinned to spec `e7580b9`. Validator cleared to re-run the Week 3 live suite in one pass (SV-PERM-01 live path, SV-SESS-BOOT-01/02, SV-AUDIT-TAIL-01).
+
+- **Pin:** `2eccf6e → e7580b9`. MANIFEST regen (`7d4406165ff7d7d80004321b7c056c19916ec88aa437b626a1a867b4f2af2dc0`) recomputed locally and matched. Two new normative schemas land in `@soa-harness/schemas` — `session-bootstrap-response` and `audit-tail-response`.
+- **New endpoints:**
+  - `POST /sessions` (§12.6) — bootstrap-bearer-auth'd; 201 + `{session_id, session_bearer, granted_activeMode, expires_at, runner_version}` per schema; 400 malformed, 401 wrong bootstrap bearer, 403 `ConfigPrecedenceViolation` when `requested_activeMode > card.permissions.activeMode`, 429 rate-limit, 503 pre-boot. Session mints `ses_<24 hex>` id + random 32-byte base64url bearer. Bootstrap bearer comes from `SOA_RUNNER_BOOTSTRAP_BEARER`.
+  - `GET /audit/tail` (§10.5.2) — any session bearer works (implicit `audit:read` scope per §12.6). 200 + `{this_hash: "GENESIS" | <hex64>, record_count, last_record_timestamp?, runner_version, generated_at}`. 401/403/429/503. `AuditChain` keeps hash-chained in-memory records; real persistence + WORM sink is an M2 concern.
+- **Resolver update (§10.3 step 1):** `/permissions/resolve` now reads `capability` from the session's `activeMode` (looked up via `SessionStore.getRecord`), falling back to the Agent Card's `activeMode` when no session record exists. The card's value stays the upper bound that gated session creation.
+- **Fixture loader:** `RUNNER_TOOLS_FIXTURE=<path>` loads the pinned conformance registry from `test-vectors/tool-registry/tools.json` (8 tools across every risk_class × default_control combination). `RUNNER_TOOLS_PATH` stays available for operator-supplied registries.
+- **Live smoke (127.0.0.1:7700 against the pinned fixture):**
+  - `POST /sessions` with `requested_activeMode=ReadOnly` → `201 {session_id:"ses_072ec9…", granted_activeMode:"ReadOnly", expires_at:<now+1h>, …}`
+  - `GET /audit/tail` with that bearer → `200 {this_hash:"GENESIS", record_count:0, runner_version:"1.0", generated_at:…}`
+  - `GET /permissions/resolve?tool=fs__read_file` under that session → `AutoAllow` + `resolved_capability="ReadOnly"` (pulled from the session, not the card)
+  - `GET /permissions/resolve?tool=fs__write_file` under that session → `CapabilityDenied` + step-2 rejected
+  - `POST /sessions` with `requested_activeMode=WorkspaceWrite` (card is ReadOnly) → `403 {error:"ConfigPrecedenceViolation", detail:"requested_activeMode=WorkspaceWrite exceeds Agent Card permissions.activeMode=ReadOnly"}`
+- **Tests (16 new — 136 runner + 4 schemas + 30 core = 170 total, across 13 files):** `sessions-bootstrap.test.ts` (8 — happy-path per activeMode, TTL math, 401 no bearer, 401 wrong bearer, 400 malformed variants, 403 ConfigPrecedenceViolation, 429, 503). `audit-tail.test.ts` (8 — GENESIS on empty, tail updates on append, hash-link invariant, 401, 403 unknown bearer, 503, two-reads-byte-identical, write→read→read record_count unchanged).
+
+Bootstrap bearer guard: `SOA_RUNNER_BOOTSTRAP_BEARER` lives on loopback listeners per §12.6. The bin accepts it as an env var; production deployments should bind the bootstrap surface to a Unix socket / named pipe separate from the public TLS listener (wiring that split is M2 scope).
+
 ## 2026-04-20 (Week 3 day 1)
 
 ### `/permissions/resolve` live on :7700 — validator cleared for SV-PERM-01 live path
