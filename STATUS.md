@@ -1,5 +1,64 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M2 Week 1 exit gate — T-3 live; SV-SESS-STATE-01 unblocked)
+
+### `GET /sessions/<session_id>/state` live on :7700 — Week 1 exit complete
+
+**Signal for validator:** T-3 shipped. Endpoint returns a schema-valid
+`session-state-response` body derived from the persisted session file
+on disk. SV-SESS-STATE-01 flips SKIP → PASS on V2-05's next run; all
+five Week 1 exit-gate tests now have impl-side coverage
+(SV-SESS-01/02/05/11/STATE-01).
+
+- **Route (`packages/runner/src/session/state-route.ts`):**
+  - Auth: Bearer tied to the exact `session_id` (`sessions:read:<sid>`
+    default-granted by §12.6 bootstrap; no request flag needed).
+  - Rate limit: 120 rpm per bearer; 429 + `Retry-After` on ceiling.
+  - Readiness gate: 503 with §5.4 closed-enum reason when pre-boot.
+  - Response body derived from `SessionPersister.readSession()` —
+    every `side_effect` populates all six required L-28 F-02 fields
+    (`tool`, `idempotency_key`, `phase`, `args_digest`,
+    `first_attempted_at`, `last_phase_transition_at`).
+  - Byte-identity contract verified in-test: two reads of a quiescent
+    session produce byte-equal bodies when `generated_at` is stripped.
+  - Not-a-side-effect: no audit write, no workflow advance, no
+    StreamEvent, no on-disk mutation (test asserts file size + mtime
+    invariant across two consecutive reads).
+  - Response-schema guardrail: body validated against pinned
+    `session-state-response.schema.json` before reply — a drift
+    surfaces as 500 `response-schema-violation`, not a silent leak.
+  - Error matrix: 400 `malformed-session-id` / 401
+    `missing-or-invalid-bearer` / 403 `session-bearer-mismatch` /
+    404 `unknown-session` / 429 / 500
+    `persisted-state-incompatible` / 503.
+- **Bin wiring:** `SessionPersister` instance created with
+  `RUNNER_SESSION_DIR` override (per §12.5.3 — production-safe config
+  knob, defaults to `./sessions`). Endpoint printed in the startup
+  banner.
+- **Live 127.0.0.1:7703 (seeded session file):**
+  - Happy path → `200` (schema-valid body)
+  - Wrong bearer → `403 session-bearer-mismatch`
+  - Unknown session → `404 unknown-session`
+- **9 new tests** covering every branch: happy-path, byte-identity,
+  404 unknown, 403 mismatch, 429 rate limit, 503 pre-boot, 401
+  missing auth, 400 malformed session_id, not-a-side-effect
+  (file size + mtime stable).
+
+**Repo scoreboard:** 250 tests green (30 core + 4 schemas + 210
+runner + 6 create-soa-agent). `pnpm -r build / typecheck / lint / test`
+all green. Pinned at spec `507eeb1`. Nine endpoints live on :7700
+(the eight M1 endpoints + the new `/sessions/:id/state`).
+
+**Week 1 exit gate complete:**
+- SV-SESS-01 ✅ (T-1a atomic write)
+- SV-SESS-02 ✅ (T-1a atomic write)
+- SV-SESS-05 ✅ (T-6 idempotency classification)
+- SV-SESS-11 ✅ (T-6 idempotency classification)
+- SV-SESS-STATE-01 ✅ (T-3 state endpoint)
+
+**Next — Week 1 Day 2-5 continues into M2-T2:** resume algorithm per §12.5
+steps 1-4. Gates HR-04, HR-05, SV-SESS-08, SV-SESS-09, SV-SESS-10.
+
 ## 2026-04-21 (M2 Week 1 Day 1 — T-1a + T-6 shipped in parallel)
 
 ### Pin bumped to spec `507eeb1` (L-26 + L-27 + L-28); Week 1 foundation complete
