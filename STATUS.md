@@ -1,5 +1,42 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (:7700 restarted against HEAD — T-3 endpoints now live)
+
+- **Done:** Bounced the long-running `:7700` process so commit `8b5d650`
+  (T-3 scaffolds) is actually serving. New binary PID assigned; fresh
+  session dir, no replay state. Live-verified: `/tools/registered` and
+  `/budget/projection/<session_id>` both answering 200 with schema-
+  conformant bodies against the pinned DFA conformance card + 8-tool
+  registry.
+- **Validator auto-flip expected:** +4 M3 greens without any validator
+  code change — `SV-BUD-PROJ-01`, `SV-BUD-PROJ-02`, `SV-REG-OBS-01`,
+  `SV-REG-OBS-02`.
+- **Active:** T-1 (Memory subsystem + `/memory/state`) + T-2 (StreamEvent
+  25-type + `/events/recent`) resume next.
+- **Blocked:** None.
+- **Pin:** `5e97277`.
+
+Spot-checks from restart:
+- `/tools/registered` → 200 with 8 tools, `registered_at` stamped at
+  boot time, `registration_source:"static-fixture"` on every entry.
+- `/budget/projection/ses_demoWeek3Conformance01` → 200 with
+  `safety_factor:1.15`, `cold_start_baseline_active:true`,
+  `cumulative_tokens_consumed:0` (the T-4 accounting wire-up hasn't
+  started yet).
+
+<!-- machine-readable -->
+```json
+{
+  "week": 1,
+  "day": 1,
+  "event": "restart-for-t3-endpoints",
+  "spec_pin": "5e97277",
+  "endpoints_now_serving_t3": ["/tools/registered", "/budget/projection/:session_id"],
+  "validator_auto_flip": ["SV-BUD-PROJ-01", "SV-BUD-PROJ-02", "SV-REG-OBS-01", "SV-REG-OBS-02"]
+}
+```
+<!-- /machine-readable -->
+
 ## 2026-04-21 (M3 Week 1 Day 1 — pin bump + T-3 scaffolds + T-0 Memory MCP mock)
 
 - **Done:** Pin bumped to spec `5e97277` (L-33 rev 2 + L-34). Four new
