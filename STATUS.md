@@ -1,5 +1,86 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M2 Week 1 Day 3 — T-2 live + CRL auto-refresh fix)
+
+### Two follow-ups from validator findings + M2-T2 resume algorithm
+
+**Signal for validator:** Two things landed. (1) The long-running
+`/ready=503 crl-stale` you caught is fixed — the BootOrchestrator
+now schedules §10.6 periodic refresh; restart `:7700` and live
+regression stays green indefinitely. (2) The §12.5 resume algorithm
+is live with full step-1-through-4 coverage; HR-04, HR-05, and
+SV-SESS-08/09/10 all have impl-side assertions waiting on the
+validator's V2-06 crash-kill harness.
+
+**Fix: §10.6 CRL auto-refresh scheduler (validator Finding B)**
+- Root cause: `BootOrchestrator.boot()` refreshed every anchor's CRL
+  once and then never again. The cache's 2h `staleCeilingMs` aged
+  past, `anchorFreshness()` flipped to `expired`, and `/ready`
+  returned `crl-stale` until a manual `boot()` that never came.
+- Fix: `BootOrchestrator` now schedules a `setInterval`-backed
+  refresh loop after successful boot. Default tick = 30 minutes
+  (half of §10.6's 60-minute refresh ceiling; well under the 2h
+  stale ceiling). The timer is `.unref()`'d so it doesn't pin the
+  event loop.
+- New methods: `stop()` (idempotent; clears the interval — bin's
+  SIGINT/SIGTERM handler now calls it before `app.close()`),
+  `refreshAllNow()` (one-shot test helper + operator-forced refresh).
+- New ctor options: `refreshIntervalMs` (0 disables the timer for
+  tests), `onRefreshError` (default logs via `console.warn`).
+  Refresh-failure routes through the logger; last-good CRL stays
+  in cache until the stale ceiling is crossed.
+- 3 new tests: long-run `/ready` stays green across the 2h ceiling;
+  `stop()` idempotent + safe pre-boot; refresh-failure logs but
+  preserves last-good entry.
+
+**M2-T2 — Resume algorithm §12.5 steps 1-4:**
+- `resumeSession(persister, session_id, ctx)` in
+  `packages/runner/src/session/resume.ts`.
+- Step 1 uses a new lenient read path (`readSessionForResume` +
+  `parseLenient`) — format_version + partial-write detection only,
+  no full schema validation. Pre-1.0 files (missing `activeMode`
+  per L-20) pass through step 1, get migrated in step 1.5, then
+  pass strict validation on post-resume rewrite.
+- Step 2 — `card_version` mismatch throws `CardVersionDrift`
+  (new closed-enum `StopReason` class; carries `sessionId`,
+  `expected`, `actual`).
+- Step 3 — `tool_pool_hash` mismatch re-uses `ToolPoolStale` with
+  a new closed-enum reason `tool-pool-hash-mismatch` (existing
+  `idempotency-retention-insufficient` unchanged).
+- Step 4 — per-side_effect walk:
+  - `pending` → `replayPending(se)` (caller-injected); phase →
+    `committed`; `result_digest` stamped when returned;
+    `last_phase_transition_at` updated.
+  - `committed` → skip (HR-05 invariant; idempotency_key preserved).
+  - `inflight` + `canCompensate:true` → `compensate(se)`; phase →
+    `compensated`.
+  - `inflight` + `canCompensate:false` → phase → `compensated`
+    with `_resume_note = "ResumeCompensationGap"` per §12.5 exactly.
+  - `compensated` → skip.
+- Post-step-4: atomic write via `SessionPersister.writeSession`.
+  Second `resumeSession` call finds everything committed/compensated
+  and replays nothing — HR-05 cross-restart idempotency holds.
+- 9 new tests covering every spec branch (HR-04, HR-05 same-resume +
+  cross-restart, SV-SESS-08/09/10, inflight-with-compensate,
+  pre-1.0 migration, unknown-session).
+
+**Repo scoreboard:** 262 tests green (30 core + 4 schemas + 222
+runner + 6 create-soa-agent). `pnpm -r build / typecheck / lint /
+test` all green. Pinned at spec `507eeb1`. Nine endpoints live
+on `:7700` (status unchanged — T-2 is a library module, not an
+endpoint).
+
+**Week 1 exit gate cumulative (Week 1 work across Day 1-3):**
+- SV-SESS-01 ✅  SV-SESS-02 ✅  SV-SESS-05 ✅  SV-SESS-11 ✅
+  SV-SESS-STATE-01 ✅ (T-3 + validator's V2-05 next run)
+- HR-04 ⏳  HR-05 ⏳  SV-SESS-08 ⏳  SV-SESS-09 ⏳  SV-SESS-10 ⏳
+  (impl library coverage in T-2; validator crash-kill harness —
+  V2-06 — flips these green in Week 3 with T-7 marker protocol)
+
+**Next — Week 2 kickoff:** M2-T4 (audit-sink three-state degradation
+§10.5.1) + M2-T4b (`GET /audit/sink-events` §12.5.4). T-4b unblocks
+the validator's SV-AUDIT-SINK-EVENTS-01 + SV-PERM-19 SKIPs.
+
 ## 2026-04-21 (M2 Week 1 exit gate — T-3 live; SV-SESS-STATE-01 unblocked)
 
 ### `GET /sessions/<session_id>/state` live on :7700 — Week 1 exit complete
