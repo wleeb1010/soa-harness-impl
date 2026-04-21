@@ -238,23 +238,25 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       }
     }
 
-    // Append audit row (§10.5 hash chain). Reading MUST NOT write meta-records;
-    // this endpoint IS the write path.
+    // Append audit row (§10.5 hash chain) in the exact shape audit-records-
+    // response.schema.json requires. No extra fields — additionalProperties:
+    // false on the record item. Reading MUST NOT write meta-records; this
+    // endpoint IS the write path.
     const recordId = auditRecordId();
     const recordedAt = opts.clock().toISOString();
     const written = opts.chain.append({
-      audit_record_id: recordId,
-      kind: "permission-decision",
-      tool: toolEntry.name,
+      id: recordId,
+      timestamp: recordedAt,
       session_id: sessionId,
+      subject_id: "none", // M1: no subject inference yet (§10.7 is M3)
+      tool: toolEntry.name,
       args_digest: argsDigest,
+      capability: resolverResponse.resolved_capability,
+      control: resolverResponse.resolved_control,
+      handler: "Interactive", // M1: handler role is Agent Card config; hardcode until T-?? lands
       decision: finalDecision,
-      resolved_control: resolverResponse.resolved_control,
-      resolved_capability: resolverResponse.resolved_capability,
       reason: finalReason,
-      handler_accepted: handlerAccepted,
-      ...(pdaSignerKid !== undefined ? { pda_signer_kid: pdaSignerKid } : {}),
-      recorded_at: recordedAt
+      signer_key_id: pdaSignerKid ?? ""
     });
 
     return reply.code(201).send({

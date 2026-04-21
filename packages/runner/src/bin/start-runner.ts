@@ -188,6 +188,12 @@ async function main() {
       clock,
       runnerVersion: "1.0"
     },
+    auditRecords: {
+      chain,
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
+    },
     ...(registry
       ? {
           permissionsDecisions: {
@@ -216,6 +222,7 @@ async function main() {
   console.log(`  GET http://${HOST}:${PORT}/health`);
   console.log(`  GET http://${HOST}:${PORT}/ready`);
   console.log(`  GET http://${HOST}:${PORT}/audit/tail`);
+  console.log(`  GET http://${HOST}:${PORT}/audit/records?after=<id>&limit=<n>`);
   if (registry) {
     console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
     console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);

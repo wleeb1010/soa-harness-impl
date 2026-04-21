@@ -132,7 +132,7 @@ describe("POST /permissions/decisions — §10.3.2", () => {
     expect(body.handler_accepted).toBe(true);
     expect(chain.recordCount()).toBe(1);
     const snap = chain.snapshot()[0] as Record<string, unknown>;
-    expect(snap.pda_signer_kid).toBe(KID);
+    expect(snap.signer_key_id).toBe(KID);
     await app.close();
   });
 

@@ -16,7 +16,7 @@ import type { ToolRegistry } from "./registry/index.js";
 import type { Capability } from "./permission/index.js";
 import type { Control } from "./registry/index.js";
 import type { Clock } from "./clock/index.js";
-import { AuditChain, auditTailPlugin } from "./audit/index.js";
+import { AuditChain, auditTailPlugin, auditRecordsPlugin } from "./audit/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -68,6 +68,19 @@ export interface BuildRunnerOptions {
     clock: Clock;
     runnerVersion?: string;
     requestsPerMinute?: number;
+  };
+  /**
+   * Optional — when present the Runner exposes GET /audit/records per Core
+   * §10.5.3 with pagination. Shares the AuditChain with auditTail.
+   */
+  auditRecords?: {
+    chain: AuditChain;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    defaultLimit?: number;
+    maxLimit?: number;
   };
   /**
    * Optional — when present the Runner exposes POST /permissions/decisions
@@ -147,6 +160,20 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       clock: at.clock,
       ...(at.runnerVersion !== undefined ? { runnerVersion: at.runnerVersion } : {}),
       ...(at.requestsPerMinute !== undefined ? { requestsPerMinute: at.requestsPerMinute } : {})
+    });
+  }
+
+  if (opts.auditRecords !== undefined) {
+    const ar = opts.auditRecords;
+    await app.register(auditRecordsPlugin, {
+      chain: ar.chain,
+      sessionStore: ar.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: ar.clock,
+      ...(ar.runnerVersion !== undefined ? { runnerVersion: ar.runnerVersion } : {}),
+      ...(ar.requestsPerMinute !== undefined ? { requestsPerMinute: ar.requestsPerMinute } : {}),
+      ...(ar.defaultLimit !== undefined ? { defaultLimit: ar.defaultLimit } : {}),
+      ...(ar.maxLimit !== undefined ? { maxLimit: ar.maxLimit } : {})
     });
   }
 
