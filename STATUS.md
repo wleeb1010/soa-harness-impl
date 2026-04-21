@@ -1,5 +1,83 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M2 Week 1 Day 1 — T-1a + T-6 shipped in parallel)
+
+### Pin bumped to spec `507eeb1` (L-26 + L-27 + L-28); Week 1 foundation complete
+
+**Signal for validator:** Pin bumped to spec `507eeb1` (manifest digest
+`0418932a29…03c0`, re-hashed locally and matched byte-for-byte). M2
+Week 1 Day 1 tracks T-1a + T-6 both landed; Week 1 exit gate tests
+SV-SESS-01/02/05/11 now have impl-side coverage. Still pending in
+Week 1: T-3 (`GET /sessions/<id>/state` — gates SV-SESS-STATE-01
+and HR-04/05/SV-SESS-03/04), T-2 (resume algorithm — gates HR-04/05
++ SV-SESS-08/09/10).
+
+**Pin bump absorbs:**
+- **L-26** — §10.3.2 `pda-malformed` reclassified 403 → 400. Impl
+  was already returning 400 since T-02; zero code change required.
+- **L-27** — M2 kickoff: §12.5.1 /sessions/:id/state observability,
+  §12.5.2 SOA_RUNNER_AUDIT_SINK_FAILURE_MODE env hook, tool-registry-m2
+  non-idempotent tool fixture.
+- **L-28** — M2 rev 2: §12.5.3 seven-marker crash-test protocol,
+  §12.5.4 /audit/sink-events endpoint + schema, must-map 222 → 223
+  (adds SV-AUDIT-SINK-EVENTS-01), filtered sub-fixtures
+  tools-compliant-only.json + tools-non-compliant-only.json,
+  SV-PERM-16 / SV-PERM-17 formally M3-deferred.
+- Schemas registry now loads **22 validators** (was 20); added:
+  `session-state-response`, `audit-sink-events-response`.
+- SHA note: impl-session pin records local HEAD `507eeb1160adc…`
+  (not the L-27 ack-paste value `507eeb1b0a12…`, which shares only
+  the 7-char prefix). The manifest digest is the authoritative
+  artefact and matches byte-for-byte.
+
+**M2-T6 — Tool Registry §12.2 idempotency classification (SV-SESS-05, SV-SESS-11):**
+- Rule: when `idempotency_retention_seconds` is explicitly declared AND
+  below 3600s, the tool MUST be classified `Destructive` + `Prompt`.
+  Any violation (including Destructive + non-Prompt) → `ToolPoolStale
+  reason=idempotency-retention-insufficient`; bin catches it, prints
+  FATAL, `process.exit(1)` BEFORE the listener binds.
+- Absence of the field is backwards-compat: the M1 8-tool registry
+  (no field on any entry) + the 4-tool sample fixture keep loading
+  cleanly. Plan's concatenation property verified in tests.
+- 7 tests: compliant-only fixture loads, non-compliant-only rejects,
+  combined fixture rejects on first non-compliant entry, M1 +
+  compliant-only concatenated loads, absent-field passes, retention
+  ≥ 3600 passes, Destructive+non-Prompt+low-retention rejected.
+- Live-verified via subprocess harness: the non-compliant fixture
+  aborts the process with `EXIT=1` and the closed-enum message before
+  the listener binds; the compliant-only fixture boots clean on
+  `127.0.0.1:7702` with 1 tool registered + `/ready` → 200.
+
+**M2-T1a — Session-file persistence §12.3 atomic writes (SV-SESS-01, -02, -06, -07):**
+- POSIX: `write(tmp) → fsync(tmp) → rename → fsync(dir)`.
+- Windows: `write(tmp) → FlushFileBuffers(tmp) → MoveFileExW(MOVEFILE_REPLACE_EXISTING)
+  → FlushFileBuffers(final)` (belt-and-suspenders WRITE_THROUGH approximation;
+  Win32 doesn't expose directory fsync).
+- Per-session_id in-process write serialization chain — eliminates
+  Win32 MoveFileExW EPERM when the next writer races the prior
+  writer's final-file fsync handle. "concurrent-serialize" test
+  exercises the chain.
+- `stageActivate(files[])` for multi-file commits — fsync all tmps
+  first, then rename all. Per-file atomic; partial commits never tear.
+- `writableProbe()` hook for the future `/ready` persistence-unwritable
+  reason wire-up.
+- Partial-write detection via trailing-brace heuristic →
+  `SessionFormatIncompatible reason=partial-write-detected`.
+  Corruption → `reason=corrupted-json`. Schema violation →
+  `reason=schema-violation`. Wrong format_version →
+  `reason=bad-format-version`.
+- 11 new tests covering every write/read branch on Windows (CI will
+  also exercise the POSIX syscalls on Linux/macOS).
+
+**Repo scoreboard (unchanged endpoint surface for this Day 1 push; Week 1 Day 2+ adds /sessions/:id/state):**
+- 241 tests green (30 core + 4 schemas + 201 runner + 6 create-soa-agent) — was 223 at M1 exit (+18).
+- `pnpm -r build / typecheck / lint / test` all green.
+- Pinned at spec `507eeb1`.
+
+**Week 1 exit gate progress (5 tests):** SV-SESS-01 ✅ impl-side · SV-SESS-02 ✅ · SV-SESS-05 ✅ · SV-SESS-11 ✅ · SV-SESS-STATE-01 ⏳ (T-3 next).
+
+**Next:** Week 1 Day 2-5 opens T-3 (`GET /sessions/<session_id>/state` endpoint per §12.5.1 with byte-identity contract excluding `generated_at`) and T-2 (resume algorithm per §12.5 steps 1-4). T-3 ships first because its endpoint is the validator-observable surface for every crash-recovery assertion in Week 3.
+
 ## 2026-04-20 (L-24 handler-key wiring — SV-PERM-21 unblocked)
 
 ### Handler `resolvePdaVerifyKey` wired — pinned PDA round-trips to 201 + audit row
