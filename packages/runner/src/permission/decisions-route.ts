@@ -11,6 +11,7 @@ import type { MarkerEmitter } from "../markers/index.js";
 import type { StreamEventEmitter } from "../stream/index.js";
 import { runHook, type HookOutcome, type HookReentrancyTracker } from "../hook/index.js";
 import type { BudgetTracker } from "../budget/index.js";
+import type { OtelEmitter } from "../observability/index.js";
 import {
   SessionPersister,
   SessionFormatIncompatible,
@@ -121,6 +122,14 @@ export interface PermissionsDecisionsRouteOptions {
    * Omit to preserve pre-Finding-N behavior.
    */
   hookReentrancy?: HookReentrancyTracker;
+  /**
+   * §14.4 OTel emitter (Finding W / SV-STR-06/07). When present, every
+   * committed decision fires soa.turn + soa.tool.<tool_name> spans into
+   * the OtelSpanStore that backs /observability/otel-spans/recent. The
+   * PermissionDecision StreamEvent event_id is carried as a span event
+   * on both spans for cross-channel correlation. Omit → no spans emit.
+   */
+  otelEmitter?: OtelEmitter;
 }
 
 const WINDOW_MS = 60_000;
@@ -784,9 +793,10 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     // reflects the final recorded outcome. The prompt_id is synthesized
     // from the aud_ audit row id so clients can correlate back to the
     // chain; decision is mapped to the §14.1.1 allow/deny enum.
+    let permissionDecisionEventId: string | undefined;
     if (opts.emitter) {
       const decisionAllowOrDeny = finalDecision === "AutoAllow" ? "allow" : "deny";
-      opts.emitter.emit({
+      const pd = opts.emitter.emit({
         session_id: sessionId,
         type: "PermissionDecision",
         payload: {
@@ -798,6 +808,7 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           reason: finalReason
         }
       });
+      permissionDecisionEventId = pd.event_id;
 
       // §14.1 PreToolUseOutcome — SV-HOOK-07 ordering spec:
       // PermissionDecision → PreToolUseOutcome → ToolResult →
@@ -823,6 +834,25 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           }
         });
       }
+    }
+
+    // §14.4 OTel spans (Finding W / SV-STR-06/07): soa.turn outer +
+    // soa.tool.<tool_name> child for every committed decision. Carries
+    // the PermissionDecision StreamEvent event_id as a span event so
+    // validators can correlate the two channels (/events/recent ↔
+    // /observability/otel-spans/recent). The spans land in the same
+    // OtelSpanStore the endpoint reads — no duplicate transport path.
+    if (opts.otelEmitter) {
+      opts.otelEmitter.emitDecisionSpans({
+        session_id: sessionId,
+        turn_id: bracketIdempotencyKey ?? recordId,
+        tool_name: toolEntry.name,
+        tool_risk_class: toolEntry.risk_class,
+        permission_decision: finalDecision,
+        ...(permissionDecisionEventId !== undefined
+          ? { permission_decision_event_id: permissionDecisionEventId }
+          : {})
+      });
     }
 
     // §15 PostToolUse hook + §14.1 PostToolUseOutcome — advisory at the

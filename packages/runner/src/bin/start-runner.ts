@@ -34,7 +34,7 @@ import {
 import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
 import { HookReentrancyTracker } from "../hook/index.js";
-import { OtelSpanStore, BackpressureState } from "../observability/index.js";
+import { OtelSpanStore, BackpressureState, OtelEmitter } from "../observability/index.js";
 import { SystemLogBuffer } from "../system-log/index.js";
 import {
   InMemoryMemoryStateStore,
@@ -120,7 +120,9 @@ interface CardShape {
    * to a hardcoded literal. projectionWindow has the same card-driven
    * contract but is less exercised by conformance.
    */
-  tokenBudget?: { maxTokensPerRun?: number; projectionWindow?: number };
+  tokenBudget?: { maxTokensPerRun?: number; projectionWindow?: number; billingTag?: string };
+  /** §14.4 observability config — Finding W reads requiredResourceAttrs. */
+  observability?: { otelExporter?: string; requiredResourceAttrs?: string[] };
 }
 
 async function main() {
@@ -383,6 +385,32 @@ async function main() {
   // probes pin on the schema shape independent of producer timing.
   const otelSpanStore = new OtelSpanStore();
   const backpressureState = new BackpressureState({ clock });
+
+  // Finding W / SV-STR-06/07 — bridge that emits soa.turn + soa.tool.*
+  // spans from every committed decision into the OTel ring. billingTag
+  // flows from card.tokenBudget.billingTag when Finding Q ships the
+  // end-to-end threading; until then the card fixture's value is used
+  // directly so the span attribute is present with a real value.
+  const agentNameForSpans =
+    typeof (card as { name?: unknown }).name === "string"
+      ? ((card as { name: string }).name)
+      : "soa-harness-runner";
+  const agentVersionForSpans =
+    typeof (card as { version?: unknown }).version === "string"
+      ? ((card as { version: string }).version)
+      : "1.0";
+  const billingTagForSpans =
+    typeof card.tokenBudget?.billingTag === "string" ? card.tokenBudget.billingTag : "";
+  const requiredAttrs = card.observability?.requiredResourceAttrs;
+  const otelEmitter = new OtelEmitter({
+    store: otelSpanStore,
+    agentName: agentNameForSpans,
+    agentVersion: agentVersionForSpans,
+    billingTag: billingTagForSpans,
+    ...(requiredAttrs !== undefined ? { requiredResourceAttrs: requiredAttrs } : {}),
+    runnerVersion: "1.0",
+    clock
+  });
 
   // L-38 §14.2/§14.5.4 System Event Log buffer. Finding T writes
   // per-timeout MemoryDegraded records here; GET /logs/system/recent
@@ -655,6 +683,9 @@ async function main() {
             budgetTracker,
             // §15 Finding N — share one tracker across the process.
             hookReentrancy,
+            // §14.4 Finding W — OTel spans emitted at the decision
+            // call-site, read back by /observability/otel-spans/recent.
+            otelEmitter,
             // §15 hooks — operator supplies command lines via env.
             ...((): {
               hookConfig?: {

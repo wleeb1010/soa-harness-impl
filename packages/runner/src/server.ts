@@ -152,6 +152,8 @@ export interface BuildRunnerOptions {
     budgetPerTurnEstimate?: number;
     /** §15 Finding N — shared hook reentrancy tracker. */
     hookReentrancy?: import("./hook/index.js").HookReentrancyTracker;
+    /** §14.4 Finding W — OTel span emission bridge. */
+    otelEmitter?: import("./observability/index.js").OtelEmitter;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/sink-events
@@ -468,7 +470,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.budgetPerTurnEstimate !== undefined
         ? { budgetPerTurnEstimate: pd.budgetPerTurnEstimate }
         : {}),
-      ...(pd.hookReentrancy !== undefined ? { hookReentrancy: pd.hookReentrancy } : {})
+      ...(pd.hookReentrancy !== undefined ? { hookReentrancy: pd.hookReentrancy } : {}),
+      ...(pd.otelEmitter !== undefined ? { otelEmitter: pd.otelEmitter } : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
   }
