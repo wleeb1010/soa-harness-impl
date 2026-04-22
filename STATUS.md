@@ -1,5 +1,64 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M3 Week 2 Day 1-2 — T-4 Budget + T-5 Dynamic MCP + T-6 Hooks)
+
+- **Done:** `T-4`, `T-5`, `T-6` all shipped. **`T-4`**: `BudgetTracker`
+  implements §13.1 p95-over-W projection with 1.15 safety factor + cold-
+  start baseline + cache accounting. `/budget/projection` now supports
+  the §13.5 canonical query-param form (back-compat path form retained)
+  and reads from the real tracker. **`T-5`**: §11.3.1 dynamic
+  registration env hook (`SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION=<path>`).
+  Watcher polls, ingests JSON-array tool entries, truncates-after-
+  ingest. `ToolEntry` gains per-tool metadata
+  (`_registered_at`, `_registration_source`). Production guard refuses
+  startup on non-loopback. `/tools/registered` surfaces both static
+  and dynamic tools with proper source attribution. **`T-6`**: §15 hooks
+  pipeline integrated at POST `/permissions/decisions` — PreToolUse
+  Deny short-circuits to 403 `PermissionDenied` `reason=hook-deny`,
+  PreToolUse Prompt forces final decision to Prompt, PostToolUse
+  advisory. Env vars `SOA_PRE_TOOL_USE_HOOK` + `SOA_POST_TOOL_USE_HOOK`.
+  **`:7700` bounced** with all three shipped.
+- **Active:** Week 3 opens: T-7 (SV-CARD/PERM/BOOT/SIGN remainders),
+  T-8 (Policy/manifest block), T-9 (SV-AGENTS), T-10 (HRs), T-11
+  (version errata), T-11b (Week-4 scaffolds).
+- **Blocked:** None.
+- **Pin:** `5e97277` (unchanged).
+- **Scoreboard:** 388 repo-wide tests green (was 365, +23 for Week 2:
+  8 budget + 5 hooks + 10 dynamic-registration). **≥53 M3 tests have
+  impl coverage** (Week-1 core + full T-4/T-5/T-6 + T-3 scaffolds).
+
+Live verified end-to-end on `127.0.0.1:7700`:
+- `/budget/projection?session_id=<sid>` → 200 with real `p95_tokens_per_turn_over_window_w`,
+  `safety_factor:1.15`, cold-start transition after 3+ recorded turns.
+- Dynamic registration: write
+  `[{"name":"dyn__live_smoke_probe","risk_class":"ReadOnly","default_control":"AutoAllow"}]`
+  to trigger file → `registry_version` advances from
+  `sha256:020eb1c7…0c9b1` → `sha256:67f34c76…97f4`, tool count 8 → 9,
+  new entry carries `registration_source:"mcp-dynamic"` +
+  ingest-time `registered_at`.
+- Pre-hook `deny.mjs` → 403 `PermissionDenied` `reason=hook-deny`, NO
+  audit row appended.
+
+<!-- machine-readable -->
+```json
+{
+  "week": 2,
+  "day": "1-2-close",
+  "t_tasks_landed": ["T-4", "T-5", "T-6"],
+  "t_tasks_active": ["T-7", "T-8", "T-9", "T-10", "T-11", "T-11b"],
+  "endpoints_live_updated": ["/budget/projection?session_id=", "/tools/registered"],
+  "env_hooks_added": [
+    "SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION",
+    "SOA_PRE_TOOL_USE_HOOK",
+    "SOA_POST_TOOL_USE_HOOK"
+  ],
+  "spec_pin": "5e97277",
+  "tests_green_total": 388,
+  "m3_impl_coverage_estimate": 53
+}
+```
+<!-- /machine-readable -->
+
 ## 2026-04-21 (M3 Week 1 complete — T-1 Memory state live; core Week 1 delivered)
 
 - **Done:** `T-1` shipped. `InMemoryMemoryStateStore` (`packages/runner/src/memory/`)
