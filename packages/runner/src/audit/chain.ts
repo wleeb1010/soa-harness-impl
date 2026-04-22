@@ -5,6 +5,16 @@ import { NOOP_EMITTER, type MarkerEmitter } from "../markers/index.js";
 
 export const GENESIS = "GENESIS" as const;
 
+/**
+ * §10.5.5 L-48 Finding BC — WORM sink model. When enabled, each
+ * appended record is stamped with `sink_timestamp` (distinct field
+ * from Runner-internal `timestamp`) and the §10.5.1 mutation/delete
+ * endpoints reject with 405 ImmutableAuditSink. Hash-chain
+ * participation matches L-40 billing_tag: canonical-JCS-serialized
+ * when present, absent when not — no empty-string placeholder.
+ */
+export type AuditSinkMode = "worm-in-memory";
+
 export interface AuditRecordCore {
   timestamp: string;
   prev_hash: string;
@@ -41,12 +51,19 @@ export class AuditChain {
   private readonly records: AuditRecord[] = [];
   private tail: string = GENESIS;
   private readonly markers: MarkerEmitter;
+  private readonly sinkMode: AuditSinkMode | null;
 
   constructor(
     private readonly now: Clock,
-    opts?: { markers?: MarkerEmitter }
+    opts?: { markers?: MarkerEmitter; sinkMode?: AuditSinkMode }
   ) {
     this.markers = opts?.markers ?? NOOP_EMITTER;
+    this.sinkMode = opts?.sinkMode ?? null;
+  }
+
+  /** Is this chain backed by a WORM sink model? (§10.5.5 Finding BC.) */
+  isWormSink(): boolean {
+    return this.sinkMode === "worm-in-memory";
   }
 
   /** Append an arbitrary record body; the chain fills in timestamp + prev_hash + this_hash. */
@@ -54,6 +71,14 @@ export class AuditChain {
     const timestamp = this.now().toISOString();
     const prev_hash = this.tail;
     const draft: AuditRecord = { ...body, timestamp, prev_hash, this_hash: "" };
+    // §10.5.5 Finding BC — stamp sink_timestamp when WORM model is
+    // attached. Same clock call as `timestamp` so |sink_timestamp −
+    // timestamp| = 0 in-process (≤1s per spec). Only stamped when the
+    // field is absent in the inbound body so callers can override for
+    // replay scenarios (audit-sink flush reuses original sink_timestamp).
+    if (this.sinkMode === "worm-in-memory" && draft["sink_timestamp"] === undefined) {
+      draft["sink_timestamp"] = timestamp;
+    }
     // Canonical form is the full record minus the this_hash placeholder.
     const withoutHash = { ...draft } as Record<string, unknown>;
     delete withoutHash["this_hash"];

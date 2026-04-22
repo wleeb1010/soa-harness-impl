@@ -3,7 +3,10 @@ import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import type { Clock } from "../clock/index.js";
 import type { ReadinessProbe } from "../probes/index.js";
 import type { SessionStore } from "../permission/index.js";
+import type { SystemLogBuffer } from "../system-log/index.js";
 import { AuditChain } from "./chain.js";
+import type { ReaderTokenStore } from "./reader-tokens.js";
+import { looksLikeReaderBearer } from "./reader-tokens.js";
 
 export interface AuditRecordsRouteOptions {
   chain: AuditChain;
@@ -17,6 +20,16 @@ export interface AuditRecordsRouteOptions {
   defaultLimit?: number;
   /** Schema-pinned max page size. 1000. */
   maxLimit?: number;
+  /**
+   * §10.5.5 Finding BC — System Event Log for ImmutableAuditSink
+   * record emission when PUT/DELETE is rejected under WORM mode.
+   * Optional — when unset, the 405 still fires but no log record.
+   */
+  systemLog?: SystemLogBuffer;
+  /** §10.5.5 session_id for the ImmutableAuditSink log record (BOOT_SESSION_ID). */
+  bootSessionId?: string;
+  /** §10.5.7 Finding BJ — reader bearers bypass session-bearer audit:read. */
+  readerTokens?: ReaderTokenStore;
 }
 
 const WINDOW_MS = 60_000;
@@ -72,7 +85,13 @@ export const auditRecordsPlugin: FastifyPluginAsync<AuditRecordsRouteOptions> = 
     const bearer = extractBearer(request);
     if (!bearer) return reply.code(401).send({ error: "missing-or-invalid-bearer" });
 
-    if (!bearerAuthorizedForAuditRead(opts.sessionStore, bearer)) {
+    // §10.5.7 Finding BJ — reader bearers carry audit:read:* scope.
+    const isReader =
+      looksLikeReaderBearer(bearer) &&
+      opts.readerTokens !== undefined &&
+      opts.readerTokens.isValid(bearer);
+
+    if (!isReader && !bearerAuthorizedForAuditRead(opts.sessionStore, bearer)) {
       return reply.code(403).send({ error: "bearer-lacks-audit-read-scope" });
     }
 
@@ -116,4 +135,42 @@ export const auditRecordsPlugin: FastifyPluginAsync<AuditRecordsRouteOptions> = 
 
     return reply.code(200).send(body);
   });
+
+  // §10.5.5 L-48 Finding BC — WORM sink immutability. Mutating /audit
+  // records via HTTP is never permitted in any mode, but under the
+  // worm-in-memory sink we surface the rejection with the specific
+  // ImmutableAuditSink shape AND mirror it onto /logs/system/recent so
+  // validators observe both the HTTP response and the Audit-category
+  // log record. Outside WORM mode this path returns the same shape for
+  // structural consistency — audit mutation is never legitimate regardless.
+  const mutationHandler = async (
+    request: FastifyRequest,
+    reply: import("fastify").FastifyReply
+  ) => {
+    reply.header("Cache-Control", "no-store");
+    const params = request.params as { id?: string };
+    const body = {
+      error: "ImmutableAuditSink",
+      reason: "worm-sink-forbids-mutation"
+    };
+    if (opts.systemLog !== undefined && opts.bootSessionId !== undefined) {
+      opts.systemLog.write({
+        session_id: opts.bootSessionId,
+        category: "Audit",
+        level: "error",
+        code: "ImmutableAuditSink",
+        message:
+          `ImmutableAuditSink: ${request.method} /audit/records/${params.id ?? "<missing>"} rejected — ` +
+          `§10.5.5 WORM sink forbids mutation`,
+        data: {
+          method: request.method,
+          record_id: params.id,
+          sink_mode: opts.chain.isWormSink() ? "worm-in-memory" : "non-worm"
+        }
+      });
+    }
+    return reply.code(405).send(body);
+  };
+  app.put("/audit/records/:id", mutationHandler);
+  app.delete("/audit/records/:id", mutationHandler);
 };

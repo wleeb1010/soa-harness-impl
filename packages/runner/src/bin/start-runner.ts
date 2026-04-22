@@ -35,7 +35,10 @@ import {
   AuditChain,
   AuditSink,
   parseAuditSinkFailureModeEnv,
-  assertAuditSinkEnvListenerSafe
+  assertAuditSinkEnvListenerSafe,
+  parseAuditSinkModeEnv,
+  assertAuditSinkModeListenerSafe,
+  ReaderTokenStore
 } from "../audit/index.js";
 import {
   SessionPersister,
@@ -78,6 +81,15 @@ import {
 import { assertBootstrapBearerListenerSafe } from "../guards/index.js";
 import type { TrustAnchor } from "../card/verify.js";
 import type { Control } from "../registry/index.js";
+import {
+  HandlerKeyRegistry,
+  HandlerCrlPoller,
+  parseHandlerEnv,
+  assertHandlerEnvListenerSafe,
+  loadOverlapKeypairs,
+  appendSuspectDecisionsForKid,
+  type HandlerKeyEntry
+} from "../attestation/index.js";
 
 const TRUST_PATH = process.env.RUNNER_TRUST_PATH ?? "./initial-trust.json";
 const CARD_PATH = process.env.RUNNER_CARD_PATH ?? "./agent-card.json";
@@ -202,6 +214,15 @@ async function main() {
   // §12.5.2 production guard for the audit-sink failure-mode env hook.
   const AUDIT_SINK_FAILURE_MODE = process.env.SOA_RUNNER_AUDIT_SINK_FAILURE_MODE;
   assertAuditSinkEnvListenerSafe({ envValue: AUDIT_SINK_FAILURE_MODE, host: HOST });
+
+  // §10.5.5 L-48 Finding BC — RUNNER_AUDIT_SINK_MODE production guard.
+  const AUDIT_SINK_MODE_RAW = process.env.RUNNER_AUDIT_SINK_MODE;
+  const auditSinkMode = parseAuditSinkModeEnv(AUDIT_SINK_MODE_RAW);
+  assertAuditSinkModeListenerSafe({ mode: auditSinkMode, host: HOST });
+
+  // §10.6.2 L-48 Findings BD/BE/BF — handler key lifecycle env hooks.
+  const handlerEnv = parseHandlerEnv(process.env);
+  assertHandlerEnvListenerSafe({ env: handlerEnv, host: HOST });
 
   // §5.3.3 Findings AP/AQ/AR — bootstrap testability env hooks.
   // Parsed up front so the guard fires before any fixture read.
@@ -506,7 +527,52 @@ async function main() {
     }
   }
 
-  const chain = new AuditChain(clock, { markers });
+  const chain = new AuditChain(clock, {
+    markers,
+    // §10.5.5 L-48 Finding BC — wire WORM model when env hook set.
+    // Appended records gain sink_timestamp; the records-route
+    // PUT/DELETE guard fires regardless of mode for structural
+    // consistency (audit mutation is never legitimate).
+    ...(auditSinkMode !== null ? { sinkMode: auditSinkMode } : {})
+  });
+  if (auditSinkMode !== null) {
+    console.log(`[start-runner] §10.5.5 WORM sink model active (mode=${auditSinkMode})`);
+  }
+
+  // §10.5.7 L-48 Finding BJ — in-process reader-token store backing
+  // POST /audit/reader-tokens and the reader-scope guard.
+  const readerTokenStore = new ReaderTokenStore(clock);
+
+  // §10.6 L-48 Findings BD/BE/BF — handler key registry + optional
+  // overlap-dir multi-kid fixture load + handler CRL poller.
+  const handlerKeyRegistry = new HandlerKeyRegistry();
+  // Default handler kid (conformance fixture). enrolled_at defaults to
+  // clock() at boot; SOA_HANDLER_ENROLLED_AT overrides for age-boundary
+  // tests. spki_hex is left empty here — verify flow uses its own key
+  // resolver; registry only gates age + revocation.
+  const defaultHandlerKid =
+    process.env.RUNNER_EXPECTED_PUBLISHER_KID ??
+    "soa-conformance-test-handler-v1.0";
+  handlerKeyRegistry.enroll({
+    kid: defaultHandlerKid,
+    spki_hex: "",
+    algo: "EdDSA",
+    enrolled_at: handlerEnv.enrolledAtOverride ?? clock().toISOString()
+  });
+  if (handlerEnv.overlapDir !== undefined) {
+    const entries: HandlerKeyEntry[] = loadOverlapKeypairs(handlerEnv.overlapDir);
+    for (const entry of entries) {
+      if (!handlerKeyRegistry.has(entry.kid)) handlerKeyRegistry.enroll(entry);
+    }
+    console.log(
+      `[start-runner] §10.6.2 loaded ${entries.length} overlap keypair(s) from ${handlerEnv.overlapDir}`
+    );
+  }
+  if (handlerEnv.enrolledAtOverride !== undefined) {
+    console.log(
+      `[start-runner] §10.6.2 SOA_HANDLER_ENROLLED_AT override in effect (${handlerEnv.enrolledAtOverride})`
+    );
+  }
   const activeCapability = (card.permissions?.activeMode ?? "ReadOnly") as Capability;
 
   // §12.5.3 RUNNER_SESSION_DIR override (production-safe; tests use it for
@@ -704,6 +770,47 @@ async function main() {
   const bootstrapRevocationReadiness = {
     check: () => (bootstrapRevoked ? ("bootstrap-pending" as const) : null)
   };
+
+  // §10.6.2 L-48 Findings BD/BE/BF — handler CRL poller. Watches the
+  // same revocation file as the bootstrap poller but accepts entries
+  // keyed by handler_kid (non-terminal — the Runner keeps serving;
+  // only the named kid's verify path denies). Each refresh records a
+  // crl-refresh-complete row under BOOT_SESSION_ID so SV-PERM-14
+  // observes the cadence.
+  let handlerCrlPoller: HandlerCrlPoller | undefined;
+  const handlerCrlTickMs = handlerEnv.crlPollTickMs ?? 60 * 60 * 1000;
+  if (bootstrapEnv.revocationFilePath !== undefined) {
+    handlerCrlPoller = new HandlerCrlPoller({
+      filePath: bootstrapEnv.revocationFilePath,
+      registry: handlerKeyRegistry,
+      tickMs: handlerCrlTickMs,
+      clock,
+      systemLog,
+      bootSessionId: BOOT_SESSION_ID,
+      // §10.6.5 L-48 Finding BE-retroactive — scan back 24h + append
+      // SuspectDecision admin-rows for every decision signed by the
+      // newly-revoked kid. Original rows immutable (WORM); the flag
+      // lives in the referencing rows.
+      onHandlerRevoked: (kid, record) => {
+        const result = appendSuspectDecisionsForKid({
+          chain,
+          kid,
+          clock,
+          ...(record.revoked_at !== undefined ? { revokedAtIso: record.revoked_at } : {})
+        });
+        if (result.flagged > 0) {
+          console.log(
+            `[start-runner] §10.6.5 appended ${result.flagged} SuspectDecision row(s) for kid=${kid}`
+          );
+        }
+      },
+      log: (m) => console.log(m)
+    });
+    handlerCrlPoller.start();
+    console.log(
+      `[start-runner] §10.6.2 handler CRL poller active (file=${bootstrapEnv.revocationFilePath}, tick=${handlerCrlTickMs}ms)`
+    );
+  }
 
   // M3-T1 Memory state store — per-session zero-state initialized at
   // §12.6 bootstrap. Full §8 client (search / write / consolidate /
@@ -1066,13 +1173,65 @@ async function main() {
       chain,
       sessionStore,
       clock,
-      runnerVersion: "1.0"
+      runnerVersion: "1.0",
+      // §10.5.7 Finding BJ — accept short-TTL reader bearers.
+      readerTokens: readerTokenStore
     },
     auditRecords: {
       chain,
       sessionStore,
       clock,
-      runnerVersion: "1.0"
+      runnerVersion: "1.0",
+      // §10.5.5 Finding BC — when PUT/DELETE /audit/records/:id fires,
+      // mirror the refusal into /logs/system/recent as Audit/error/
+      // ImmutableAuditSink so validators can observe it alongside the
+      // 405 HTTP response.
+      systemLog,
+      bootSessionId: BOOT_SESSION_ID,
+      // §10.5.7 Finding BJ — accept short-TTL reader bearers.
+      readerTokens: readerTokenStore
+    },
+    // §10.5.7 L-48 Finding BJ — operator mint endpoint for reader bearers.
+    ...(BOOTSTRAP_BEARER !== undefined
+      ? {
+          auditReaderTokens: {
+            store: readerTokenStore,
+            clock,
+            runnerVersion: "1.0",
+            operatorBearer: BOOTSTRAP_BEARER
+          }
+        }
+      : {}),
+    // §10.6.3 L-48 Finding BG — POST /handlers/enroll (operator-only).
+    ...(BOOTSTRAP_BEARER !== undefined
+      ? {
+          handlerEnroll: {
+            registry: handlerKeyRegistry,
+            runnerVersion: "1.0",
+            operatorBearer: BOOTSTRAP_BEARER
+          }
+        }
+      : {}),
+    // §10.6.4 L-48 Finding BH — GET /security/key-storage. Reports the
+    // Runner's key-storage posture so validators prove
+    // private_keys_on_disk === false without filesystem inspection.
+    // Conformance deployments MUST NOT report ephemeral; our in-process
+    // signing key lives in-memory only so we map that to software-keystore
+    // (process-local OS memory) with private_keys_on_disk=false.
+    keyStorage: {
+      report: {
+        storage_mode: "software-keystore",
+        private_keys_on_disk: false,
+        provider: process.platform === "win32"
+          ? "windows-dpapi"
+          : process.platform === "darwin"
+            ? "macos-keychain"
+            : "linux-keyring"
+      },
+      sessionStore,
+      clock,
+      runnerVersion: "1.0",
+      ...(BOOTSTRAP_BEARER !== undefined ? { operatorBearer: BOOTSTRAP_BEARER } : {})
     },
     sessionState: {
       persister,
@@ -1167,6 +1326,11 @@ async function main() {
                     kid === "soa-conformance-test-handler-v1.0" ? conformanceHandlerKey : null
                 }
               : {}),
+            // §10.6 L-48 BD/BE/BF — age + revocation gates on the PDA
+            // verify path. Registry carries enrolled_at + rotation
+            // overlap + revocation set; assertUsable fires at each
+            // /permissions/decisions call.
+            handlerKeyRegistry,
             runnerVersion: "1.0",
             sink: auditSink,
             // §12.2 L-31 bracket-persist bundle.

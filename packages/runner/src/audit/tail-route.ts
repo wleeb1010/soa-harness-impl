@@ -4,6 +4,8 @@ import type { Clock } from "../clock/index.js";
 import type { ReadinessProbe } from "../probes/index.js";
 import type { SessionStore } from "../permission/index.js";
 import { AuditChain } from "./chain.js";
+import type { ReaderTokenStore } from "./reader-tokens.js";
+import { looksLikeReaderBearer } from "./reader-tokens.js";
 
 export interface AuditTailRouteOptions {
   chain: AuditChain;
@@ -13,6 +15,8 @@ export interface AuditTailRouteOptions {
   runnerVersion?: string;
   /** Default 120 req/min per bearer per §10.5.2. */
   requestsPerMinute?: number;
+  /** §10.5.7 Finding BJ — audit-reader bearers bypass session-bearer auth. */
+  readerTokens?: ReaderTokenStore;
 }
 
 const WINDOW_MS = 60_000;
@@ -75,7 +79,15 @@ export const auditTailPlugin: FastifyPluginAsync<AuditTailRouteOptions> = async 
     const bearer = extractBearer(request);
     if (!bearer) return reply.code(401).send({ error: "missing-or-invalid-bearer" });
 
-    if (!bearerAuthorizedForAuditRead(opts.sessionStore, bearer)) {
+    // §10.5.7 Finding BJ — reader bearers carry audit:read:* scope.
+    // The onRequest guard already rejected reader bearers on non-
+    // allowed paths, so a reader bearer reaching this route is valid.
+    const isReader =
+      looksLikeReaderBearer(bearer) &&
+      opts.readerTokens !== undefined &&
+      opts.readerTokens.isValid(bearer);
+
+    if (!isReader && !bearerAuthorizedForAuditRead(opts.sessionStore, bearer)) {
       return reply.code(403).send({ error: "bearer-lacks-audit-read-scope" });
     }
 

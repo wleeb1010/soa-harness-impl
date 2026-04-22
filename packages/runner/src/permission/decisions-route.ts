@@ -21,7 +21,10 @@ import {
 import {
   verifyPda,
   PdaVerifyFailed,
+  HandlerKeyExpired,
+  HandlerKeyRevoked,
   type HandlerKeyResolver,
+  type HandlerKeyRegistry,
   type KidRevokedCheck
 } from "../attestation/index.js";
 import { resolvePermissionForQuery, type PermissionsResolveResponse } from "./resolve-for-query.js";
@@ -67,6 +70,13 @@ export interface PermissionsDecisionsRouteOptions {
   resolvePdaVerifyKey?: HandlerKeyResolver;
   /** Optional CRL check for PDA kid revocation. */
   isPdaKidRevoked?: KidRevokedCheck;
+  /**
+   * §10.6 L-48 BD/BE/BF — handler key registry carrying age +
+   * revocation state. After PDA signature verify succeeds, the
+   * registry.assertUsable() call gates on §10.6 90d rotation cap +
+   * §10.6.2 revocation observed via the CRL poller.
+   */
+  handlerKeyRegistry?: HandlerKeyRegistry;
   runnerVersion?: string;
   /** §10.3.2 rate limit — 30 rpm per bearer. */
   requestsPerMinute?: number;
@@ -752,6 +762,38 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
         });
         pdaSignerKid = verified.decision.handler_kid;
 
+        // §10.6 L-48 Findings BD/BE/BF — handler key lifecycle gates.
+        // After cryptographic verify succeeds, check the registry for
+        // (1) explicit revocation and (2) >90d enrollment age. Either
+        // fires a 403 with the specific HandlerKey* reason so validators
+        // distinguish lifecycle denial from signature failure.
+        if (opts.handlerKeyRegistry !== undefined && typeof pdaSignerKid === "string") {
+          try {
+            opts.handlerKeyRegistry.assertUsable(pdaSignerKid, opts.clock());
+          } catch (err) {
+            if (err instanceof HandlerKeyRevoked) {
+              return reply.code(403).send({
+                error: "HandlerKeyRevoked",
+                reason: "kid-revoked",
+                kid: err.kid,
+                revoked_at: err.revoked_at,
+                detail: err.reason
+              });
+            }
+            if (err instanceof HandlerKeyExpired) {
+              return reply.code(403).send({
+                error: "HandlerKeyExpired",
+                reason: "key-age-exceeded",
+                kid: err.kid,
+                age_days: err.info.age_days,
+                enrolled_at: err.info.enrolled_at,
+                max_age_days: err.info.max_age_days
+              });
+            }
+            throw err;
+          }
+        }
+
         // Forgery resistance: the PDA's embedded decision MUST be consistent
         // with what the resolver concluded. For Prompt the handler picks
         // allow/deny freely; for other resolver outputs the PDA can't override.
@@ -813,6 +855,12 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     // : {})}) is the correct shape — the key is literally absent in the
     // canonical JCS bytes when the session carries no billing_tag.
     const sessionBillingTag = sessionRecord.billing_tag;
+    // §10.5.6 L-48 Finding BI — retention_class derived from the
+    // session's GRANTED activeMode at append time. Immutable post-
+    // append per WORM semantics. Two classes: dfa-365d for
+    // DangerFullAccess; standard-90d otherwise.
+    const retentionClass =
+      sessionRecord.activeMode === "DangerFullAccess" ? "dfa-365d" : "standard-90d";
     const written = opts.chain.append({
       id: recordId,
       timestamp: recordedAt,
@@ -826,6 +874,7 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       decision: finalDecision,
       reason: finalReason,
       signer_key_id: pdaSignerKid ?? "",
+      retention_class: retentionClass,
       ...(sessionBillingTag !== undefined ? { billing_tag: sessionBillingTag } : {})
     });
 

@@ -11,7 +11,14 @@ import {
   type SessionStore,
   InMemorySessionStore
 } from "./permission/index.js";
-import type { HandlerKeyResolver, KidRevokedCheck } from "./attestation/index.js";
+import {
+  handlerEnrollPlugin,
+  keyStoragePlugin,
+  type HandlerKeyResolver,
+  type HandlerKeyRegistry,
+  type KidRevokedCheck,
+  type KeyStorageReport
+} from "./attestation/index.js";
 import type { ToolRegistry } from "./registry/index.js";
 import type { Capability } from "./permission/index.js";
 import type { Control } from "./registry/index.js";
@@ -21,7 +28,10 @@ import {
   auditTailPlugin,
   auditRecordsPlugin,
   auditSinkEventsPlugin,
-  AuditSink
+  AuditSink,
+  ReaderTokenStore,
+  auditReaderTokensPlugin,
+  makeReaderScopeGuard
 } from "./audit/index.js";
 import { sessionStatePlugin, SessionPersister } from "./session/index.js";
 import {
@@ -121,6 +131,31 @@ export interface BuildRunnerOptions {
     clock: Clock;
     runnerVersion?: string;
     requestsPerMinute?: number;
+    /** §10.5.7 Finding BJ — audit-reader bearers accepted. */
+    readerTokens?: ReaderTokenStore;
+  };
+  /** §10.5.7 L-48 Finding BJ — POST /audit/reader-tokens operator endpoint. */
+  auditReaderTokens?: {
+    store: ReaderTokenStore;
+    clock: Clock;
+    runnerVersion?: string;
+    operatorBearer?: string;
+    defaultTtlSeconds?: number;
+  };
+  /** §10.6.3 L-48 Finding BG — POST /handlers/enroll. */
+  handlerEnroll?: {
+    registry: HandlerKeyRegistry;
+    runnerVersion?: string;
+    operatorBearer?: string;
+  };
+  /** §10.6.4 L-48 Finding BH — GET /security/key-storage. */
+  keyStorage?: {
+    report: KeyStorageReport;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    operatorBearer?: string;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/records per Core
@@ -134,6 +169,11 @@ export interface BuildRunnerOptions {
     requestsPerMinute?: number;
     defaultLimit?: number;
     maxLimit?: number;
+    /** §10.5.5 Finding BC — ImmutableAuditSink log emitter. */
+    systemLog?: import("./system-log/index.js").SystemLogBuffer;
+    bootSessionId?: string;
+    /** §10.5.7 Finding BJ — audit-reader bearers accepted. */
+    readerTokens?: ReaderTokenStore;
   };
   /**
    * Optional — when present the Runner exposes POST /permissions/decisions
@@ -154,6 +194,8 @@ export interface BuildRunnerOptions {
     policyEndpoint?: string;
     resolvePdaVerifyKey?: HandlerKeyResolver;
     isPdaKidRevoked?: KidRevokedCheck;
+    /** §10.6 L-48 BD/BE/BF — handler key registry (age + revocation). */
+    handlerKeyRegistry?: HandlerKeyRegistry;
     runnerVersion?: string;
     requestsPerMinute?: number;
     sink?: AuditSink;
@@ -378,6 +420,13 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
     });
   }
 
+  // §10.5.7 Finding BJ — install reader-scope guard BEFORE any audit
+  // endpoints register so reader bearers hitting non-audit paths get
+  // 403 bearer-lacks-audit-write-scope before per-route auth runs.
+  if (opts.auditReaderTokens !== undefined) {
+    app.addHook("onRequest", makeReaderScopeGuard(opts.auditReaderTokens.store));
+  }
+
   if (opts.auditTail !== undefined) {
     const at = opts.auditTail;
     await app.register(auditTailPlugin, {
@@ -386,7 +435,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       readiness: readiness ?? { check: () => null },
       clock: at.clock,
       ...(at.runnerVersion !== undefined ? { runnerVersion: at.runnerVersion } : {}),
-      ...(at.requestsPerMinute !== undefined ? { requestsPerMinute: at.requestsPerMinute } : {})
+      ...(at.requestsPerMinute !== undefined ? { requestsPerMinute: at.requestsPerMinute } : {}),
+      ...(at.readerTokens !== undefined ? { readerTokens: at.readerTokens } : {})
     });
   }
 
@@ -400,7 +450,45 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(ar.runnerVersion !== undefined ? { runnerVersion: ar.runnerVersion } : {}),
       ...(ar.requestsPerMinute !== undefined ? { requestsPerMinute: ar.requestsPerMinute } : {}),
       ...(ar.defaultLimit !== undefined ? { defaultLimit: ar.defaultLimit } : {}),
-      ...(ar.maxLimit !== undefined ? { maxLimit: ar.maxLimit } : {})
+      ...(ar.maxLimit !== undefined ? { maxLimit: ar.maxLimit } : {}),
+      ...(ar.systemLog !== undefined ? { systemLog: ar.systemLog } : {}),
+      ...(ar.bootSessionId !== undefined ? { bootSessionId: ar.bootSessionId } : {}),
+      ...(ar.readerTokens !== undefined ? { readerTokens: ar.readerTokens } : {})
+    });
+  }
+
+  if (opts.auditReaderTokens !== undefined) {
+    const rt = opts.auditReaderTokens;
+    await app.register(auditReaderTokensPlugin, {
+      store: rt.store,
+      clock: rt.clock,
+      readiness: readiness ?? { check: () => null },
+      ...(rt.runnerVersion !== undefined ? { runnerVersion: rt.runnerVersion } : {}),
+      ...(rt.operatorBearer !== undefined ? { operatorBearer: rt.operatorBearer } : {}),
+      ...(rt.defaultTtlSeconds !== undefined ? { defaultTtlSeconds: rt.defaultTtlSeconds } : {})
+    });
+  }
+
+  if (opts.handlerEnroll !== undefined) {
+    const he = opts.handlerEnroll;
+    await app.register(handlerEnrollPlugin, {
+      registry: he.registry,
+      readiness: readiness ?? { check: () => null },
+      ...(he.runnerVersion !== undefined ? { runnerVersion: he.runnerVersion } : {}),
+      ...(he.operatorBearer !== undefined ? { operatorBearer: he.operatorBearer } : {})
+    });
+  }
+
+  if (opts.keyStorage !== undefined) {
+    const ks = opts.keyStorage;
+    await app.register(keyStoragePlugin, {
+      report: ks.report,
+      sessionStore: ks.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: ks.clock,
+      ...(ks.runnerVersion !== undefined ? { runnerVersion: ks.runnerVersion } : {}),
+      ...(ks.requestsPerMinute !== undefined ? { requestsPerMinute: ks.requestsPerMinute } : {}),
+      ...(ks.operatorBearer !== undefined ? { operatorBearer: ks.operatorBearer } : {})
     });
   }
 
@@ -534,6 +622,9 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.policyEndpoint !== undefined ? { policyEndpoint: pd.policyEndpoint } : {}),
       ...(pd.resolvePdaVerifyKey !== undefined ? { resolvePdaVerifyKey: pd.resolvePdaVerifyKey } : {}),
       ...(pd.isPdaKidRevoked !== undefined ? { isPdaKidRevoked: pd.isPdaKidRevoked } : {}),
+      ...(pd.handlerKeyRegistry !== undefined
+        ? { handlerKeyRegistry: pd.handlerKeyRegistry }
+        : {}),
       ...(pd.runnerVersion !== undefined ? { runnerVersion: pd.runnerVersion } : {}),
       ...(pd.requestsPerMinute !== undefined ? { requestsPerMinute: pd.requestsPerMinute } : {}),
       ...(pd.sink !== undefined ? { sink: pd.sink } : {}),
