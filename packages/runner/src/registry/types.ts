@@ -23,6 +23,13 @@ export interface ToolEntry {
    * surface (which predates the field) keeps loading cleanly.
    */
   idempotency_retention_seconds?: number;
+  /**
+   * §11.4 per-tool registration metadata. Non-normative on disk (tools.json
+   * fixtures don't carry these) but populated at load time so /tools/registered
+   * can surface both `registered_at` + `registration_source`.
+   */
+  _registered_at?: string;
+  _registration_source?: "static-fixture" | "mcp-dynamic";
 }
 
 export interface ToolsFile {

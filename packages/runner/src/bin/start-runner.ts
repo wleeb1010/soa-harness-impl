@@ -9,7 +9,12 @@ import { createClock } from "../clock/index.js";
 import { CrlCache, type Crl, type CrlFetcher } from "../crl/index.js";
 import { BootOrchestrator } from "../boot/index.js";
 import { InMemorySessionStore, type Capability } from "../permission/index.js";
-import { loadToolRegistry, ToolPoolStale } from "../registry/index.js";
+import {
+  loadToolRegistry,
+  ToolPoolStale,
+  startDynamicRegistrationWatcher,
+  assertDynamicRegistrationListenerSafe
+} from "../registry/index.js";
 import {
   AuditChain,
   AuditSink,
@@ -114,6 +119,13 @@ async function main() {
   // §12.5.3 crash-test marker emission + production guard.
   const markersEnabled = parseCrashTestMarkersEnv(process.env.RUNNER_CRASH_TEST_MARKERS);
   assertCrashTestMarkersListenerSafe({ enabled: markersEnabled, host: HOST });
+
+  // §11.3.1 dynamic-registration env hook + production guard.
+  const DYNAMIC_REG_TRIGGER = process.env.SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION;
+  assertDynamicRegistrationListenerSafe({
+    triggerPath: DYNAMIC_REG_TRIGGER,
+    host: HOST
+  });
   const markers = new MarkerEmitter({ enabled: markersEnabled });
   if (markersEnabled) {
     console.log(`[start-runner] crash-test markers enabled (RUNNER_CRASH_TEST_MARKERS=1)`);
@@ -249,6 +261,16 @@ async function main() {
   if (registryPath) {
     try {
       registry = loadToolRegistry(registryPath);
+      // §11.4 — stamp static-fixture tools with source + boot-time
+      // registered_at so /tools/registered reflects per-tool metadata
+      // consistently whether the tool came from the fixture or a later
+      // §11.3.1 dynamic add.
+      const nowIso = clock().toISOString();
+      for (const name of registry.names()) {
+        const t = registry.mustLookup(name);
+        if (!t._registered_at) t._registered_at = nowIso;
+        if (!t._registration_source) t._registration_source = "static-fixture";
+      }
       const label = TOOLS_FIXTURE ? "conformance fixture" : "operator registry";
       console.log(`[start-runner] loaded ${registry.size()} tool(s) from ${label}: ${registryPath}`);
     } catch (err) {
@@ -571,9 +593,24 @@ async function main() {
     console.error(`[start-runner] L-29 boot scan FAILED (non-fatal; listener still opens):`, err);
   }
 
+  // §11.3.1 start the dynamic-registration watcher after boot succeeds
+  // so it can't trigger registration before the Tool Registry is loaded.
+  let dynamicWatcher: { stop: () => Promise<void> } | null = null;
+  if (DYNAMIC_REG_TRIGGER && registry) {
+    dynamicWatcher = startDynamicRegistrationWatcher({
+      triggerPath: DYNAMIC_REG_TRIGGER,
+      registry,
+      clock,
+      pollIntervalMs: 250,
+      log: (msg) => console.log(msg)
+    });
+    console.log(`[start-runner] dynamic-registration watcher on ${DYNAMIC_REG_TRIGGER}`);
+  }
+
   const shutdown = async (sig: string) => {
     console.log(`[start-runner] received ${sig}, closing`);
     boot.stop();
+    if (dynamicWatcher) await dynamicWatcher.stop();
     await app.close();
     process.exit(0);
   };

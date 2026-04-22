@@ -42,6 +42,33 @@ export class ToolRegistry {
     return entry;
   }
 
+  /**
+   * §11.3.1 dynamic-add entry point. Stamps _registered_at +
+   * _registration_source="mcp-dynamic" on the entry. Re-runs the §12.2
+   * idempotency-classification check so a bad dynamic add fails the same
+   * way a bad static fixture does.
+   *
+   * Returns true when the entry was added; false when a tool with the
+   * same name already exists (no-op — §11 name uniqueness).
+   */
+  addDynamic(entry: ToolEntry, registeredAt: Date): boolean {
+    if (!RISK_CLASSES.includes(entry.risk_class)) {
+      throw new Error(`ToolRegistry: dynamic add "${entry.name}" has unknown risk_class "${entry.risk_class}"`);
+    }
+    if (!CONTROLS.includes(entry.default_control)) {
+      throw new Error(`ToolRegistry: dynamic add "${entry.name}" has unknown default_control "${entry.default_control}"`);
+    }
+    if (this.byName.has(entry.name)) return false;
+    assertIdempotencyClassification(entry);
+    const stamped: ToolEntry = {
+      ...entry,
+      _registered_at: registeredAt.toISOString(),
+      _registration_source: "mcp-dynamic"
+    };
+    this.byName.set(entry.name, stamped);
+    return true;
+  }
+
   names(): string[] {
     return [...this.byName.keys()];
   }

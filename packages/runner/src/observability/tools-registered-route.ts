@@ -126,8 +126,8 @@ export const toolsRegisteredPlugin: FastifyPluginAsync<ToolsRegisteredRouteOptio
         name: tool.name,
         risk_class: toSchemaRiskClass(tool.risk_class),
         default_control: tool.default_control,
-        registered_at: registeredAt,
-        registration_source: "static-fixture" as const
+        registered_at: tool._registered_at ?? registeredAt,
+        registration_source: tool._registration_source ?? ("static-fixture" as const)
       };
       if (typeof tool.idempotency_retention_seconds === "number") {
         row["idempotency_retention_seconds"] = tool.idempotency_retention_seconds;
