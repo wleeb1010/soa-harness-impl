@@ -176,12 +176,13 @@ describe("Finding W — decision call-site emits soa.turn + soa.tool.* spans", (
         }
       });
       const [turn] = store.snapshot(SESSION);
-      expect(Object.keys(turn!.resource_attributes)).toEqual([
-        "service.name",
-        "soa.agent.name",
-        "custom.operator.tag"
-      ]);
+      // Operator list honored for everything they named; Finding X adds
+      // unconditional service.version alongside (SV-STR-07 requires it).
+      expect(Object.keys(turn!.resource_attributes).sort()).toEqual(
+        ["custom.operator.tag", "service.name", "service.version", "soa.agent.name"].sort()
+      );
       expect(turn!.resource_attributes["custom.operator.tag"]).toBe(""); // unknown → empty stub
+      expect(turn!.resource_attributes["service.version"]).toBeDefined();
     } finally {
       await ctx.app.close();
     }

@@ -1,5 +1,5 @@
 /**
- * Memory MCP Mock — §8.1 three-tool protocol.
+ * Memory MCP Mock — §8.1 tool protocol (expanded for L-38).
  *
  * Spec fixture: `test-vectors/memory-mcp-mock/README.md`
  *
@@ -7,6 +7,10 @@
  *   - search_memories({query, limit, sharing_scope}) → {notes: [...]}
  *   - write_memory({summary, data_class, session_id}) → {note_id}
  *   - consolidate_memories({consolidation_threshold}) → {consolidated_count, pending_count}
+ *   - delete_memory_note({id, reason}) → {deleted, tombstone_id, deleted_at}
+ *     (idempotent on id per §8.1 line 566; tombstoned ids NEVER reappear
+ *     in search_memories responses; repeat delete returns same
+ *     tombstone_id + deleted_at)
  *
  * Env var controls:
  *   SOA_MEMORY_MCP_MOCK_TIMEOUT_AFTER_N_CALLS=<n>
@@ -58,6 +62,26 @@ export interface ConsolidateMemoriesRequest {
   consolidation_threshold?: string;
 }
 
+export interface DeleteMemoryNoteRequest {
+  id: string;
+  reason?: string;
+}
+
+export interface DeleteMemoryNoteResponse {
+  deleted: boolean;
+  tombstone_id: string;
+  deleted_at: string;
+}
+
+export interface Tombstone {
+  id: string;
+  tombstone_id: string;
+  created_at: string;
+  tags: string[];
+  deleted_at: string;
+  reason: string;
+}
+
 export interface ConsolidateMemoriesResponse {
   consolidated_count: number;
   pending_count: number;
@@ -86,7 +110,11 @@ export interface MemoryMockOptions {
   seedPath?: string;
 }
 
-export type ToolName = "search_memories" | "write_memory" | "consolidate_memories";
+export type ToolName =
+  | "search_memories"
+  | "write_memory"
+  | "consolidate_memories"
+  | "delete_memory_note";
 
 /**
  * Core mock implementation separated from the HTTP transport so unit
@@ -108,6 +136,13 @@ export class MemoryMcpMock {
     data_class: NoteHit["data_class"];
     session_id: string;
   }> = [];
+  /**
+   * §8.1 idempotent tombstone store: keyed by the source note id so a
+   * repeat delete_memory_note call returns the same tombstone_id +
+   * deleted_at. Tombstones survive for the process lifetime (no TTL in
+   * the mock — real implementations should retain per operator policy).
+   */
+  private readonly tombstones = new Map<string, Tombstone>();
 
   constructor(opts: MemoryMockOptions = {}) {
     this.timeoutAfterNCalls = opts.timeoutAfterNCalls ?? -1;
@@ -142,7 +177,9 @@ export class MemoryMcpMock {
     // across platforms. Weights: semantic (naive substring match), recency
     // (inverse days), graph_strength (from the seed).
     const q = req.query.toLowerCase();
-    const scored = this.corpus.map((entry) => {
+    // §8.1 — tombstoned ids MUST NOT appear in search responses.
+    const liveCorpus = this.corpus.filter((e) => !this.tombstones.has(e.note_id));
+    const scored = liveCorpus.map((entry) => {
       const semantic = substringScore(entry.summary.toLowerCase(), q);
       const recency = 1 / (1 + entry.recency_days_ago);
       const graph = entry.graph_strength;
@@ -187,6 +224,78 @@ export class MemoryMcpMock {
     this.writtenNotes.length = 0;
     return { consolidated_count: consolidated, pending_count: 0 };
   }
+
+  /**
+   * §8.1 delete_memory_note — idempotent on `id` (line 566). Returns
+   * the same tombstone_id + deleted_at on every repeat call. The
+   * deleted note never reappears in search_memories after this call.
+   *
+   * Error taxonomy (§8.1 → §24):
+   *   MemoryNotFound — id is unknown (not in corpus, writtenNotes, or
+   *                    tombstones).
+   *   MemoryDeletionForbidden — the id exists but is protected from
+   *                    deletion (mock: all deletes are permitted, so
+   *                    this branch is unreachable in the default
+   *                    config; error-injection via
+   *                    SOA_MEMORY_MCP_MOCK_RETURN_ERROR=delete_memory_note
+   *                    surfaces the generic mock-error).
+   */
+  async deleteMemoryNote(
+    req: DeleteMemoryNoteRequest
+  ): Promise<DeleteMemoryNoteResponse | MockErrorResponse> {
+    this.callCount++;
+    if (this.errorForTool === "delete_memory_note") return { error: "mock-error" };
+
+    // Idempotency: if already tombstoned, return the prior record
+    // verbatim. Identical tombstone_id + deleted_at across retries.
+    const existing = this.tombstones.get(req.id);
+    if (existing) {
+      return {
+        deleted: true,
+        tombstone_id: existing.tombstone_id,
+        deleted_at: existing.deleted_at
+      };
+    }
+
+    // Resolve the source note — corpus first, then writtenNotes.
+    const corpusHit = this.corpus.find((n) => n.note_id === req.id);
+    const writtenHit = this.writtenNotes.find((n) => n.note_id === req.id);
+    if (!corpusHit && !writtenHit) {
+      return { error: "mock-error" }; // MemoryNotFound sentinel in the mock
+    }
+
+    const now = new Date().toISOString();
+    const tombstone_id = `tomb_${randomBytes(6).toString("hex")}`;
+    const created_at = corpusHit
+      ? // seed entries don't carry created_at; synthesize a deterministic
+        // boot-time stamp so the tombstone record is well-formed.
+        new Date(0).toISOString()
+      : now;
+    const tombstone: Tombstone = {
+      id: req.id,
+      tombstone_id,
+      created_at,
+      tags: [], // mock doesn't carry tags; retained as empty array
+      deleted_at: now,
+      reason: typeof req.reason === "string" ? req.reason : ""
+    };
+    this.tombstones.set(req.id, tombstone);
+
+    // Remove from writtenNotes in place — subsequent consolidates
+    // won't see it. Corpus entries stay in memory (source-of-truth for
+    // seed determinism) but are filtered at search time.
+    if (writtenHit) {
+      const idx = this.writtenNotes.findIndex((n) => n.note_id === req.id);
+      if (idx >= 0) this.writtenNotes.splice(idx, 1);
+    }
+
+    return { deleted: true, tombstone_id, deleted_at: now };
+  }
+
+  /** Test-only: read the tombstone record for an id. */
+  tombstoneFor(id: string): Tombstone | undefined {
+    return this.tombstones.get(id);
+  }
 }
 
 /** Naive substring-overlap score normalized to [0, 1]. Stable across platforms. */
@@ -220,9 +329,13 @@ export function parseMockEnv(env: NodeJS.ProcessEnv): MemoryMockOptions {
   }
   const errRaw = env["SOA_MEMORY_MCP_MOCK_RETURN_ERROR"];
   if (typeof errRaw === "string" && errRaw.length > 0) {
-    if (!["search_memories", "write_memory", "consolidate_memories"].includes(errRaw)) {
+    if (
+      !["search_memories", "write_memory", "consolidate_memories", "delete_memory_note"].includes(
+        errRaw
+      )
+    ) {
       throw new Error(
-        `SOA_MEMORY_MCP_MOCK_RETURN_ERROR must name a tool (search_memories | write_memory | consolidate_memories), got "${errRaw}"`
+        `SOA_MEMORY_MCP_MOCK_RETURN_ERROR must name a tool (search_memories | write_memory | consolidate_memories | delete_memory_note), got "${errRaw}"`
       );
     }
     opts.errorForTool = errRaw;

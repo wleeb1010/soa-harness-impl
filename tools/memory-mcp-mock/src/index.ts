@@ -9,6 +9,9 @@ export {
   type WriteMemoryResponse,
   type ConsolidateMemoriesRequest,
   type ConsolidateMemoriesResponse,
+  type DeleteMemoryNoteRequest,
+  type DeleteMemoryNoteResponse,
+  type Tombstone,
   type MockErrorResponse,
   type NoteHit
 } from "./mock.js";

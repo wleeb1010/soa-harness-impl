@@ -3,7 +3,8 @@ import { MemoryMcpMock } from "./mock.js";
 import type {
   SearchMemoriesRequest,
   WriteMemoryRequest,
-  ConsolidateMemoriesRequest
+  ConsolidateMemoriesRequest,
+  DeleteMemoryNoteRequest
 } from "./mock.js";
 
 /**
@@ -60,6 +61,17 @@ export async function buildMockServer(opts: MockServerOptions): Promise<FastifyI
       return reply.send(result);
     }
   );
+
+  app.post<{ Body: DeleteMemoryNoteRequest }>("/delete_memory_note", async (request, reply) => {
+    if (opts.mock.shouldTimeout()) {
+      await neverResolve(opts.timeoutAbortSignal);
+      return reply.code(504).send({ error: "mock-timeout" });
+    }
+    const result = await opts.mock.deleteMemoryNote(
+      request.body ?? ({} as DeleteMemoryNoteRequest)
+    );
+    return reply.send(result);
+  });
 
   return app;
 }

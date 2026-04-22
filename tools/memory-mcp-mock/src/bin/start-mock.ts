@@ -39,6 +39,7 @@ async function main() {
   console.log(`  POST http://${host}:${port}/search_memories`);
   console.log(`  POST http://${host}:${port}/write_memory`);
   console.log(`  POST http://${host}:${port}/consolidate_memories`);
+  console.log(`  POST http://${host}:${port}/delete_memory_note`);
   console.log(`  GET  http://${host}:${port}/health`);
 
   const shutdown = async (sig: string): Promise<void> => {
