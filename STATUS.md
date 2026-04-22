@@ -1,5 +1,47 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (Rate-limit inventory for validator harness pacing)
+
+**Answer to validator question:** `/budget/projection` is NOT stricter
+than other observability endpoints. It sits at 120 rpm per bearer,
+tied with `/sessions/:id/state`, `/memory/state`, `/audit/tail`,
+`/events/recent`. The 429 flap on SV-BUD-PROJ-02 is harness-side
+pacing, not an impl asymmetry.
+
+### Per-endpoint rate-limit inventory (defaults, per bearer)
+
+| Endpoint | Default rpm | Spec source |
+|---|---|---|
+| `GET /sessions/:session_id/state` | **120** | §12.5.1 |
+| `GET /memory/state/:session_id` | **120** | §8.6 (plan) |
+| `GET /audit/tail` | **120** | §10.5.2 |
+| `GET /events/recent` | **120** | §14.5 |
+| `GET /budget/projection` | **120** | §13.5 |
+| `GET /audit/records` | **60** | §10.5.3 |
+| `GET /audit/sink-events` | **60** | §12.5.4 |
+| `GET /tools/registered` | **60** | §11.4 |
+| `GET /permissions/resolve` | **60** | §10.3.1 |
+| `POST /permissions/decisions` | **30** | §10.3.2 |
+| `POST /sessions` | **30** | §12.6 |
+
+Harness pacing guidance: the 120-rpm group is 2 requests/second
+sustained per bearer; the 60-rpm group is 1/s; the 30-rpm POST group
+is 0.5/s. Across the ~90 handlers at M3 scale, either per-test
+bearers or ≥500ms inter-request spacing on a shared bearer should
+stay inside every endpoint's cap without impl-side raise.
+
+If the harness genuinely needs more headroom for batch testing, the
+impl accepts `requestsPerMinute` on every route's plugin options —
+the bin could thread a `SOA_RUNNER_HARNESS_RATE_MULTIPLIER` env knob
+through for validator-only deployments. Flag if needed; otherwise
+impl holds to the spec defaults.
+
+**Next queued (Week 4 prep):** T-12 governance block + T-13 HR-17.
+HR-17 needs the Memory MCP client path wired to the mock with
+`SOA_MEMORY_MCP_MOCK_TIMEOUT_AFTER_N_CALLS=0`; three consecutive
+timeouts terminate the session with
+`SessionEnd.payload.stop_reason="MemoryDegraded"` per §8.3.1.
+
 ## 2026-04-21 (M3 Week 3 Day 1 — T-11 version errata + T-11b Week-4 scaffolds)
 
 - **Done:** `T-11` + `T-11b` shipped. **`T-11`**: Runner package version
