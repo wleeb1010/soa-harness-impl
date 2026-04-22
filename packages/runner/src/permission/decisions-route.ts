@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { registry as schemaRegistry } from "@soa-harness/schemas";
+import { jcsBytes } from "@soa-harness/core";
 import type { AuditChain, AuditSink } from "../audit/index.js";
 import type { Clock } from "../clock/index.js";
 import type { ReadinessProbe } from "../probes/index.js";
@@ -283,7 +284,12 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     }
     const tool = body.tool as string;
     const sessionId = body.session_id as string;
-    const argsDigest = body.args_digest as string;
+    // `argsDigest` is mutable: §15 PreToolUse replace_args re-fingerprints
+    // the substituted args and the new digest flows through bracket-persist +
+    // chain.append + audit row. `argsDigestBefore` is captured pre-hook so
+    // the §14.1 PreToolUseOutcome payload can report both.
+    let argsDigest = body.args_digest as string;
+    const argsDigestBefore = argsDigest;
     const pdaJws = typeof body.pda === "string" ? body.pda : null;
 
     // Session: must exist, bearer must match, scope must include
@@ -323,8 +329,28 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     // §15 PreToolUse hook: fires BEFORE the resolver. Deny short-circuits
     // to 403 with no audit row / no side_effect. Prompt forces the final
     // decision's user-facing outcome into Prompt even when the resolver
-    // would have AutoAllow'd.
+    // would have AutoAllow'd. §15.3 stdout.replace_args substitutes the
+    // args BEFORE the resolver runs; the re-fingerprinted digest flows
+    // through bracket-persist + audit + stream. Finding L / SV-HOOK-05.
+    //
+    // §14.1 tool_call_id correlates the Pre/PostToolUseOutcome pair
+    // against a single decision lifecycle.
+    const toolCallId = `tc_${randomBytes(6).toString("hex")}`;
     let preHookForcedPrompt = false;
+    /**
+     * Parked until after PermissionDecision emits (§14.1 ordering:
+     * PermissionDecision → PreToolUseOutcome → ToolResult →
+     * PostToolUseOutcome). On hook Deny we emit synchronously and return
+     * 403 without parking.
+     */
+    let pendingPreToolUseOutcome:
+      | {
+          outcome: "allow" | "replace_args";
+          reason?: string;
+          args_digest_before: string;
+          args_digest_after?: string;
+        }
+      | null = null;
     if (opts.hookConfig?.preToolUseCommand && opts.hookConfig.preToolUseCommand.length > 0) {
       const turnId = opts.hookConfig.turnIdFn?.() ?? `turn_${randomBytes(6).toString("hex")}`;
       const outcome = await runHook({
@@ -339,6 +365,24 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
         }
       });
       if (outcome.decision === "Deny") {
+        // §14.1 PreToolUseOutcome: emit BEFORE the 403 return so the
+        // validator sees the hook's view of the invocation even on the
+        // deny-short-circuit path. No PermissionDecision event fires on
+        // this path because no audit row is appended.
+        if (opts.emitter) {
+          const denyReason = outcome.stdout?.reason ?? outcome.reason ?? "hook-deny";
+          opts.emitter.emit({
+            session_id: sessionId,
+            type: "PreToolUseOutcome",
+            payload: {
+              tool_call_id: toolCallId,
+              tool_name: toolEntry.name,
+              outcome: "deny",
+              reason: denyReason,
+              args_digest_before: argsDigestBefore
+            }
+          });
+        }
         return reply.code(403).send({
           error: "PermissionDenied",
           reason: "hook-deny",
@@ -347,6 +391,38 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
         });
       }
       if (outcome.decision === "Prompt") preHookForcedPrompt = true;
+
+      // §15.3 stdout.replace_args: canonicalize the substituted args
+      // (JCS-RFC-8785) and re-fingerprint. The new digest replaces
+      // `argsDigest` so every downstream step (bracket-persist pending
+      // row, chain.append args_digest field, audit row) uses the post-
+      // substitution value. `argsDigestBefore` remains pinned for the
+      // PreToolUseOutcome payload.
+      const replaceArgs = outcome.stdout?.replace_args;
+      if (replaceArgs !== undefined) {
+        // sha256 of JCS-RFC-8785 canonical bytes — same fingerprint
+        // scheme the spec uses for every other args_digest.
+        const digestAfter = `sha256:${createHash("sha256").update(jcsBytes(replaceArgs)).digest("hex")}`;
+        argsDigest = digestAfter;
+        pendingPreToolUseOutcome = {
+          outcome: "replace_args",
+          ...(outcome.stdout?.reason ? { reason: outcome.stdout.reason } : {}),
+          args_digest_before: argsDigestBefore,
+          args_digest_after: digestAfter
+        };
+      } else {
+        // Allow / Prompt path: record the hook's "allow" outcome so the
+        // §14.1 PreToolUseOutcome fires after PermissionDecision.
+        pendingPreToolUseOutcome = {
+          outcome: "allow",
+          ...(outcome.stdout?.reason
+            ? { reason: outcome.stdout.reason }
+            : outcome.decision === "Prompt"
+              ? { reason: "hook-forced-prompt" }
+              : {}),
+          args_digest_before: argsDigestBefore
+        };
+      }
     }
 
     // §12.2 L-31 bracket-persist: when the persister bundle is wired, read
@@ -627,6 +703,31 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           reason: finalReason
         }
       });
+
+      // §14.1 PreToolUseOutcome — SV-HOOK-07 ordering spec:
+      // PermissionDecision → PreToolUseOutcome → ToolResult →
+      // PostToolUseOutcome. Emitted once per decision when the hook ran;
+      // payload carries the allow / replace_args outcome plus the pre-
+      // and post-substitution digests so validators can verify the
+      // resolver re-invoked against the fingerprinted args.
+      if (pendingPreToolUseOutcome) {
+        opts.emitter.emit({
+          session_id: sessionId,
+          type: "PreToolUseOutcome",
+          payload: {
+            tool_call_id: toolCallId,
+            tool_name: toolEntry.name,
+            outcome: pendingPreToolUseOutcome.outcome,
+            ...(pendingPreToolUseOutcome.reason !== undefined
+              ? { reason: pendingPreToolUseOutcome.reason }
+              : {}),
+            args_digest_before: pendingPreToolUseOutcome.args_digest_before,
+            ...(pendingPreToolUseOutcome.args_digest_after !== undefined
+              ? { args_digest_after: pendingPreToolUseOutcome.args_digest_after }
+              : {})
+          }
+        });
+      }
     }
 
     return reply.code(201).send({
