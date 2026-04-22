@@ -30,11 +30,13 @@ is 0.5/s. Across the ~90 handlers at M3 scale, either per-test
 bearers or ≥500ms inter-request spacing on a shared bearer should
 stay inside every endpoint's cap without impl-side raise.
 
-If the harness genuinely needs more headroom for batch testing, the
-impl accepts `requestsPerMinute` on every route's plugin options —
-the bin could thread a `SOA_RUNNER_HARNESS_RATE_MULTIPLIER` env knob
-through for validator-only deployments. Flag if needed; otherwise
-impl holds to the spec defaults.
+**Rate-multiplier env knob declined** — validator correctly rejected
+the `SOA_RUNNER_HARNESS_RATE_MULTIPLIER` offer; a pass signal that
+only holds "when rate limits are disabled" isn't conformance. The
+knob was offered but never shipped; no impl code to remove. If
+anything similar lands in the future it'll carry an explicit
+NOT-FOR-CONFORMANCE-RUNS guard + docs warning. Impl holds to spec
+defaults unconditionally; harness pacing is validator-side.
 
 **Next queued (Week 4 prep):** T-12 governance block + T-13 HR-17.
 HR-17 needs the Memory MCP client path wired to the mock with
