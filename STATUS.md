@@ -1,5 +1,51 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M3 Week 1 complete — T-1 Memory state live; core Week 1 delivered)
+
+- **Done:** `T-1` shipped. `InMemoryMemoryStateStore` (`packages/runner/src/memory/`)
+  tracks per-session sharing_policy + in_context_notes + available_notes_count +
+  consolidation + aging config. Defensive-copy reads keep `/memory/state`
+  not-a-side-effect. **GET `/memory/state/:session_id`** live per §8.6:
+  schema-pinned body, 120 rpm, session-scoped auth, byte-identity
+  excluding `generated_at`, full 400/401/403/404/429/503 matrix. New
+  sessions get a zero-state initialized at §12.6 bootstrap — the first
+  read after POST `/sessions` returns schema-valid immediately.
+  **:7700 bounced** to the T-1 binary.
+- **Active:** Week 2 opens with `T-4` (Budget subsystem fills projection
+  placeholder with real §13.1 p95-over-W algorithm), `T-5` (Dynamic MCP
+  registration + §11.3.1 env hook), `T-6` (Hooks pipeline §15.1-15.3).
+- **Blocked:** None.
+- **Pin:** `5e97277` (unchanged).
+- **Scoreboard:** 365 repo-wide tests green (was 358, +7 for T-1).
+  **25 M3 tests have impl coverage** (+2 for SV-MEM-STATE-01/02).
+  **Week 1 core delivered:** T-0 mock (7) + T-1 memory state (7) +
+  T-2 stream (13) + T-3 scaffolds (6) — 33 tests wired for Week 1
+  tracks alone.
+
+Live verified end-to-end on `127.0.0.1:7700`:
+- POST `/sessions` → 201 with `session_id=ses_c85be24db290e77754a1c882`.
+- GET `/memory/state/ses_c85be24db290e77754a1c882` → 200 with
+  `sharing_policy="session"`, `in_context_notes=[]`,
+  `consolidation.last_run_at=2026-04-22T00:26:01.567Z`,
+  `aging.max_in_context_tokens=16000` — the §8.6 zero-state contract.
+
+<!-- machine-readable -->
+```json
+{
+  "week": 1,
+  "day": "2-close",
+  "t_tasks_landed": ["T-0", "T-1", "T-2", "T-3"],
+  "t_tasks_active": ["T-4", "T-5", "T-6"],
+  "endpoints_live_added": ["/memory/state/:session_id"],
+  "memory_state_init_site": "POST /sessions (§12.6 bootstrap)",
+  "spec_pin": "5e97277",
+  "tests_green_total": 365,
+  "m3_impl_coverage_estimate": 25,
+  "week_1_core_delivered": true
+}
+```
+<!-- /machine-readable -->
+
 ## 2026-04-21 (M3 Week 1 Day 2 — T-2 StreamEvent + /events/recent live)
 
 - **Done:** `T-2` shipped. §14.1 closed 25-type enum emitter in
