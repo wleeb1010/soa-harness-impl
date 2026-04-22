@@ -4,5 +4,6 @@ export {
   parseSupportedCoreVersions,
   RUNNER_SUPPORTED_CORE_VERSIONS,
   RUNNER_SOA_HARNESS_VERSION,
-  type VersionPluginOptions
+  type VersionPluginOptions,
+  type DocRoute
 } from "./version-plugin.js";

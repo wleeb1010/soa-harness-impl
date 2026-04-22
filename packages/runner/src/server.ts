@@ -109,6 +109,8 @@ export interface BuildRunnerOptions {
     supportedCoreVersions?: readonly string[];
     errataBody?: unknown;
     errataPath?: string;
+    /** Finding AF — HTTP doc routes serving bundled repo artifacts. */
+    docRoutes?: readonly import("./governance/index.js").DocRoute[];
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -363,7 +365,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
         ? { supportedCoreVersions: gv.supportedCoreVersions }
         : {}),
       ...(gv.errataBody !== undefined ? { errataBody: gv.errataBody } : {}),
-      ...(gv.errataPath !== undefined ? { errataPath: gv.errataPath } : {})
+      ...(gv.errataPath !== undefined ? { errataPath: gv.errataPath } : {}),
+      ...(gv.docRoutes !== undefined ? { docRoutes: gv.docRoutes } : {})
     });
   }
 

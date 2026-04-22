@@ -600,6 +600,38 @@ async function main() {
     }
   }
 
+  // Finding AF — HTTP doc routes. Load each deployment-bundled artifact
+  // at boot so validator probes don't need filesystem access. Missing
+  // files are logged + skipped (not fatal) so a partial-scaffold deploy
+  // still starts. Every route cached in memory; per-request disk IO = 0.
+  const docRouteCandidates: Array<{
+    path: string;
+    route: string;
+    contentType: string;
+  }> = [
+    { path: "docs/data-inventory.md", route: "/docs/data-inventory.md", contentType: "text/markdown; charset=utf-8" },
+    { path: "docs/stability-tiers.md", route: "/docs/stability-tiers.md", contentType: "text/markdown; charset=utf-8" },
+    { path: "docs/migrations/README.md", route: "/docs/migrations/README.md", contentType: "text/markdown; charset=utf-8" },
+    { path: "docs/errata-v1.0.json", route: "/docs/errata-v1.0.json", contentType: "application/json; charset=utf-8" },
+    { path: "release-gate.json", route: "/release-gate.json", contentType: "application/json; charset=utf-8" }
+  ];
+  const docRoutes: Array<{ route: string; body: string; contentType: string }> = [];
+  for (const c of docRouteCandidates) {
+    if (!existsSync(c.path)) {
+      console.warn(`[start-runner] Finding AF: ${c.path} missing; ${c.route} unavailable`);
+      continue;
+    }
+    try {
+      docRoutes.push({ route: c.route, body: readFileSync(c.path, "utf8"), contentType: c.contentType });
+    } catch (err) {
+      console.warn(
+        `[start-runner] Finding AF: failed to load ${c.path}: ${
+          err instanceof Error ? err.message : String(err)
+        }; ${c.route} unavailable`
+      );
+    }
+  }
+
   // §10.7.1 SV-PRIV-03 — subject store for privacy.delete_subject +
   // privacy.export_subject endpoints. In-memory mirror for M3; full
   // persisted mirror is post-M3 scope.
@@ -899,7 +931,8 @@ async function main() {
       card.supported_core_versions.length > 0
         ? { supportedCoreVersions: card.supported_core_versions }
         : {}),
-      ...(errataBody !== undefined ? { errataBody } : {})
+      ...(errataBody !== undefined ? { errataBody } : {}),
+      ...(docRoutes.length > 0 ? { docRoutes } : {})
     },
     privacy: {
       subjectStore,

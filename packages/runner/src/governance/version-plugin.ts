@@ -60,6 +60,19 @@ export function parseSupportedCoreVersions(raw: unknown): string[] | { error: st
   return out;
 }
 
+/**
+ * Doc-route entry. The Runner loads each body at boot and serves it
+ * on `route` with the supplied Content-Type. Bodies MUST be small
+ * deployment-bundled artifacts (docs, release-gate.json) — not
+ * user content. Serving reads a cached Buffer; no per-request disk IO.
+ */
+export interface DocRoute {
+  route: string;
+  body: string | Buffer;
+  contentType: string;
+  cacheControl?: string;
+}
+
 export interface VersionPluginOptions {
   readiness: ReadinessProbe;
   clock: Clock;
@@ -67,6 +80,13 @@ export interface VersionPluginOptions {
   supportedCoreVersions?: readonly string[];
   errataPath?: string;
   errataBody?: unknown;
+  /**
+   * Finding AF — HTTP doc routes. Each entry wires a GET route that
+   * returns the pre-loaded body with the declared Content-Type. Keeps
+   * the validator from needing filesystem access to probe docs + the
+   * release gate.
+   */
+  docRoutes?: readonly DocRoute[];
 }
 
 export const versionPlugin: FastifyPluginAsync<VersionPluginOptions> = async (app, opts) => {
@@ -93,6 +113,13 @@ export const versionPlugin: FastifyPluginAsync<VersionPluginOptions> = async (ap
     app.get(errataPath, async (_request, reply) => {
       reply.header("Cache-Control", "max-age=300");
       return reply.code(200).type("application/json; charset=utf-8").send(errataBody);
+    });
+  }
+
+  for (const doc of opts.docRoutes ?? []) {
+    app.get(doc.route, async (_request, reply) => {
+      reply.header("Cache-Control", doc.cacheControl ?? "max-age=300");
+      return reply.code(200).type(doc.contentType).send(doc.body);
     });
   }
 };
