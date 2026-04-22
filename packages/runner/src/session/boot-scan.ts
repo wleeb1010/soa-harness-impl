@@ -20,6 +20,8 @@
  * is also unwritable.
  */
 
+import { createHash, randomBytes } from "node:crypto";
+import { jcs } from "@soa-harness/core";
 import { SessionPersister, SessionFormatIncompatible } from "./persist.js";
 import { resumeSession, type ResumeContext, CardVersionDrift } from "./resume.js";
 import { ToolPoolStale } from "../registry/index.js";
@@ -172,21 +174,66 @@ export async function scanAndResumeInProgressSessions(
   const summary = summarize(outcomes);
   log(`[boot-scan] ${summary}`);
 
+  // Append one schema-conformant audit row per outcome. The chain is the
+  // same log /audit/records serves, and that response's record items are
+  // pinned to audit-records-response.schema.json with additionalProperties:
+  // false + a fixed required-field set inherited from §10.5. Resume lifecycle
+  // rows must therefore project onto the decision-record schema: sentinel
+  // `tool`/`subject_id`/`capability`/`control`/`handler` fields, real
+  // sha256 args_digest, and the lifecycle semantics (resumed / migrated /
+  // failed-*) carried in `reason`. Downstream consumers recover the kind
+  // by matching on tool=="RUNNER_RESUME".
   if (opts.chain) {
-    const nowIso = clock().toISOString();
     for (const outcome of outcomes) {
-      opts.chain.append({
-        kind: "session-resume",
-        timestamp: nowIso,
-        session_id: outcome.session_id,
-        status: outcome.status,
-        action: outcome.action,
-        detail: outcome.detail ?? ""
-      });
+      opts.chain.append(buildResumeAuditBody(outcome));
     }
   }
 
   return outcomes;
+}
+
+/**
+ * Map a resume-scan outcome onto the §10.5 audit-record shape so the chain
+ * stays conformant to audit-records-response.schema.json. Non-decision
+ * fields are sentinels; the lifecycle payload lives in `reason`.
+ */
+function buildResumeAuditBody(outcome: ScanOutcomeEntry): Record<string, unknown> {
+  const decisionForAction: Record<ScanOutcomeEntry["action"], "AutoAllow" | "Deny"> = {
+    resumed: "AutoAllow",
+    migrated: "AutoAllow",
+    "skipped-terminal": "AutoAllow",
+    "skipped-unknown-status": "AutoAllow",
+    "failed-read": "Deny",
+    "failed-resume": "Deny"
+  };
+  // Deterministic fingerprint: sha256(JCS({session_id, action, status})).
+  // Same input → same digest across restarts (useful for diffing resume
+  // trails). We avoid putting the detail string into the fingerprint
+  // because it may carry transient state (e.g., error messages).
+  const digestInput = {
+    session_id: outcome.session_id,
+    action: outcome.action,
+    status: outcome.status
+  };
+  const argsDigest =
+    "sha256:" + createHash("sha256").update(jcs(digestInput)).digest("hex");
+  const reason =
+    outcome.detail !== undefined && outcome.detail.length > 0
+      ? `resume:${outcome.action}:${outcome.status} (${outcome.detail})`
+      : `resume:${outcome.action}:${outcome.status}`;
+  return {
+    id: `aud_${randomBytes(6).toString("hex")}`,
+    session_id: outcome.session_id,
+    subject_id: "none",
+    tool: "RUNNER_RESUME",
+    args_digest: argsDigest,
+    capability: "ReadOnly",
+    control: "AutoAllow",
+    handler: "Autonomous",
+    decision: decisionForAction[outcome.action],
+    reason,
+    signer_key_id: ""
+  };
 }
 
 /** Inspect a persisted session object for its workflow.status field. */

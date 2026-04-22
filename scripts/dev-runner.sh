@@ -24,7 +24,12 @@ runner_bin="$repo_root/packages/runner/dist/bin/start-runner.js"
 mock_bin="$repo_root/tools/memory-mcp-mock/dist/bin/start-mock.js"
 
 card_fixture="$spec_root/test-vectors/conformance-card/agent-card.json"
-tools_fixture="$spec_root/test-vectors/tool-registry-m2/tools-compliant-only.json"
+tools_fixture="$spec_root/test-vectors/tool-registry/tools.json"
+# The 8-tool SV-PERM-01 matrix is the canonical live-:7700 fixture — covers
+# every (risk_class, default_control) × (activeMode) combination. The M2
+# compliant-only fixture is for SV-SESS-05 negative-path tests only and
+# MUST NOT be the :7700 default (it has only 2 tools, so the validator's
+# main permission sweep hits 404 unknown-tool on fs__*).
 initial_trust="$spec_root/test-vectors/initial-trust/valid.json"
 memory_corpus="$spec_root/test-vectors/memory-mcp-mock/corpus-seed.json"
 

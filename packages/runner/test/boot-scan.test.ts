@@ -200,7 +200,7 @@ describe("scanAndResumeInProgressSessions — L-29 resume-trigger #1", () => {
     expect(byId.get("ses_scanfixturebroken01")?.action).toBe("failed-read");
   });
 
-  it("audit chain integration: one session-resume row appended per outcome", async () => {
+  it("audit chain integration: one resume row per outcome, each conforming to audit-records-response.schema.json", async () => {
     await persister.writeSession(session("ses_auditfixtureexec01", "Executing"));
     await persister.writeSession(session("ses_auditfixtureok0001", "Succeeded"));
     const chain = new AuditChain(() => FROZEN_NOW);
@@ -212,11 +212,36 @@ describe("scanAndResumeInProgressSessions — L-29 resume-trigger #1", () => {
     expect(outcomes).toHaveLength(2);
     const snapshot = chain.snapshot();
     expect(snapshot).toHaveLength(2);
+
+    // Schema-conformance contract: every resume row must satisfy the
+    // pinned /audit/records item shape so responses round-trip through
+    // audit-records-response.schema.json without `additionalProperties:
+    // false` violations or missing-required-field errors.
+    const { registry: schemas } = await import("@soa-harness/schemas");
+    const validate = schemas["audit-records-response"];
+    const responseBody = {
+      records: snapshot,
+      has_more: false,
+      runner_version: "1.0",
+      generated_at: FROZEN_NOW.toISOString()
+    };
+    const ok = validate(responseBody);
+    if (!ok) {
+      console.error("validation errors:", (validate as unknown as { errors?: unknown }).errors);
+    }
+    expect(ok).toBe(true);
+
     for (const row of snapshot) {
-      expect(row["kind"]).toBe("session-resume");
+      // Lifecycle semantics survive via `tool` sentinel + `reason`.
+      expect(row["tool"]).toBe("RUNNER_RESUME");
+      expect(row["subject_id"]).toBe("none");
+      expect(row["handler"]).toBe("Autonomous");
+      expect(row["control"]).toBe("AutoAllow");
+      expect(row["decision"]).toMatch(/^(AutoAllow|Deny)$/);
+      expect(String(row["reason"])).toMatch(/^resume:(resumed|migrated|skipped-terminal|skipped-unknown-status|failed-read|failed-resume):/);
       expect(row["timestamp"]).toBe(FROZEN_NOW.toISOString());
-      expect(typeof row["session_id"]).toBe("string");
-      expect(typeof row["action"]).toBe("string");
+      expect(String(row["id"])).toMatch(/^aud_[A-Za-z0-9_-]{8,}$/);
+      expect(String(row["args_digest"])).toMatch(/^sha256:[a-f0-9]{64}$/);
     }
   });
 
