@@ -52,6 +52,10 @@ import {
   assertSyntheticCacheHitListenerSafe
 } from "../budget/index.js";
 import {
+  InMemorySubjectStore,
+  RetentionSweepScheduler
+} from "../privacy/index.js";
+import {
   MarkerEmitter,
   parseCrashTestMarkersEnv,
   assertCrashTestMarkersListenerSafe
@@ -119,7 +123,15 @@ function demoCrlFetcher(now: () => Date): CrlFetcher {
 }
 
 interface CardShape {
-  security?: { trustAnchors?: TrustAnchor[] };
+  security?: {
+    trustAnchors?: TrustAnchor[];
+    /**
+     * §10.7.2 SV-PRIV-05 — ISO-3166 alpha-2 region pin. Empty/unset =
+     * no residency constraint. Non-empty = every MCP tool invocation
+     * MUST declare a `data_processing_location` that intersects.
+     */
+    data_residency?: string[];
+  };
   permissions?: { activeMode?: Capability; toolRequirements?: Record<string, Control>; policyEndpoint?: string };
   /**
    * §7 Agent Card — token-budget configuration. Finding O (SV-BUD-02):
@@ -588,6 +600,46 @@ async function main() {
     }
   }
 
+  // §10.7.1 SV-PRIV-03 — subject store for privacy.delete_subject +
+  // privacy.export_subject endpoints. In-memory mirror for M3; full
+  // persisted mirror is post-M3 scope.
+  const subjectStore = new InMemorySubjectStore();
+
+  // §10.7.3 SV-PRIV-04 — retention-sweep scheduler. 24h cadence (default);
+  // emits a System Event Log record each pass. M3 hooks are no-op
+  // counters since the Runner doesn't yet populate retention-tracked
+  // persisted state beyond the audit chain.
+  const retentionSweeper = new RetentionSweepScheduler({
+    systemLog,
+    clock,
+    log: (m) => console.log(m)
+  });
+  retentionSweeper.start();
+  console.log(
+    "[start-runner] §10.7.3 retention-sweep scheduler started (24h cadence)"
+  );
+
+  // §10.7.2 SV-PRIV-05 — tool residency metadata. Wired from the
+  // operator-configured tools fixture when present (L-34 tools-registry
+  // fixtures may declare `data_processing_location`). When Card's
+  // `security.data_residency` is non-empty but no tool metadata is
+  // provided, the residency guard rejects every invocation with
+  // PermissionDenied(residency-violation, sub_reason=unknown-region)
+  // per §10.7.2's primary-signal rule.
+  const dataResidency = Array.isArray(card.security?.data_residency)
+    ? card.security.data_residency
+    : [];
+  const toolResidencyLookup: (
+    name: string
+  ) => { declared_location?: readonly string[]; attested_location?: readonly string[] } | undefined =
+    (_name) => {
+      // Default lookup: no tool declares a location. Deployments wire
+      // real metadata via a future registry extension. With empty
+      // `dataResidency` the guard is inert; non-empty + unknown tool
+      // → residency-violation (the spec's intended behavior).
+      return undefined;
+    };
+
   // Build the ResumeContext before startRunner so both the state-route
   // plugin (lazy-hydrate) and the post-boot scan share the same ctx.
   const cardVersionForResume =
@@ -806,6 +858,9 @@ async function main() {
             ...(syntheticCacheCfg.value !== undefined
               ? { syntheticCacheHit: syntheticCacheCfg.value }
               : {}),
+            // §10.7.2 SV-PRIV-05 — residency layered-defence gate.
+            ...(dataResidency.length > 0 ? { dataResidency } : {}),
+            ...(dataResidency.length > 0 ? { toolResidency: toolResidencyLookup } : {}),
             // §15 hooks — operator supplies command lines via env.
             ...((): {
               hookConfig?: {
@@ -845,6 +900,16 @@ async function main() {
         ? { supportedCoreVersions: card.supported_core_versions }
         : {}),
       ...(errataBody !== undefined ? { errataBody } : {})
+    },
+    privacy: {
+      subjectStore,
+      sessionStore,
+      chain,
+      clock,
+      runnerVersion: "1.0",
+      ...(BOOTSTRAP_BEARER !== undefined ? { operatorBearer: BOOTSTRAP_BEARER } : {}),
+      emitter: streamEmitter,
+      systemLog
     }
   });
 

@@ -17,9 +17,20 @@
  */
 
 import type { Clock } from "../clock/index.js";
+import { MemoryDeletionForbidden } from "../privacy/errors.js";
 
 export type SharingPolicy = "none" | "session" | "project" | "tenant";
-export type DataClass = "public" | "internal" | "confidential" | "personal";
+/**
+ * §10.7 data-class closed enum. Added `sensitive-personal` per SV-PRIV-02
+ * — MUST NOT be persisted to memory in any form; consolidation attempts
+ * emit MemoryDeletionForbidden(reason=sensitive-class-forbidden).
+ */
+export type DataClass =
+  | "public"
+  | "internal"
+  | "confidential"
+  | "personal"
+  | "sensitive-personal";
 
 export interface MemoryInContextNote {
   note_id: string;
@@ -134,9 +145,45 @@ export class InMemoryMemoryStateStore {
   ): void {
     const state = this.byId.get(session_id);
     if (!state) return;
+    // §10.7 SV-PRIV-02 — sensitive-personal MUST NOT be persisted to
+    // memory in any form. Any attempt to load such an entry into the
+    // in-context set surfaces MemoryDeletionForbidden so the caller
+    // can abort the consolidation or drop the slice before persist.
+    for (const n of notes) {
+      if (n.data_class === "sensitive-personal") {
+        throw new MemoryDeletionForbidden({
+          reason: "sensitive-class-forbidden",
+          note_id: n.note_id,
+          session_id,
+          message:
+            `note ${n.note_id} tagged data_class=sensitive-personal — ` +
+            "§10.7 #2 forbids persistence; MUST drop or re-tag before memory write"
+        });
+      }
+    }
     const loadedAt = this.clock().toISOString();
     state.in_context_notes = notes.map((n) => ({ ...n, loaded_at: loadedAt }));
     state.available_notes_count = availableNotesCount;
+  }
+
+  /**
+   * §10.7 SV-PRIV-02 pre-consolidation guard. Call BEFORE dispatching
+   * `consolidate_memories` — if the pending slice contains any
+   * sensitive-personal entry, throw so the scheduler emits the
+   * MemoryDeletionForbidden system-log record and skips the run.
+   */
+  guardSensitivePersonal(notes: readonly { note_id: string; data_class: DataClass }[]): void {
+    for (const n of notes) {
+      if (n.data_class === "sensitive-personal") {
+        throw new MemoryDeletionForbidden({
+          reason: "sensitive-class-forbidden",
+          note_id: n.note_id,
+          message:
+            `note ${n.note_id} tagged data_class=sensitive-personal — ` +
+            "§10.7 #2 forbids consolidation of this record"
+        });
+      }
+    }
   }
 
   /** Record a §8.4 consolidation pass. */

@@ -27,6 +27,24 @@ import {
 import { resolvePermissionForQuery, type PermissionsResolveResponse } from "./resolve-for-query.js";
 import type { SessionStore } from "./session-store.js";
 import type { Capability } from "./types.js";
+import { residencyDecision, residencyAuditPayload } from "../privacy/index.js";
+
+/**
+ * §10.7.2 layered-defence tool metadata. Tools declare processing
+ * locations per `data_processing_location` manifest field + optional
+ * attestation + optional network-signal corroboration. When the
+ * deployment's Card `security.data_residency` is non-empty, each
+ * invocation checks this map; missing entries are treated as region
+ * `"*"` (unknown) per spec and rejected.
+ */
+export interface ToolResidencyMetadata {
+  declared_location?: readonly string[];
+  attested_location?: readonly string[];
+  network_signal_regions?: readonly string[];
+}
+export type ToolResidencyMetadataLookup = (
+  toolName: string
+) => ToolResidencyMetadata | undefined;
 
 export interface PermissionsDecisionsRouteOptions {
   registry: ToolRegistry;
@@ -120,6 +138,19 @@ export interface PermissionsDecisionsRouteOptions {
    * Loopback-guarded at bin startup.
    */
   syntheticCacheHit?: number;
+  /**
+   * §10.7.2 SV-PRIV-05 — Agent Card `security.data_residency` pin.
+   * Empty or unset = no constraint. Non-empty → each invocation
+   * layered-defence checked: declared_location MUST intersect, and
+   * attested_location (when present) MUST agree with declared.
+   */
+  dataResidency?: readonly string[];
+  /**
+   * §10.7.2 per-tool location metadata lookup. Returns `undefined` for
+   * tools with no declaration → region "*" → rejected by any non-empty
+   * pin per spec.
+   */
+  toolResidency?: ToolResidencyMetadataLookup;
   /**
    * §15 reentrancy guard (Finding N / SV-HOOK-08). When set, every
    * PreToolUse/PostToolUse runHook call registers its child PID with
@@ -389,6 +420,54 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
         error: "PermissionDenied",
         reason: "audit-sink-unreachable"
       });
+    }
+
+    // §10.7.2 SV-PRIV-05 — layered residency defence. When
+    // card.security.data_residency is non-empty, every invocation
+    // checks the tool's declared + attested + network-signal locations
+    // against the pin. The decision (allow or deny) emits an audit
+    // row with all four layers so downstream compliance review can see
+    // which signals agreed. Tools without a declaration are region
+    // "*" and rejected by any non-empty pin.
+    if (opts.dataResidency !== undefined && opts.dataResidency.length > 0) {
+      const meta = opts.toolResidency?.(toolEntry.name);
+      const decision = residencyDecision({
+        tool: toolEntry.name,
+        data_residency: opts.dataResidency,
+        ...(meta?.declared_location !== undefined
+          ? { declared_location: meta.declared_location }
+          : {}),
+        ...(meta?.attested_location !== undefined
+          ? { attested_location: meta.attested_location }
+          : {}),
+        ...(meta?.network_signal_regions !== undefined
+          ? { network_signal_regions: meta.network_signal_regions }
+          : {})
+      });
+      const residencyPayload = residencyAuditPayload(decision);
+      // Append the residency audit row regardless of allow/deny so the
+      // full decision trail is preserved per §10.7.2 #4.
+      opts.chain.append({
+        session_id: sessionId,
+        decision: "ResidencyCheck",
+        tool: toolEntry.name,
+        subject_id: sessionRecord.user_sub,
+        reason: `residency-layered-defence decision=${residencyPayload.decision}` +
+          (residencyPayload.sub_reason !== undefined
+            ? ` sub_reason=${residencyPayload.sub_reason}`
+            : ""),
+        timestamp: opts.clock().toISOString(),
+        residency: residencyPayload
+      });
+      if (decision.outcome === "deny") {
+        return reply.code(403).send({
+          error: "PermissionDenied",
+          reason: "residency-violation",
+          sub_reason: decision.error.sub_reason,
+          detail: decision.error.message,
+          residency: residencyPayload
+        });
+      }
     }
 
     // §13.2 pre-call projection-over-budget check (HR-02 / SV-BUD-02..07).

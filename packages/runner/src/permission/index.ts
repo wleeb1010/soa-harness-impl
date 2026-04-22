@@ -32,5 +32,7 @@ export {
 export { sessionsBootstrapPlugin, type SessionsRouteOptions } from "./sessions-route.js";
 export {
   permissionsDecisionsPlugin,
-  type PermissionsDecisionsRouteOptions
+  type PermissionsDecisionsRouteOptions,
+  type ToolResidencyMetadata,
+  type ToolResidencyMetadataLookup
 } from "./decisions-route.js";

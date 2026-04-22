@@ -175,6 +175,22 @@ export interface BuildRunnerOptions {
     otelEmitter?: import("./observability/index.js").OtelEmitter;
     /** §13.3 Finding AD — synthetic cache-hit injection from env. */
     syntheticCacheHit?: number;
+    /** §10.7.2 SV-PRIV-05 — Card `security.data_residency` pin. */
+    dataResidency?: readonly string[];
+    /** §10.7.2 per-tool `data_processing_location` metadata lookup. */
+    toolResidency?: import("./permission/index.js").ToolResidencyMetadataLookup;
+  };
+  /** §10.7.1 SV-PRIV-03 — privacy.delete_subject + privacy.export_subject. */
+  privacy?: {
+    subjectStore: import("./privacy/index.js").InMemorySubjectStore;
+    sessionStore: InMemorySessionStore;
+    chain: AuditChain;
+    clock: Clock;
+    runnerVersion?: string;
+    operatorBearer?: string;
+    emitter?: StreamEventEmitter;
+    systemLog?: import("./system-log/index.js").SystemLogBuffer;
+    bootSessionId?: string;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/sink-events
@@ -516,9 +532,28 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.otelEmitter !== undefined ? { otelEmitter: pd.otelEmitter } : {}),
       ...(pd.syntheticCacheHit !== undefined
         ? { syntheticCacheHit: pd.syntheticCacheHit }
-        : {})
+        : {}),
+      ...(pd.dataResidency !== undefined ? { dataResidency: pd.dataResidency } : {}),
+      ...(pd.toolResidency !== undefined ? { toolResidency: pd.toolResidency } : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
+  }
+
+  if (opts.privacy !== undefined) {
+    const { privacyPlugin } = await import("./privacy/index.js");
+    const pv = opts.privacy;
+    await app.register(privacyPlugin, {
+      subjectStore: pv.subjectStore,
+      sessionStore: pv.sessionStore,
+      chain: pv.chain,
+      readiness: readiness ?? { check: () => null },
+      clock: pv.clock,
+      ...(pv.runnerVersion !== undefined ? { runnerVersion: pv.runnerVersion } : {}),
+      ...(pv.operatorBearer !== undefined ? { operatorBearer: pv.operatorBearer } : {}),
+      ...(pv.emitter !== undefined ? { emitter: pv.emitter } : {}),
+      ...(pv.systemLog !== undefined ? { systemLog: pv.systemLog } : {}),
+      ...(pv.bootSessionId !== undefined ? { bootSessionId: pv.bootSessionId } : {})
+    });
   }
 
   if (opts.auditSinkEvents !== undefined) {
