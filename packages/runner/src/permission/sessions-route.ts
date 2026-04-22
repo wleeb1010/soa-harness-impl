@@ -84,6 +84,14 @@ export interface SessionsRouteOptions {
    * the log buffer being wired).
    */
   systemLog?: SystemLogBuffer;
+  /**
+   * §8.5 default sharing_scope for the bootstrap-time searchMemories
+   * prefetch. Finding V / SV-MEM-06: pulled from
+   * card.memory.default_sharing_scope. Fallback to "session" (least-
+   * privilege) when the card omits. Valid values: "none" | "session" |
+   * "project" | "tenant" (SharingPolicy enum from §8.5).
+   */
+  memoryDefaultSharingScope?: "none" | "session" | "project" | "tenant";
 }
 
 const WINDOW_MS = 60_000;
@@ -284,7 +292,9 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
         const hits = await opts.memoryClient.searchMemories({
           query: userSub,
           limit: 5,
-          sharing_scope: "session"
+          // Finding V / SV-MEM-06: honor card.memory.default_sharing_scope
+          // when declared; fall back to "session" least-privilege default.
+          sharing_scope: opts.memoryDefaultSharingScope ?? "session"
         });
         if (opts.memoryDegradation) opts.memoryDegradation.recordSuccess();
         // Record in the memory-state store so /memory/state reflects the load.

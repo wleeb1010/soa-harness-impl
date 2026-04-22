@@ -123,6 +123,11 @@ interface CardShape {
   tokenBudget?: { maxTokensPerRun?: number; projectionWindow?: number; billingTag?: string };
   /** §14.4 observability config — Finding W reads requiredResourceAttrs. */
   observability?: { otelExporter?: string; requiredResourceAttrs?: string[] };
+  /**
+   * §8.5 memory config — Finding V reads default_sharing_scope. Enum
+   * values: "none" | "session" | "project" | "tenant" (SharingPolicy).
+   */
+  memory?: { default_sharing_scope?: "none" | "session" | "project" | "tenant" };
 }
 
 async function main() {
@@ -576,7 +581,11 @@ async function main() {
             budgetTracker,
             ...(memoryClient !== undefined ? { memoryClient } : {}),
             ...(memoryDegradation !== undefined ? { memoryDegradation } : {}),
-            systemLog
+            systemLog,
+            // Finding V / SV-MEM-06 — honor card.memory.default_sharing_scope.
+            ...(card.memory?.default_sharing_scope !== undefined
+              ? { memoryDefaultSharingScope: card.memory.default_sharing_scope }
+              : {})
           }
         }
       : {}),

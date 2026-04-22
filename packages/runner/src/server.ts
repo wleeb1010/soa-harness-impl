@@ -90,6 +90,8 @@ export interface BuildRunnerOptions {
     memoryDegradation?: import("./memory/mcp-client.js").MemoryDegradationTracker;
     /** L-38 Finding T — per-timeout MemoryDegraded log records. */
     systemLog?: import("./system-log/index.js").SystemLogBuffer;
+    /** L-38 Finding V — card-driven sharing_scope for bootstrap prefetch. */
+    memoryDefaultSharingScope?: "none" | "session" | "project" | "tenant";
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -305,7 +307,10 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.budgetTracker !== undefined ? { budgetTracker: sb.budgetTracker } : {}),
       ...(sb.memoryClient !== undefined ? { memoryClient: sb.memoryClient } : {}),
       ...(sb.memoryDegradation !== undefined ? { memoryDegradation: sb.memoryDegradation } : {}),
-      ...(sb.systemLog !== undefined ? { systemLog: sb.systemLog } : {})
+      ...(sb.systemLog !== undefined ? { systemLog: sb.systemLog } : {}),
+      ...(sb.memoryDefaultSharingScope !== undefined
+        ? { memoryDefaultSharingScope: sb.memoryDefaultSharingScope }
+        : {})
     });
   }
 

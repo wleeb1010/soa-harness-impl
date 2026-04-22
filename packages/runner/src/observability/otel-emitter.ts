@@ -25,8 +25,17 @@
 import { randomBytes } from "node:crypto";
 import type { OtelSpanStore, OtelSpanRecord, OtelSpanEventRecord } from "./otel-span-store.js";
 
+/**
+ * §14.4 default required resource attrs. Spec inline default set at §6
+ * observability schema; Finding X adds `service.version` because OTel
+ * semconv pairs it with `service.name` and validator SV-STR-07
+ * asserts both. `service.version` is also unconditionally stamped in
+ * `resourceAttributes()` even when operator overrides this list —
+ * see the emitter's guard below.
+ */
 export const DEFAULT_REQUIRED_RESOURCE_ATTRS = [
   "service.name",
+  "service.version",
   "soa.agent.name",
   "soa.agent.version",
   "soa.billing.tag"
@@ -105,6 +114,14 @@ export class OtelEmitter {
         default:
           out[name] = "";
       }
+    }
+    // Finding X / SV-STR-07: service.version is OTel semconv-paired with
+    // service.name and validator asserts its presence regardless of
+    // whether the card lists it. Unconditionally stamp here so operator
+    // overrides of requiredResourceAttrs can't drop the field by
+    // accident.
+    if (!("service.version" in out)) {
+      out["service.version"] = this.cfg.runnerVersion ?? "1.0";
     }
     return out;
   }
