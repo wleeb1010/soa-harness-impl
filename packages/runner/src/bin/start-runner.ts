@@ -41,7 +41,8 @@ import {
   MemoryMcpClient,
   MemoryDegradationTracker,
   MemoryReadinessProbe,
-  runStartupMemoryProbe
+  runStartupMemoryProbe,
+  ConsolidationScheduler
 } from "../memory/index.js";
 import { BudgetTracker } from "../budget/index.js";
 import {
@@ -496,6 +497,26 @@ async function main() {
       probe: memoryReadiness,
       systemLog
     });
+  }
+
+  // Finding U / SV-MEM-05 — §8.4 consolidation scheduler. Wakes every
+  // 5 min to check the 24 h elapsed-time trigger; also exposes
+  // recordNoteWritten(session_id) for the future M4 dispatcher to call
+  // after each write_memory so the 100-note-per-session threshold
+  // advances. Only active when Memory MCP is wired.
+  const consolidationScheduler =
+    MEMORY_MCP_ENDPOINT && memoryClient
+      ? new ConsolidationScheduler({
+          client: memoryClient,
+          systemLog,
+          clock
+        })
+      : undefined;
+  if (consolidationScheduler) {
+    consolidationScheduler.start();
+    console.log(
+      `[start-runner] Memory consolidation scheduler started (24h interval, 100-note threshold)`
+    );
   }
 
   // Build the ResumeContext before startRunner so both the state-route

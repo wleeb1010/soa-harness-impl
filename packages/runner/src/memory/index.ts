@@ -31,3 +31,8 @@ export {
   runStartupMemoryProbe,
   type StartupMemoryProbeOptions
 } from "./startup-probe.js";
+export {
+  ConsolidationScheduler,
+  type ConsolidationSchedulerOptions,
+  type ConsolidationOutcome
+} from "./consolidation-scheduler.js";
