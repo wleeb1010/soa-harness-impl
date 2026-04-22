@@ -25,7 +25,9 @@ import {
   HandlerKeyRevoked,
   type HandlerKeyResolver,
   type HandlerKeyRegistry,
-  type KidRevokedCheck
+  type KidRevokedCheck,
+  type EscalationCoordinator,
+  type EscalationOutcome
 } from "../attestation/index.js";
 import { resolvePermissionForQuery, type PermissionsResolveResponse } from "./resolve-for-query.js";
 import type { SessionStore } from "./session-store.js";
@@ -77,6 +79,13 @@ export interface PermissionsDecisionsRouteOptions {
    * §10.6.2 revocation observed via the CRL poller.
    */
   handlerKeyRegistry?: HandlerKeyRegistry;
+  /**
+   * §10.4.1 L-49 Finding BB — escalation coordinator. When signer
+   * role = Autonomous and tool.risk_class ∈ {Mutating, Destructive}
+   * and resolver decision = Prompt, the coordinator awaits an
+   * Interactive responder (production: UI Gateway; test: file hook).
+   */
+  escalationCoordinator?: EscalationCoordinator;
   runnerVersion?: string;
   /** §10.3.2 rate limit — 30 rpm per bearer. */
   requestsPerMinute?: number;
@@ -791,6 +800,166 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
               });
             }
             throw err;
+          }
+        }
+
+        // §10.4 L-49 Finding BB — handler-role gates on Prompt + high-risk.
+        // §10.4 prose: Coordinator/Autonomous signature does NOT satisfy
+        // HITL. On a Prompt+high-risk action, Coordinator rejects
+        // directly; Autonomous triggers §10.4.1 escalation to
+        // Interactive. resolverDecision==Prompt AND tool.risk_class ∈
+        // {Mutating, Destructive} is the trigger.
+        const highRisk =
+          toolEntry.risk_class === "Mutating" || toolEntry.risk_class === "Destructive";
+        if (
+          resolverDecision === "Prompt" &&
+          highRisk &&
+          opts.handlerKeyRegistry !== undefined &&
+          typeof pdaSignerKid === "string"
+        ) {
+          const signerRole = opts.handlerKeyRegistry.get(pdaSignerKid)?.role;
+          if (signerRole === "Coordinator") {
+            await compensatePendingSideEffect(
+              bracketSession,
+              sideEffectIndex,
+              opts.persister,
+              opts.markers,
+              opts.clock,
+              sessionId
+            );
+            return reply.code(403).send({
+              error: "PermissionDenied",
+              reason: "hitl-required",
+              detail: "coordinator-insufficient"
+            });
+          }
+          if (signerRole === "Autonomous") {
+            if (opts.escalationCoordinator === undefined) {
+              // No coordinator wired — spec-default 30s timeout would
+              // fire; surface the immediate rejection instead of
+              // blocking a whole minute in tests. Same shape as
+              // escalation-timeout per §10.4.1 step 4.
+              const escAuditTs = opts.clock().toISOString();
+              opts.chain.append({
+                id: `aud_${randomBytes(6).toString("hex")}`,
+                timestamp: escAuditTs,
+                session_id: sessionId,
+                subject_id: "none",
+                tool: toolEntry.name,
+                args_digest: argsDigest,
+                capability: resolverResponse.resolved_capability,
+                control: resolverResponse.resolved_control,
+                handler: "Autonomous",
+                decision: "Deny",
+                reason: "escalation-timeout",
+                signer_key_id: pdaSignerKid,
+                retention_class:
+                  sessionRecord.activeMode === "DangerFullAccess"
+                    ? "dfa-365d"
+                    : "standard-90d"
+              });
+              await compensatePendingSideEffect(
+                bracketSession,
+                sideEffectIndex,
+                opts.persister,
+                opts.markers,
+                opts.clock,
+                sessionId
+              );
+              return reply.code(403).send({
+                error: "PermissionDenied",
+                reason: "escalation-timeout"
+              });
+            }
+            const outcome: EscalationOutcome =
+              await opts.escalationCoordinator.awaitResponder();
+            if (outcome.kind === "timeout") {
+              const escAuditTs = opts.clock().toISOString();
+              opts.chain.append({
+                id: `aud_${randomBytes(6).toString("hex")}`,
+                timestamp: escAuditTs,
+                session_id: sessionId,
+                subject_id: "none",
+                tool: toolEntry.name,
+                args_digest: argsDigest,
+                capability: resolverResponse.resolved_capability,
+                control: resolverResponse.resolved_control,
+                handler: "Autonomous",
+                decision: "Deny",
+                reason: "escalation-timeout",
+                signer_key_id: pdaSignerKid,
+                retention_class:
+                  sessionRecord.activeMode === "DangerFullAccess"
+                    ? "dfa-365d"
+                    : "standard-90d"
+              });
+              await compensatePendingSideEffect(
+                bracketSession,
+                sideEffectIndex,
+                opts.persister,
+                opts.markers,
+                opts.clock,
+                sessionId
+              );
+              return reply.code(403).send({
+                error: "PermissionDenied",
+                reason: "escalation-timeout"
+              });
+            }
+            if (outcome.kind === "hitl-required") {
+              await compensatePendingSideEffect(
+                bracketSession,
+                sideEffectIndex,
+                opts.persister,
+                opts.markers,
+                opts.clock,
+                sessionId
+              );
+              return reply.code(403).send({
+                error: "PermissionDenied",
+                reason: "hitl-required",
+                detail: outcome.detail ?? "autonomous-insufficient"
+              });
+            }
+            if (outcome.kind === "denied") {
+              const denAuditTs = opts.clock().toISOString();
+              opts.chain.append({
+                id: `aud_${randomBytes(6).toString("hex")}`,
+                timestamp: denAuditTs,
+                session_id: sessionId,
+                subject_id: "none",
+                tool: toolEntry.name,
+                args_digest: argsDigest,
+                capability: resolverResponse.resolved_capability,
+                control: resolverResponse.resolved_control,
+                handler: "Interactive",
+                decision: "Deny",
+                reason: "hitl-denied",
+                signer_key_id: outcome.kid ?? pdaSignerKid,
+                retention_class:
+                  sessionRecord.activeMode === "DangerFullAccess"
+                    ? "dfa-365d"
+                    : "standard-90d"
+              });
+              await compensatePendingSideEffect(
+                bracketSession,
+                sideEffectIndex,
+                opts.persister,
+                opts.markers,
+                opts.clock,
+                sessionId
+              );
+              return reply.code(403).send({
+                error: "PermissionDenied",
+                reason: "hitl-denied"
+              });
+            }
+            // outcome.kind === "approved" — rewrite pdaSignerKid to the
+            // Interactive responder's kid so the subsequent audit row's
+            // signer_key_id reflects who actually satisfied HITL.
+            if (outcome.kid !== undefined && outcome.kid.length > 0) {
+              pdaSignerKid = outcome.kid;
+            }
           }
         }
 

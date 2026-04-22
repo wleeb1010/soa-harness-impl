@@ -40,12 +40,18 @@ export function isHandlerAlgo(value: string): value is HandlerAlgo {
   return HANDLER_ALGO_SET.has(value);
 }
 
+/** §10.4 handler roles — drives §10.4.1 escalation machine + §10.4.2 responder kid-role check. */
+export type HandlerRole = "Interactive" | "Coordinator" | "Autonomous";
+export const HANDLER_ROLES: readonly HandlerRole[] = ["Interactive", "Coordinator", "Autonomous"];
+
 export interface HandlerKeyEntry {
   kid: string;
   spki_hex: string;
   algo: HandlerAlgo;
   enrolled_at: string; // RFC 3339
   rotation_overlap_end?: string; // RFC 3339
+  /** §10.4 handler role — absent = unknown (treated as Interactive for backward compat). */
+  role?: HandlerRole;
 }
 
 export interface HandlerKeyExpiredInfo {
@@ -214,6 +220,8 @@ export interface HandlerEnvConfig {
   enrolledAtOverride?: string; // SOA_HANDLER_ENROLLED_AT
   overlapDir?: string; // SOA_HANDLER_KEYPAIR_OVERLAP_DIR
   crlPollTickMs?: number; // RUNNER_HANDLER_CRL_POLL_TICK_MS
+  escalationTimeoutMs?: number; // RUNNER_HANDLER_ESCALATION_TIMEOUT_MS (§10.4.2)
+  responderFilePath?: string; // SOA_HANDLER_ESCALATION_RESPONDER (§10.4.2)
 }
 
 export function parseHandlerEnv(env: NodeJS.ProcessEnv): HandlerEnvConfig {
@@ -231,6 +239,15 @@ export function parseHandlerEnv(env: NodeJS.ProcessEnv): HandlerEnvConfig {
     const n = Number.parseInt(tickRaw.trim(), 10);
     if (Number.isFinite(n) && n > 0) out.crlPollTickMs = n;
   }
+  const escTimeoutRaw = env["RUNNER_HANDLER_ESCALATION_TIMEOUT_MS"];
+  if (typeof escTimeoutRaw === "string" && escTimeoutRaw.trim().length > 0) {
+    const n = Number.parseInt(escTimeoutRaw.trim(), 10);
+    if (Number.isFinite(n) && n > 0) out.escalationTimeoutMs = n;
+  }
+  const responder = env["SOA_HANDLER_ESCALATION_RESPONDER"];
+  if (typeof responder === "string" && responder.trim().length > 0) {
+    out.responderFilePath = responder.trim();
+  }
   return out;
 }
 
@@ -241,7 +258,9 @@ export function assertHandlerEnvListenerSafe(params: {
   const anySet =
     params.env.enrolledAtOverride !== undefined ||
     params.env.overlapDir !== undefined ||
-    params.env.crlPollTickMs !== undefined;
+    params.env.crlPollTickMs !== undefined ||
+    params.env.escalationTimeoutMs !== undefined ||
+    params.env.responderFilePath !== undefined;
   if (!anySet) return;
   if (LOOPBACK_HOSTS.has(params.host.toLowerCase())) return;
   const active =
@@ -249,7 +268,11 @@ export function assertHandlerEnvListenerSafe(params: {
       ? "SOA_HANDLER_ENROLLED_AT"
       : params.env.overlapDir !== undefined
         ? "SOA_HANDLER_KEYPAIR_OVERLAP_DIR"
-        : "RUNNER_HANDLER_CRL_POLL_TICK_MS";
+        : params.env.crlPollTickMs !== undefined
+          ? "RUNNER_HANDLER_CRL_POLL_TICK_MS"
+          : params.env.escalationTimeoutMs !== undefined
+            ? "RUNNER_HANDLER_ESCALATION_TIMEOUT_MS"
+            : "SOA_HANDLER_ESCALATION_RESPONDER";
   throw new HandlerEnvHookOnPublicListener(active, params.host);
 }
 

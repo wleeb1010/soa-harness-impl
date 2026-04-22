@@ -21,6 +21,7 @@ export {
   AlgorithmRejected,
   HandlerEnvHookOnPublicListener,
   HANDLER_ALGOS,
+  HANDLER_ROLES,
   isHandlerAlgo,
   parseHandlerEnv,
   assertHandlerEnvListenerSafe,
@@ -28,6 +29,7 @@ export {
   type HandlerKeyEntry,
   type HandlerKeyExpiredInfo,
   type HandlerAlgo,
+  type HandlerRole,
   type HandlerEnvConfig,
   type OverlapKeyManifest
 } from "./handler-key.js";
@@ -48,3 +50,10 @@ export {
   type AppendSuspectDecisionsOptions,
   type SuspectDecisionResult
 } from "./suspect-decision.js";
+export {
+  EscalationCoordinator,
+  type EscalationCoordinatorOptions,
+  type EscalationOutcome,
+  type EscalationOutcomeKind,
+  type EscalationResponderFile
+} from "./escalation.js";

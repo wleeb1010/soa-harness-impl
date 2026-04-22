@@ -84,6 +84,7 @@ import type { Control } from "../registry/index.js";
 import {
   HandlerKeyRegistry,
   HandlerCrlPoller,
+  EscalationCoordinator,
   parseHandlerEnv,
   assertHandlerEnvListenerSafe,
   loadOverlapKeypairs,
@@ -557,7 +558,10 @@ async function main() {
     kid: defaultHandlerKid,
     spki_hex: "",
     algo: "EdDSA",
-    enrolled_at: handlerEnv.enrolledAtOverride ?? clock().toISOString()
+    enrolled_at: handlerEnv.enrolledAtOverride ?? clock().toISOString(),
+    // §10.4 default conformance handler is Interactive — high-risk Prompt
+    // flows with an Interactive-signed PDA satisfy §10.4 directly.
+    role: "Interactive"
   });
   if (handlerEnv.overlapDir !== undefined) {
     const entries: HandlerKeyEntry[] = loadOverlapKeypairs(handlerEnv.overlapDir);
@@ -571,6 +575,29 @@ async function main() {
   if (handlerEnv.enrolledAtOverride !== undefined) {
     console.log(
       `[start-runner] §10.6.2 SOA_HANDLER_ENROLLED_AT override in effect (${handlerEnv.enrolledAtOverride})`
+    );
+  }
+
+  // §10.4.1 L-49 Finding BB — Autonomous→Interactive escalation. Timeout
+  // defaults to §10.4's 30s production value; test hook shrinks it via
+  // RUNNER_HANDLER_ESCALATION_TIMEOUT_MS. SOA_HANDLER_ESCALATION_RESPONDER
+  // file supplies the Interactive response in test runs.
+  const escalationCoordinator = new EscalationCoordinator({
+    registry: handlerKeyRegistry,
+    clock,
+    timeoutMs: handlerEnv.escalationTimeoutMs ?? 30_000,
+    ...(handlerEnv.responderFilePath !== undefined
+      ? { responderFilePath: handlerEnv.responderFilePath }
+      : {})
+  });
+  if (
+    handlerEnv.escalationTimeoutMs !== undefined ||
+    handlerEnv.responderFilePath !== undefined
+  ) {
+    console.log(
+      `[start-runner] §10.4.2 escalation test hooks active (timeout=${
+        handlerEnv.escalationTimeoutMs ?? 30000
+      }ms, responder=${handlerEnv.responderFilePath ?? "<none>"})`
     );
   }
   const activeCapability = (card.permissions?.activeMode ?? "ReadOnly") as Capability;
@@ -1331,6 +1358,8 @@ async function main() {
             // overlap + revocation set; assertUsable fires at each
             // /permissions/decisions call.
             handlerKeyRegistry,
+            // §10.4.1 L-49 BB — Autonomous→Interactive escalation.
+            escalationCoordinator,
             runnerVersion: "1.0",
             sink: auditSink,
             // §12.2 L-31 bracket-persist bundle.

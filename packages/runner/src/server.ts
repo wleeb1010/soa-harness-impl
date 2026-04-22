@@ -17,7 +17,8 @@ import {
   type HandlerKeyResolver,
   type HandlerKeyRegistry,
   type KidRevokedCheck,
-  type KeyStorageReport
+  type KeyStorageReport,
+  type EscalationCoordinator
 } from "./attestation/index.js";
 import type { ToolRegistry } from "./registry/index.js";
 import type { Capability } from "./permission/index.js";
@@ -196,6 +197,8 @@ export interface BuildRunnerOptions {
     isPdaKidRevoked?: KidRevokedCheck;
     /** §10.6 L-48 BD/BE/BF — handler key registry (age + revocation). */
     handlerKeyRegistry?: HandlerKeyRegistry;
+    /** §10.4.1 L-49 BB — Autonomous→Interactive escalation coordinator. */
+    escalationCoordinator?: EscalationCoordinator;
     runnerVersion?: string;
     requestsPerMinute?: number;
     sink?: AuditSink;
@@ -624,6 +627,9 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.isPdaKidRevoked !== undefined ? { isPdaKidRevoked: pd.isPdaKidRevoked } : {}),
       ...(pd.handlerKeyRegistry !== undefined
         ? { handlerKeyRegistry: pd.handlerKeyRegistry }
+        : {}),
+      ...(pd.escalationCoordinator !== undefined
+        ? { escalationCoordinator: pd.escalationCoordinator }
         : {}),
       ...(pd.runnerVersion !== undefined ? { runnerVersion: pd.runnerVersion } : {}),
       ...(pd.requestsPerMinute !== undefined ? { requestsPerMinute: pd.requestsPerMinute } : {}),
