@@ -96,7 +96,17 @@ function assertIdempotencyClassification(t: ToolEntry): void {
   throw new ToolPoolStale(t.name, "idempotency-retention-insufficient");
 }
 
-export function loadToolRegistry(path: string): ToolRegistry {
+export interface LoadToolRegistryOptions {
+  /**
+   * §11.2.1 AGENTS.md deny-list. Tool names in this set are removed from
+   * the loaded registry BEFORE §12.2 idempotency-classification runs —
+   * denying a non-compliant tool is a valid way to bring a registry into
+   * conformance (§11.2 + the L-35 AGENTS.md source-path test hook).
+   */
+  denied?: ReadonlySet<string>;
+}
+
+export function loadToolRegistry(path: string, opts: LoadToolRegistryOptions = {}): ToolRegistry {
   if (!existsSync(path)) {
     throw new Error(`loadToolRegistry: tools file not found at ${path}`);
   }
@@ -104,5 +114,10 @@ export function loadToolRegistry(path: string): ToolRegistry {
   if (!Array.isArray(parsed.tools)) {
     throw new Error(`loadToolRegistry: ${path} has no "tools" array`);
   }
-  return new ToolRegistry(parsed.tools as ToolEntry[]);
+  const tools = parsed.tools as ToolEntry[];
+  const filtered =
+    opts.denied && opts.denied.size > 0
+      ? tools.filter((t) => !opts.denied!.has(t.name))
+      : tools;
+  return new ToolRegistry(filtered);
 }

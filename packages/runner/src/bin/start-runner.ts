@@ -13,7 +13,10 @@ import {
   loadToolRegistry,
   ToolPoolStale,
   startDynamicRegistrationWatcher,
-  assertDynamicRegistrationListenerSafe
+  assertDynamicRegistrationListenerSafe,
+  loadAgentsMdDenyList,
+  assertAgentsMdListenerSafe,
+  AgentsMdUnavailableStartup
 } from "../registry/index.js";
 import {
   AuditChain,
@@ -130,6 +133,33 @@ async function main() {
     triggerPath: DYNAMIC_REG_TRIGGER,
     host: HOST
   });
+
+  // §11.2.1 AGENTS.md source-path test hook + production guard. When
+  // SOA_RUNNER_AGENTS_MD_PATH is set, load the deny-list BEFORE the
+  // Tool Registry so denied tools never enter the pool. Fail-startup
+  // with AgentsMdUnavailableStartup on missing/unreadable file.
+  const AGENTS_MD_PATH = process.env.SOA_RUNNER_AGENTS_MD_PATH;
+  assertAgentsMdListenerSafe({ agentsMdPath: AGENTS_MD_PATH, host: HOST });
+  let agentsMdDenied: Set<string> | undefined;
+  if (AGENTS_MD_PATH) {
+    try {
+      const loaded = loadAgentsMdDenyList(AGENTS_MD_PATH);
+      agentsMdDenied = loaded.denied;
+      console.log(
+        `[start-runner] AGENTS.md deny-list loaded from ${AGENTS_MD_PATH} ` +
+          `(${agentsMdDenied.size} tool(s) denied: ${[...agentsMdDenied].join(", ") || "<none>"})`
+      );
+    } catch (err) {
+      if (err instanceof AgentsMdUnavailableStartup) {
+        console.error(
+          `[start-runner] FATAL: AgentsMdUnavailableStartup reason=${err.reason} ` +
+            `path=${err.path} — per §11.2.1 refusing to open listener.`
+        );
+        process.exit(1);
+      }
+      throw err;
+    }
+  }
   const markers = new MarkerEmitter({ enabled: markersEnabled });
   if (markersEnabled) {
     console.log(`[start-runner] crash-test markers enabled (RUNNER_CRASH_TEST_MARKERS=1)`);
@@ -264,7 +294,10 @@ async function main() {
   let registry: ReturnType<typeof loadToolRegistry> | undefined;
   if (registryPath) {
     try {
-      registry = loadToolRegistry(registryPath);
+      registry = loadToolRegistry(
+        registryPath,
+        agentsMdDenied ? { denied: agentsMdDenied } : {}
+      );
       // §11.4 — stamp static-fixture tools with source + boot-time
       // registered_at so /tools/registered reflects per-tool metadata
       // consistently whether the tool came from the fixture or a later

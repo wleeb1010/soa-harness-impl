@@ -8,3 +8,11 @@ export {
   type DynamicWatcherOptions,
   type DynamicWatcherHandle
 } from "./dynamic-watcher.js";
+export {
+  loadAgentsMdDenyList,
+  parseAgentsMdDenyList,
+  assertAgentsMdListenerSafe,
+  AgentsMdUnavailableStartup,
+  AgentsMdOnPublicListener,
+  type LoadedAgentsMd
+} from "./agents-md.js";
