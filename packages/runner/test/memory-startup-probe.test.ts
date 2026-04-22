@@ -6,6 +6,7 @@ import {
   runStartupMemoryProbe
 } from "../src/memory/index.js";
 import { SystemLogBuffer } from "../src/system-log/index.js";
+import { BOOT_SESSION_ID } from "../src/permission/boot-session.js";
 
 // Finding S / SV-MEM-03 — §8.3 line 581 startup probe semantics.
 //
@@ -94,7 +95,7 @@ describe("runStartupMemoryProbe — §8.3 driver", () => {
     expect(probe.getState()).toBe("ready");
     expect(probe.check()).toBeNull();
 
-    const logs = systemLog.snapshot("ses_runner_boot_____");
+    const logs = systemLog.snapshot(BOOT_SESSION_ID);
     expect(logs).toHaveLength(1);
     expect(logs[0]?.category).toBe("MemoryLoad");
     expect(logs[0]?.code).toBe("memory-ready");
@@ -126,7 +127,7 @@ describe("runStartupMemoryProbe — §8.3 driver", () => {
     expect(probe.getLastError()).toContain("MemoryUnavailableStartup");
 
     // 3 retry warn records + 1 final error record = 4 entries.
-    const logs = systemLog.snapshot("ses_runner_boot_____");
+    const logs = systemLog.snapshot(BOOT_SESSION_ID);
     expect(logs).toHaveLength(4);
     const retries = logs.filter((l) => l.code === "memory-probe-retry");
     expect(retries).toHaveLength(3);
@@ -175,7 +176,7 @@ describe("runStartupMemoryProbe — §8.3 driver", () => {
       expect(result.ready).toBe(true);
       expect(result.attempts).toBe(2);
       expect(probe.getState()).toBe("ready");
-      const logs = systemLog.snapshot("ses_runner_boot_____");
+      const logs = systemLog.snapshot(BOOT_SESSION_ID);
       expect(logs.map((l) => l.code)).toEqual(["memory-probe-retry", "memory-ready"]);
     } finally {
       await app.close();

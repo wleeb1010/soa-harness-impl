@@ -42,9 +42,11 @@ export interface StartupMemoryProbeOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
+import { BOOT_SESSION_ID } from "../permission/boot-session.js";
+
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_BACKOFF_MS = 500;
-const DEFAULT_BOOT_SESSION_ID = "ses_runner_boot_____";
+const DEFAULT_BOOT_SESSION_ID = BOOT_SESSION_ID;
 
 export async function runStartupMemoryProbe(
   opts: StartupMemoryProbeOptions

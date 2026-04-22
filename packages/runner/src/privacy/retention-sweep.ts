@@ -19,10 +19,10 @@
  */
 
 import type { SystemLogBuffer } from "../system-log/index.js";
+import { BOOT_SESSION_ID as DEFAULT_BOOT_SESSION_ID } from "../permission/boot-session.js";
 
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 h
 const DEFAULT_TICK_MS = 5 * 60 * 1000; // 5 min
-const DEFAULT_BOOT_SESSION_ID = "ses_runner_boot_____";
 
 export type RetentionCategory =
   | "audit-integrity"

@@ -6,6 +6,7 @@ import {
   RetentionSweepScheduler
 } from "../src/privacy/index.js";
 import { SystemLogBuffer } from "../src/system-log/index.js";
+import { BOOT_SESSION_ID } from "../src/permission/boot-session.js";
 
 // Finding AH — §10.7.3 SV-PRIV-04 retention-sweep env-hook parser + guard.
 
@@ -116,7 +117,7 @@ describe("Finding AH — scheduler honors parsed env config", () => {
     sweeper.stop();
     // System-log surface picked up the sweep.
     const sweepLogs = buf
-      .snapshot("ses_runner_boot_____")
+      .snapshot(BOOT_SESSION_ID)
       .filter((r) => r.code === "retention-sweep-ran");
     expect(sweepLogs.length).toBe(1);
   });

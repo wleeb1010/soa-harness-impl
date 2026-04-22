@@ -6,6 +6,7 @@ import type { AuditChain } from "../audit/index.js";
 import type { StreamEventEmitter } from "../stream/index.js";
 import type { SystemLogBuffer } from "../system-log/index.js";
 import type { InMemorySubjectStore, SubjectScope } from "./subject-store.js";
+import { BOOT_SESSION_ID } from "../permission/boot-session.js";
 
 /**
  * §10.7.1 privacy routes. Two first-class endpoints implementing the
@@ -61,7 +62,7 @@ interface ExportRequestBody {
 
 export const privacyPlugin: FastifyPluginAsync<PrivacyRouteOptions> = async (app, opts) => {
   const runnerVersion = opts.runnerVersion ?? "1.0";
-  const bootSessionId = opts.bootSessionId ?? "ses_runner_boot_____";
+  const bootSessionId = opts.bootSessionId ?? BOOT_SESSION_ID;
 
   app.post("/privacy/delete_subject", async (request, reply) => {
     reply.header("Cache-Control", "no-store");

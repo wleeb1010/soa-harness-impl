@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { fastify, type FastifyInstance } from "fastify";
 import { MemoryMcpClient, ConsolidationScheduler } from "../src/memory/index.js";
 import { SystemLogBuffer } from "../src/system-log/index.js";
+import { BOOT_SESSION_ID } from "../src/permission/boot-session.js";
 
 // Finding U / SV-MEM-05 — §8.4 consolidation scheduler.
 //   - 24 h elapsed-time trigger (default)
@@ -54,7 +55,7 @@ describe("ConsolidationScheduler — Finding U / SV-MEM-05", () => {
       expect(outcome.pending_count).toBe(0);
       expect(mock.calls()).toBe(1);
 
-      const logs = systemLog.snapshot("ses_runner_boot_____");
+      const logs = systemLog.snapshot(BOOT_SESSION_ID);
       expect(logs).toHaveLength(1);
       expect(logs[0]?.category).toBe("ContextLoad");
       expect(logs[0]?.code).toBe("consolidation-ran");
@@ -171,7 +172,7 @@ describe("ConsolidationScheduler — Finding U / SV-MEM-05", () => {
       // resilience: don't let a flaky MCP push the next run 24h out.
       expect(afterLastRun).toBe(firstLastRun);
 
-      const logs = systemLog.snapshot("ses_runner_boot_____");
+      const logs = systemLog.snapshot(BOOT_SESSION_ID);
       expect(logs).toHaveLength(1);
       expect(logs[0]?.category).toBe("Error");
       expect(logs[0]?.code).toBe("consolidation-failed");

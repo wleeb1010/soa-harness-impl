@@ -36,3 +36,4 @@ export {
   type ToolResidencyMetadata,
   type ToolResidencyMetadataLookup
 } from "./decisions-route.js";
+export { BOOT_SESSION_ID } from "./boot-session.js";

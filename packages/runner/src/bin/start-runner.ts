@@ -8,7 +8,7 @@ import { loadConformanceCard } from "../card/conformance-loader.js";
 import { createClock } from "../clock/index.js";
 import { CrlCache, type Crl, type CrlFetcher } from "../crl/index.js";
 import { BootOrchestrator } from "../boot/index.js";
-import { InMemorySessionStore, type Capability } from "../permission/index.js";
+import { InMemorySessionStore, BOOT_SESSION_ID, type Capability } from "../permission/index.js";
 import {
   loadToolRegistry,
   ToolPoolStale,
@@ -328,6 +328,29 @@ async function main() {
   const boot = new BootOrchestrator({ anchors, crl });
 
   const sessionStore = new InMemorySessionStore();
+  // Finding AO — register the runner-boot session so bootstrap-scoped
+  // bearers can read GET /logs/system/recent for boot-lifetime records
+  // (startup probes, retention sweeps, consolidation ticks,
+  // ConfigPrecedenceViolation from Finding AN). The bootstrap bearer
+  // doubles as the session_bearer for this synthetic session; no
+  // §12.6 POST /sessions flow is used. session_id matches the
+  // §12.1 pattern so /logs/system/recent's parameter validator
+  // accepts it.
+  if (BOOTSTRAP_BEARER !== undefined) {
+    sessionStore.register(BOOT_SESSION_ID, BOOTSTRAP_BEARER, {
+      activeMode: "ReadOnly",
+      user_sub: "runner-boot",
+      created_at: clock(),
+      // Boot session stays live for the Runner's lifetime — pin the
+      // expiry far enough out that typical conformance runs never race
+      // against it. Real §12.6 sessions still use the 60-86400s default.
+      expires_at: new Date(clock().getTime() + 365 * 24 * 60 * 60 * 1000),
+      canDecide: false
+    });
+    console.log(
+      `[start-runner] Finding AO — registered boot session ${BOOT_SESSION_ID} so bootstrap bearer can poll /logs/system/recent for boot-lifetime records`
+    );
+  }
   if (DEMO_SESSION_SPEC) {
     const parts = DEMO_SESSION_SPEC.split(":");
     const sid = parts[0];
