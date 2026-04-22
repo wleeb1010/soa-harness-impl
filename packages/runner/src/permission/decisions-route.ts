@@ -53,6 +53,14 @@ export interface PermissionsDecisionsRouteOptions {
   readiness: ReadinessProbe;
   clock: Clock;
   activeCapability: Capability;
+  /**
+   * §11.2 agentType pool axis. When `"explore"`, the per-session Tool
+   * Pool is restricted to `risk_class = ReadOnly`; invocations of
+   * non-ReadOnly tools return 403 PermissionDenied with
+   * `reason: "agent-type-insufficient"` (Finding AV / HR-07). Absent
+   * or any other value imposes no agentType-derived filter.
+   */
+  agentType?: string;
   toolRequirements?: Record<string, Control>;
   policyEndpoint?: string;
   /** Resolves PDA signing keys — consumed when the resolver says Prompt. */
@@ -408,6 +416,23 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     const toolEntry = opts.registry.lookup(tool);
     if (!toolEntry) {
       return reply.code(404).send({ error: "unknown-tool" });
+    }
+
+    // §11.2 agentType pool filter (Finding AV / HR-07). The Tool Pool
+    // is assembled per-session from the global registry filtered by
+    // agentType: `explore` MUST NOT see anything above ReadOnly. When a
+    // caller invokes a non-ReadOnly tool on an explore-typed deployment
+    // the denial reason is the specific one — `agent-type-insufficient`
+    // — rather than the generic capability-denied or unknown-tool path.
+    if (opts.agentType === "explore" && toolEntry.risk_class !== "ReadOnly") {
+      return reply.code(403).send({
+        error: "PermissionDenied",
+        reason: "agent-type-insufficient",
+        detail:
+          `agentType="${opts.agentType}" restricts the per-session Tool Pool ` +
+          `to risk_class="ReadOnly" per §11.2; tool "${toolEntry.name}" has ` +
+          `risk_class="${toolEntry.risk_class}"`
+      });
     }
 
     // §10.5.1 — audit sink unreachable-halt: refuse Mutating/Destructive tool

@@ -148,6 +148,8 @@ export interface BuildRunnerOptions {
     chain: AuditChain;
     clock: Clock;
     activeCapability: Capability;
+    /** §11.2 agentType pool axis (Finding AV / HR-07). */
+    agentType?: string;
     toolRequirements?: Record<string, Control>;
     policyEndpoint?: string;
     resolvePdaVerifyKey?: HandlerKeyResolver;
@@ -519,6 +521,7 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       readiness: readiness ?? { check: () => null },
       clock: pd.clock,
       activeCapability: pd.activeCapability,
+      ...(pd.agentType !== undefined ? { agentType: pd.agentType } : {}),
       ...(pd.toolRequirements !== undefined ? { toolRequirements: pd.toolRequirements } : {}),
       ...(pd.policyEndpoint !== undefined ? { policyEndpoint: pd.policyEndpoint } : {}),
       ...(pd.resolvePdaVerifyKey !== undefined ? { resolvePdaVerifyKey: pd.resolvePdaVerifyKey } : {}),

@@ -175,6 +175,20 @@ interface CardShape {
    * to its built-in supported set.
    */
   supported_core_versions?: string[];
+  /**
+   * §7 / §9 self-improvement entrypoint declaration. L-46 pinned
+   * `entrypoint_file` as the canonical path; AGENTS.md's
+   * `## Self-Improvement Policy → entrypoint:` line MUST match it.
+   * Finding BA / SV-AGENTS-08 threads this through the AGENTS.md body
+   * validator.
+   */
+  self_improvement?: { entrypoint_file?: string };
+  /**
+   * §11.2 agentType axis. `explore` restricts the per-session tool pool
+   * to `risk_class = ReadOnly` (Finding AV / HR-07). Other values
+   * impose no additional pool filter today.
+   */
+  agentType?: string;
 }
 
 async function main() {
@@ -237,29 +251,10 @@ async function main() {
       throw err;
     }
 
-    // Finding AT / §7.2 + §7.3 full-grammar validation. Import resolution
-    // happens before body validation so cycle/depth detection runs against
-    // the full reachable graph, not just the entry file's declared imports.
-    try {
-      const resolved = resolveAgentsMdImports(AGENTS_MD_PATH);
-      validateAgentsMdBody(resolved);
-      console.log(
-        `[start-runner] AGENTS.md §7.2/§7.3 validation passed for ${AGENTS_MD_PATH}`
-      );
-    } catch (err) {
-      if (
-        err instanceof AgentsMdInvalid ||
-        err instanceof AgentsMdImportDepthExceeded ||
-        err instanceof AgentsMdImportCycle
-      ) {
-        agentsMdValidationErr = err;
-        console.error(
-          `[start-runner] Finding AT — AGENTS.md refused: ${err.message}`
-        );
-      } else {
-        throw err;
-      }
-    }
+    // Finding AT / §7.2 + §7.3 full-grammar validation runs AFTER card
+    // load so Finding BA / SV-AGENTS-08 can thread
+    // `card.self_improvement.entrypoint_file` into the entrypoint-mismatch
+    // check. See block below the card load.
   }
   const markers = new MarkerEmitter({ enabled: markersEnabled });
   if (markersEnabled) {
@@ -331,6 +326,41 @@ async function main() {
     card = JSON.parse(readFileSync(CARD_PATH, "utf8")) as CardShape;
   }
   const anchors = card.security?.trustAnchors ?? [];
+
+  // Finding AT / §7.2 + §7.3 full-grammar validation. Runs AFTER card load
+  // so Finding BA / SV-AGENTS-08 can thread
+  // `card.self_improvement.entrypoint_file` into the entrypoint-mismatch
+  // check. Import resolution happens before body validation so cycle/depth
+  // detection runs against the full reachable graph.
+  if (AGENTS_MD_PATH) {
+    try {
+      const resolved = resolveAgentsMdImports(AGENTS_MD_PATH);
+      const cardEntrypoint = card.self_improvement?.entrypoint_file;
+      validateAgentsMdBody(
+        resolved,
+        cardEntrypoint !== undefined ? { cardEntrypointFile: cardEntrypoint } : {}
+      );
+      console.log(
+        `[start-runner] AGENTS.md §7.2/§7.3 validation passed for ${AGENTS_MD_PATH}` +
+          (cardEntrypoint !== undefined
+            ? ` (entrypoint="${cardEntrypoint}" matched Card self_improvement.entrypoint_file)`
+            : " (Card self_improvement.entrypoint_file absent — entrypoint check skipped)")
+      );
+    } catch (err) {
+      if (
+        err instanceof AgentsMdInvalid ||
+        err instanceof AgentsMdImportDepthExceeded ||
+        err instanceof AgentsMdImportCycle
+      ) {
+        agentsMdValidationErr = err;
+        console.error(
+          `[start-runner] Finding AT — AGENTS.md refused: ${err.message}`
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // L-24 — when RUNNER_CARD_FIXTURE is set, load the pinned conformance handler
   // public key alongside the card and expose it via resolvePdaVerifyKey so
@@ -555,17 +585,22 @@ async function main() {
   // surfaces them. Buffer is session-scoped + category-filtered.
   const systemLog = new SystemLogBuffer({ clock });
 
-  // Finding AN / SV-CARD-10 — §10.3 three-axis precedence guard.
-  // A Card that loosens a lower-precedence axis against a higher one
-  // (explore agentType + non-ReadOnly activeMode, or a Card
-  // toolRequirement denied at the AGENTS.md layer) is refused: we
-  // write a Config/ConfigPrecedenceViolation/error log record per
-  // violation under BOOT_SESSION_ID and pin /ready at 503 so the
-  // Runner never advertises readiness until an operator fixes the
-  // Card.
+  // Findings AN + AW / SV-CARD-10 + HR-11 — §10.3 three-axis precedence
+  // guard. A Card that loosens a lower-precedence axis against a higher
+  // one is refused: we write a Config/ConfigPrecedenceViolation/error
+  // log record per violation under BOOT_SESSION_ID and pin /ready at
+  // 503 so the Runner never advertises readiness until an operator
+  // fixes the Card. Axis 3 (Finding AW) requires the Tool Registry's
+  // default_control per tool — extracted lazily since the registry is
+  // optional at boot.
+  const toolDefaultControls =
+    registry !== undefined
+      ? new Map(registry.names().map((n) => [n, registry.mustLookup(n).default_control]))
+      : undefined;
   const precedenceResult = checkCardPrecedence({
     card: card as CardShape,
-    ...(agentsMdDenied !== undefined ? { agentsMdDenied } : {})
+    ...(agentsMdDenied !== undefined ? { agentsMdDenied } : {}),
+    ...(toolDefaultControls !== undefined ? { toolDefaultControls } : {})
   });
   if (!precedenceResult.ok) {
     for (const v of precedenceResult.violations) {
@@ -1113,6 +1148,9 @@ async function main() {
             chain,
             clock,
             activeCapability,
+            // Finding AV / HR-07 — agentType pool filter with specific
+            // denial reason.
+            ...(typeof card.agentType === "string" ? { agentType: card.agentType } : {}),
             ...(card.permissions?.toolRequirements !== undefined
               ? { toolRequirements: card.permissions.toolRequirements }
               : {}),
