@@ -9,6 +9,11 @@ import type { InMemoryMemoryStateStore } from "../memory/index.js";
 import { MemoryTimeout, type MemoryMcpClient, type MemoryDegradationTracker } from "../memory/index.js";
 import type { BudgetTracker } from "../budget/index.js";
 import type { SystemLogBuffer } from "../system-log/index.js";
+import {
+  negotiateCoreVersion,
+  parseSupportedCoreVersions,
+  RUNNER_SUPPORTED_CORE_VERSIONS
+} from "../governance/index.js";
 
 export interface SessionsRouteOptions {
   sessionStore: InMemorySessionStore;
@@ -99,6 +104,15 @@ export interface SessionsRouteOptions {
    * (incoming request.billing_tag ≠ card) layers on top.
    */
   cardBillingTag?: string;
+  /**
+   * §19.4.1 wire-level version negotiation — Runner's advertised
+   * supported set. When the request body supplies
+   * `supported_core_versions`, the intersection with this set MUST be
+   * non-empty; empty intersection → 400 `VersionNegotiationFailed`
+   * (SV-GOV-08). Absent from the request body = caller accepts the
+   * Runner's declared set implicitly. Default: `["1.0"]`.
+   */
+  supportedCoreVersions?: readonly string[];
 }
 
 const WINDOW_MS = 60_000;
@@ -146,6 +160,12 @@ interface BootstrapRequest {
    * accepts the card's value implicitly.
    */
   billing_tag?: unknown;
+  /**
+   * §19.4.1 SV-GOV-08 — caller's advertised supported Core versions.
+   * Optional; when omitted, caller accepts Runner's declared set.
+   * When present, intersection with Runner's set MUST be non-empty.
+   */
+  supported_core_versions?: unknown;
 }
 
 export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> = async (app, opts) => {
@@ -154,6 +174,7 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
   const maxTtl = Math.min(opts.maxTtlSeconds ?? TTL_MAX, TTL_MAX);
   const limiter = new BootstrapLimiter(opts.requestsPerMinute ?? 30, opts.clock);
   const validModes = new Set(Object.keys(CAPABILITY_PERMITS) as Capability[]);
+  const runnerSupported = opts.supportedCoreVersions ?? RUNNER_SUPPORTED_CORE_VERSIONS;
 
   app.post("/sessions", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
@@ -201,6 +222,35 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
         .send({ error: "malformed-request", detail: "request_decide_scope must be a boolean" });
     }
     const canDecide = rawDecideScope === true;
+
+    // §19.4.1 SV-GOV-08 — wire-level version negotiation. When the
+    // caller advertises a supported_core_versions set, intersect it
+    // with the Runner's set; empty intersection aborts the bootstrap
+    // with VersionNegotiationFailed per §24. Absent-field = implicit
+    // acceptance of the Runner's declared set (no negotiation
+    // failure possible). Runs BEFORE capability + billing-tag gates
+    // because §19.4.1 treats negotiation as the session-establishment
+    // precondition: no point in clamping activeMode or enforcing
+    // billing equality against a Card the caller's wire version can't
+    // even negotiate.
+    const rawSupportedVersions = body.supported_core_versions;
+    if (rawSupportedVersions !== undefined) {
+      const parsed = parseSupportedCoreVersions(rawSupportedVersions);
+      if (!Array.isArray(parsed)) {
+        return reply.code(400).send({ error: "malformed-request", detail: parsed.error });
+      }
+      const negotiated = negotiateCoreVersion(parsed, runnerSupported);
+      if (negotiated === null) {
+        return reply.code(400).send({
+          error: "VersionNegotiationFailed",
+          detail:
+            `supported_core_versions intersection is empty — caller advertises ` +
+            `${JSON.stringify(parsed)}, Runner supports ${JSON.stringify([...runnerSupported])}`,
+          runner_supported_core_versions: [...runnerSupported],
+          caller_supported_core_versions: parsed
+        });
+      }
+    }
 
     const requestedMode = requested as Capability;
     if (CAP_RANK[requestedMode] > CAP_RANK[opts.cardActiveMode]) {

@@ -142,6 +142,12 @@ interface CardShape {
     /** @deprecated L-40 renamed to `sharing_policy`; retained for old fixtures. */
     default_sharing_scope?: "none" | "session" | "project" | "tenant";
   };
+  /**
+   * §19.4.1 wire-level version advertisement (SV-GOV-08). `"A.B"`-pattern
+   * array; MUST include `soaHarnessVersion`. Absent = Runner falls back
+   * to its built-in supported set.
+   */
+  supported_core_versions?: string[];
 }
 
 async function main() {
@@ -563,6 +569,25 @@ async function main() {
     );
   }
 
+  // §19.2 SV-GOV-05 — load the static errata body at boot so GET
+  // /errata/v1.0.json returns a 200 JSON. The canonical path is
+  // resolved relative to the repo root; operators can override via
+  // RUNNER_ERRATA_PATH for deployment-specific errata feeds.
+  const ERRATA_PATH =
+    process.env.RUNNER_ERRATA_PATH ?? "docs/errata-v1.0.json";
+  let errataBody: unknown;
+  if (existsSync(ERRATA_PATH)) {
+    try {
+      errataBody = JSON.parse(readFileSync(ERRATA_PATH, "utf8"));
+    } catch (err) {
+      console.warn(
+        `[start-runner] errata load failed at ${ERRATA_PATH}: ${
+          err instanceof Error ? err.message : String(err)
+        }; /errata/v1.0.json will be unavailable`
+      );
+    }
+  }
+
   // Build the ResumeContext before startRunner so both the state-route
   // plugin (lazy-hydrate) and the post-boot scan share the same ctx.
   const cardVersionForResume =
@@ -659,6 +684,14 @@ async function main() {
             // every new session (record + persisted file + bearer scope).
             ...(typeof card.tokenBudget?.billingTag === "string"
               ? { cardBillingTag: card.tokenBudget.billingTag }
+              : {}),
+            // §19.4.1 SV-GOV-08 — advertise the Runner's supported Core
+            // versions so the bootstrap path can reject empty-intersection
+            // wire versions. Prefer the Card's declared set when present;
+            // fall back to the Runner's built-in `["1.0"]`.
+            ...(Array.isArray(card.supported_core_versions) &&
+            card.supported_core_versions.length > 0
+              ? { supportedCoreVersions: card.supported_core_versions }
               : {})
           }
         }
@@ -803,6 +836,15 @@ async function main() {
       sessionStore,
       clock,
       runnerVersion: "1.0"
+    },
+    governance: {
+      clock,
+      runnerVersion: "1.0",
+      ...(Array.isArray(card.supported_core_versions) &&
+      card.supported_core_versions.length > 0
+        ? { supportedCoreVersions: card.supported_core_versions }
+        : {}),
+      ...(errataBody !== undefined ? { errataBody } : {})
     }
   });
 

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://soa-harness.org/schemas/v1.0/errata.schema.json",
+  "spec_version": "1.0",
+  "spec_canonical_url": "https://soa-harness.org/errata/v1.0/",
+  "published_at": "2026-04-22T00:00:00Z",
+  "description": "Clarifications and non-normative corrections to SOA-Harness v1.0. Per §19.2, errata MUST NOT change any MUST's meaning — they are clarifications only. Binding errata reshape MUSTs only via a §19.4 minor/major bump.",
+  "errata": [
+    {
+      "id": "E-001",
+      "section": "§8.4.1",
+      "subject": "Consolidation env-hook loopback guard",
+      "status": "clarification",
+      "published_at": "2026-04-22T00:00:00Z",
+      "body": "`RUNNER_CONSOLIDATION_TICK_MS` and `RUNNER_CONSOLIDATION_ELAPSED_MS` are test-only hooks. Runners MUST refuse startup when either is set and the listener binds to a non-loopback interface. No change to the consolidation trigger algorithm itself."
+    },
+    {
+      "id": "E-002",
+      "section": "§13.3",
+      "subject": "Synthetic cache-hit env hook",
+      "status": "clarification",
+      "published_at": "2026-04-22T00:00:00Z",
+      "body": "`RUNNER_SYNTHETIC_CACHE_HIT=<n>` stamps both `prompt_tokens_cached` and `completion_tokens_cached` by <n> on each decision for test-only validation of §13.3 cache accounting. Subject to the same loopback-only guard as §8.4.1 hooks. Production Runners with this env var set on a non-loopback listener MUST refuse startup."
+    },
+    {
+      "id": "E-003",
+      "section": "§10.5",
+      "subject": "Optional billing_tag in audit records",
+      "status": "clarification",
+      "published_at": "2026-04-22T00:00:00Z",
+      "body": "When a session carries a billing_tag at bootstrap, that tag MUST appear in each audit record's hash-chained body. When the session omits billing_tag, the key MUST be absent from the record (not an empty string placeholder). This preserves byte-identity of the hash chain across tag-absent and tag-absent-historically sessions."
+    },
+    {
+      "id": "E-004",
+      "section": "§7.318",
+      "subject": "Memory sharing_policy canonical key",
+      "status": "clarification",
+      "published_at": "2026-04-22T00:00:00Z",
+      "body": "The Agent Card field at `memory.sharing_policy` is canonical. Earlier pre-1.0 drafts referred to this as `memory.default_sharing_scope`; Runners MUST accept `sharing_policy` as the primary key and MAY accept `default_sharing_scope` for backward compatibility within the §19.4 two-minor window."
+    }
+  ]
+}

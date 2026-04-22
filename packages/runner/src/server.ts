@@ -33,6 +33,7 @@ import {
 import { eventsRecentPlugin, StreamEventEmitter } from "./stream/index.js";
 import { memoryStatePlugin, InMemoryMemoryStateStore } from "./memory/index.js";
 import { BudgetTracker } from "./budget/index.js";
+import { versionPlugin } from "./governance/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -94,6 +95,20 @@ export interface BuildRunnerOptions {
     memoryDefaultSharingScope?: "none" | "session" | "project" | "tenant";
     /** L-37 Finding Q — card.tokenBudget.billingTag snapshot at bootstrap. */
     cardBillingTag?: string;
+    /** §19.4.1 SV-GOV-08 — advertised supported Core versions. */
+    supportedCoreVersions?: readonly string[];
+  };
+  /**
+   * §19.4.1 / SV-GOV-08 + §19.2 / SV-GOV-05. When present, the Runner
+   * exposes GET /version (advertised supported set) and, when errataBody
+   * is non-undefined, GET /errata/v1.0.json (static errata body).
+   */
+  governance?: {
+    clock: Clock;
+    runnerVersion?: string;
+    supportedCoreVersions?: readonly string[];
+    errataBody?: unknown;
+    errataPath?: string;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -315,7 +330,24 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.memoryDefaultSharingScope !== undefined
         ? { memoryDefaultSharingScope: sb.memoryDefaultSharingScope }
         : {}),
-      ...(sb.cardBillingTag !== undefined ? { cardBillingTag: sb.cardBillingTag } : {})
+      ...(sb.cardBillingTag !== undefined ? { cardBillingTag: sb.cardBillingTag } : {}),
+      ...(sb.supportedCoreVersions !== undefined
+        ? { supportedCoreVersions: sb.supportedCoreVersions }
+        : {})
+    });
+  }
+
+  if (opts.governance !== undefined) {
+    const gv = opts.governance;
+    await app.register(versionPlugin, {
+      readiness: readiness ?? { check: () => null },
+      clock: gv.clock,
+      ...(gv.runnerVersion !== undefined ? { runnerVersion: gv.runnerVersion } : {}),
+      ...(gv.supportedCoreVersions !== undefined
+        ? { supportedCoreVersions: gv.supportedCoreVersions }
+        : {}),
+      ...(gv.errataBody !== undefined ? { errataBody: gv.errataBody } : {}),
+      ...(gv.errataPath !== undefined ? { errataPath: gv.errataPath } : {})
     });
   }
 
