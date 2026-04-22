@@ -32,3 +32,9 @@ export {
   partitionSensitivePersonal,
   type SensitivePersonalIncident
 } from "./system-log-emission.js";
+export {
+  parseRetentionSweepEnv,
+  assertRetentionSweepListenerSafe,
+  RetentionSweepHookOnPublicListener,
+  type RetentionSweepEnvConfig
+} from "./retention-env-guard.js";

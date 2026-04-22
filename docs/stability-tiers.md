@@ -63,6 +63,8 @@ on a non-loopback interface:
 | `RUNNER_CONSOLIDATION_TICK_MS` | §8.4.1 | Consolidation-scheduler tick override for SV-MEM-05 |
 | `RUNNER_CONSOLIDATION_ELAPSED_MS` | §8.4.1 | Consolidation elapsed-threshold override |
 | `RUNNER_SYNTHETIC_CACHE_HIT` | §13.3 / SV-BUD-04 | Per-decision cache-token increment |
+| `RUNNER_RETENTION_SWEEP_TICK_MS` | §10.7.3 / SV-PRIV-04 | Retention-sweep tick-poll override |
+| `RUNNER_RETENTION_SWEEP_INTERVAL_MS` | §10.7.3 / SV-PRIV-04 | Retention-sweep firing interval override |
 
 These hooks are Experimental in the sense of §19.3 — they exist
 solely for conformance testing and MAY change in any release

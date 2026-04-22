@@ -53,7 +53,9 @@ import {
 } from "../budget/index.js";
 import {
   InMemorySubjectStore,
-  RetentionSweepScheduler
+  RetentionSweepScheduler,
+  parseRetentionSweepEnv,
+  assertRetentionSweepListenerSafe
 } from "../privacy/index.js";
 import {
   MarkerEmitter,
@@ -641,14 +643,33 @@ async function main() {
   // emits a System Event Log record each pass. M3 hooks are no-op
   // counters since the Runner doesn't yet populate retention-tracked
   // persisted state beyond the audit chain.
+  //
+  // Finding AH — RUNNER_RETENTION_SWEEP_{TICK,INTERVAL}_MS env hooks
+  // override the cadence for conformance probes. Loopback-only guard
+  // per the §8.4.1 / §11.3.1 / §10.6.1 test-hook pattern.
+  const retentionSweepEnv = parseRetentionSweepEnv(process.env);
+  assertRetentionSweepListenerSafe({ env: retentionSweepEnv, host: HOST });
   const retentionSweeper = new RetentionSweepScheduler({
     systemLog,
     clock,
-    log: (m) => console.log(m)
+    log: (m) => console.log(m),
+    ...(retentionSweepEnv.tickIntervalMs !== undefined
+      ? { tickIntervalMs: retentionSweepEnv.tickIntervalMs }
+      : {}),
+    ...(retentionSweepEnv.intervalMs !== undefined
+      ? { intervalMs: retentionSweepEnv.intervalMs }
+      : {})
   });
   retentionSweeper.start();
+  const retentionTickMs = retentionSweepEnv.tickIntervalMs ?? 5 * 60 * 1000;
+  const retentionIntervalMs = retentionSweepEnv.intervalMs ?? 24 * 60 * 60 * 1000;
+  const retentionHookNote =
+    retentionSweepEnv.tickIntervalMs !== undefined ||
+    retentionSweepEnv.intervalMs !== undefined
+      ? " [§10.7.3 test hooks active]"
+      : "";
   console.log(
-    "[start-runner] §10.7.3 retention-sweep scheduler started (24h cadence)"
+    `[start-runner] §10.7.3 retention-sweep scheduler started (tick=${retentionTickMs}ms, interval=${retentionIntervalMs}ms)${retentionHookNote}`
   );
 
   // §10.7.2 SV-PRIV-05 — tool residency metadata. Wired from the
