@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -207,11 +207,18 @@ describe("loadConformanceCard — L-30 dynamic MANIFEST lookup", () => {
   it("no MANIFEST.json reachable: throws manifest-missing", async () => {
     const cert = await signingCertB64();
     const parsed = JSON.parse(readFileSync(V1_0_FIXTURE, "utf8"));
-    // Write the fixture to a tmp dir well away from any MANIFEST. Auto-
-    // detect walks up 8 levels — tmpdir sits at the filesystem root on
-    // most platforms, so no MANIFEST will be found.
+    // Auto-detect walks up 8 levels looking for MANIFEST.json. On Unix
+    // tmpdir is shallow (`/tmp`) so it escapes to `/` quickly; on
+    // Windows tmpdir is nested (`C:\Users\<user>\AppData\Local\Temp`)
+    // and the walk can escape into user dirs where a stray MANIFEST
+    // from another process can break the "no MANIFEST reachable"
+    // premise. Build a 9-level-deep fixture path so the walk
+    // exhausts its maxDepth budget before leaving the scratch tree,
+    // regardless of the platform's tmpdir depth.
     const tmp = mkdtempSync(join(tmpdir(), "no-manifest-"));
-    const fixturePath = join(tmp, "agent-card.json");
+    const deep = join(tmp, "a", "b", "c", "d", "e", "f", "g", "h", "i");
+    mkdirSync(deep, { recursive: true });
+    const fixturePath = join(deep, "agent-card.json");
     writeFileSync(fixturePath, JSON.stringify(parsed));
     try {
       await expect(
