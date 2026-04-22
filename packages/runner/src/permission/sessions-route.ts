@@ -92,6 +92,13 @@ export interface SessionsRouteOptions {
    * "project" | "tenant" (SharingPolicy enum from §8.5).
    */
   memoryDefaultSharingScope?: "none" | "session" | "project" | "tenant";
+  /**
+   * §7 card.tokenBudget.billingTag — stamped on the new session record
+   * AND on the persisted session file for post-hoc billing attribution.
+   * Finding Q (SV-BUD-05). Finding R's BillingTagMismatch gate
+   * (incoming request.billing_tag ≠ card) layers on top.
+   */
+  cardBillingTag?: string;
 }
 
 const WINDOW_MS = 60_000;
@@ -132,6 +139,13 @@ interface BootstrapRequest {
    * Default false. `sessions:create` is never carried on session bearers.
    */
   request_decide_scope?: unknown;
+  /**
+   * Finding R / SV-BUD-07 — optional request-supplied billing_tag.
+   * When present AND the Runner's card.tokenBudget.billingTag is set,
+   * divergence raises §24 BillingTagMismatch (403). Omitting the field
+   * accepts the card's value implicitly.
+   */
+  billing_tag?: unknown;
 }
 
 export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> = async (app, opts) => {
@@ -196,12 +210,38 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
       });
     }
 
+    // Finding R / SV-BUD-07 — §24 BillingTagMismatch. When the request
+    // body supplies billing_tag AND the card declares one, they MUST
+    // match. Body omitting billing_tag implicitly accepts the card's
+    // value. Card omitting billingTag (e.g., pre-L-37 fixtures) skips
+    // the gate entirely — no divergence to detect.
+    const rawBillingTag = body.billing_tag;
+    if (rawBillingTag !== undefined && typeof rawBillingTag !== "string") {
+      return reply.code(400).send({
+        error: "malformed-request",
+        detail: "billing_tag must be a string"
+      });
+    }
+    if (
+      typeof rawBillingTag === "string" &&
+      typeof opts.cardBillingTag === "string" &&
+      rawBillingTag !== opts.cardBillingTag
+    ) {
+      return reply.code(403).send({
+        error: "BillingTagMismatch",
+        detail:
+          `request billing_tag="${rawBillingTag}" does not match Agent Card ` +
+          `tokenBudget.billingTag="${opts.cardBillingTag}" per §7 line 1821`
+      });
+    }
+
     const created = opts.sessionStore.create({
       activeMode: requestedMode,
       user_sub: userSub,
       ttlSeconds,
       now: opts.clock(),
-      canDecide
+      canDecide,
+      ...(opts.cardBillingTag !== undefined ? { billing_tag: opts.cardBillingTag } : {})
     });
 
     // §12.6 MUST — persist the session file BEFORE returning 201. A 201
@@ -240,7 +280,14 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
         },
         counters: {},
         tool_pool_hash: toolPoolHash,
-        card_version: cardVersion
+        card_version: cardVersion,
+        // Finding Q — billing_tag follows the card's tokenBudget.billingTag
+        // (§7 line 1821 equality is the premise for Finding R's divergence
+        // detection). session.schema.json is open so the extra field
+        // rides along cleanly.
+        ...(opts.cardBillingTag !== undefined
+          ? { billing_tag: opts.cardBillingTag }
+          : {})
       } as PersistedSession;
       try {
         await opts.persister.writeSession(file);

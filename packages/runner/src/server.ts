@@ -92,6 +92,8 @@ export interface BuildRunnerOptions {
     systemLog?: import("./system-log/index.js").SystemLogBuffer;
     /** L-38 Finding V — card-driven sharing_scope for bootstrap prefetch. */
     memoryDefaultSharingScope?: "none" | "session" | "project" | "tenant";
+    /** L-37 Finding Q — card.tokenBudget.billingTag snapshot at bootstrap. */
+    cardBillingTag?: string;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -310,7 +312,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.systemLog !== undefined ? { systemLog: sb.systemLog } : {}),
       ...(sb.memoryDefaultSharingScope !== undefined
         ? { memoryDefaultSharingScope: sb.memoryDefaultSharingScope }
-        : {})
+        : {}),
+      ...(sb.cardBillingTag !== undefined ? { cardBillingTag: sb.cardBillingTag } : {})
     });
   }
 

@@ -25,6 +25,14 @@ export interface SessionRecord {
    * by /permissions/decisions (§10.3.2). Default false.
    */
   canDecide: boolean;
+  /**
+   * §7 Agent Card tokenBudget.billingTag copied at session-bootstrap time.
+   * Finding Q (SV-BUD-05) — "Billing tag MUST be propagated to: OTel
+   * resource attributes, Permission Audit Trail, observability.
+   * requiredResourceAttrs." Session state match: line 1821 — divergence
+   * from card's value raises BillingTagMismatch (Finding R, §24).
+   */
+  billing_tag?: string;
 }
 
 export interface CreateSessionInput {
@@ -36,6 +44,8 @@ export interface CreateSessionInput {
   bearer?: string;
   /** Grant permissions:decide:<session_id> scope on the returned bearer. T-03. */
   canDecide?: boolean;
+  /** Finding Q — card.tokenBudget.billingTag snapshot at session mint. */
+  billing_tag?: string;
 }
 
 export interface CreatedSession {
@@ -62,6 +72,7 @@ export class InMemorySessionStore implements SessionStore {
       expires_at?: Date;
       created_at?: Date;
       canDecide?: boolean;
+      billing_tag?: string;
     }
   ): void {
     const created_at = opts?.created_at ?? new Date();
@@ -72,7 +83,8 @@ export class InMemorySessionStore implements SessionStore {
       user_sub: opts?.user_sub ?? "test-user",
       created_at,
       expires_at,
-      canDecide: opts?.canDecide ?? false
+      canDecide: opts?.canDecide ?? false,
+      ...(opts?.billing_tag !== undefined ? { billing_tag: opts.billing_tag } : {})
     };
     this.records.set(session_id, { rec, bearerHash: this.hash(bearer) });
   }
@@ -87,7 +99,8 @@ export class InMemorySessionStore implements SessionStore {
       user_sub: input.user_sub,
       created_at: input.now,
       expires_at: new Date(input.now.getTime() + input.ttlSeconds * 1000),
-      canDecide: input.canDecide ?? false
+      canDecide: input.canDecide ?? false,
+      ...(input.billing_tag !== undefined ? { billing_tag: input.billing_tag } : {})
     };
     this.records.set(session_id, { rec, bearerHash: this.hash(session_bearer) });
     return { session_id, session_bearer, record: rec };

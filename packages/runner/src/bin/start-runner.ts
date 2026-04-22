@@ -606,6 +606,11 @@ async function main() {
             // Finding V / SV-MEM-06 — honor card.memory.default_sharing_scope.
             ...(card.memory?.default_sharing_scope !== undefined
               ? { memoryDefaultSharingScope: card.memory.default_sharing_scope }
+              : {}),
+            // Finding Q / SV-BUD-05 — stamp card.tokenBudget.billingTag on
+            // every new session (record + persisted file + bearer scope).
+            ...(typeof card.tokenBudget?.billingTag === "string"
+              ? { cardBillingTag: card.tokenBudget.billingTag }
               : {})
           }
         }

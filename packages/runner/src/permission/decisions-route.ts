@@ -707,6 +707,15 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       reason: finalReason,
       signer_key_id: pdaSignerKid ?? ""
     });
+    // Finding Q billing_tag attribution — intentionally NOT embedded on
+    // the audit row. audit-records-response.schema.json has
+    // additionalProperties:false, so adding billing_tag would either
+    // (a) break the pinned schema on the wire, or (b) break hash-chain
+    // verification (consumers recompute this_hash from response fields;
+    // stripping billing_tag at serve-time would desync). For M3,
+    // billing attribution is a session-join: audit row carries session_id,
+    // session record carries billing_tag. A spec-side schema extension
+    // at the next pin bump flips this to row-embedded.
 
     // §10.5.1 — degraded-buffering / unreachable-halt: persist the just-
     // appended row to the fsync-backed local queue. In healthy this is a
