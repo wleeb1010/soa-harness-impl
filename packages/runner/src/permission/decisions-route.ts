@@ -374,6 +374,32 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       });
     }
 
+    // §13.2 pre-call projection-over-budget check (HR-02 / SV-BUD-02..07).
+    // Runs BEFORE the §15 PreToolUse hook + bracket-persist pending write so
+    // a doomed turn doesn't consume an audit slot or spin up hook children.
+    // When the §13.1 p95 * 1.15 projection + cumulative-so-far would push
+    // past maxTokensPerRun, terminate the session with
+    // SessionEnd{stop_reason:"BudgetExhausted"}, revoke the bearer, and
+    // return 403. The current turn is refused (no audit row, no side_effect).
+    if (
+      opts.budgetTracker !== undefined &&
+      opts.budgetTracker.has(sessionId) &&
+      opts.budgetTracker.wouldExhaust(sessionId)
+    ) {
+      terminateForBudgetExhausted(
+        sessionId,
+        opts.emitter,
+        opts.sessionStore,
+        opts.budgetTracker
+      );
+      return reply.code(403).send({
+        error: "PermissionDenied",
+        reason: "budget-exhausted",
+        detail:
+          "§13.2 pre-call enforcement: projected next-turn tokens would exceed maxTokensPerRun; session terminated with stop_reason=BudgetExhausted"
+      });
+    }
+
     // §15 PreToolUse hook: fires BEFORE the resolver. Deny short-circuits
     // to 403 with no audit row / no side_effect. Prompt forces the final
     // decision's user-facing outcome into Prompt even when the resolver
@@ -718,10 +744,31 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     // stops short of tool invocation), the per-turn cost is a stable
     // constant — validators observe a reliable delta per decision.
     // When the dispatcher lands, replace with API-reported token counts.
+    //
+    // §13.2 actual-over-budget check (HR-03 / SV-BUD-02..07). AFTER
+    // recordTurn advances cumulative_tokens_consumed, compare against
+    // maxTokensPerRun. When the *just-committed* turn pushed the session
+    // past its hard cap, terminate the session with
+    // SessionEnd{stop_reason:"BudgetExhausted"} and revoke the bearer.
+    // The current turn's 201 response still fires (the turn completed
+    // before the budget tripped); subsequent requests from the same
+    // bearer fail at auth because the session record is gone.
     if (opts.budgetTracker) {
       opts.budgetTracker.recordTurn(sessionId, {
         actual_total_tokens: opts.budgetPerTurnEstimate ?? 512
       });
+      const snapshot = opts.budgetTracker.getProjection(sessionId);
+      if (
+        snapshot !== undefined &&
+        snapshot.cumulative_tokens_consumed >= snapshot.max_tokens_per_run
+      ) {
+        terminateForBudgetExhausted(
+          sessionId,
+          opts.emitter,
+          opts.sessionStore,
+          opts.budgetTracker
+        );
+      }
     }
 
     // §14.1 PermissionDecision — emit AFTER the commit write completes so
@@ -903,4 +950,38 @@ async function compensatePendingSideEffect(
   } catch {
     // Swallow — the 4xx return is the primary signal to the client.
   }
+}
+
+/**
+ * §13.2 BudgetExhausted termination helper (HR-02 + HR-03 / SV-BUD-02..07).
+ *
+ * Shared by the pre-call projection-over check (HR-02) and the post-commit
+ * actual-over check (HR-03). Emits SessionEnd{stop_reason:"BudgetExhausted"}
+ * on the emitter, revokes the session bearer via SessionStore.revoke() so
+ * subsequent requests fail at auth, and drops the session from the
+ * BudgetTracker to free memory. Idempotent — safe to call twice (the
+ * second pass is a no-op).
+ *
+ * The emitter + store are optional: callers may wire the helper against
+ * a minimum-viable plugin composition that omits one or the other. When
+ * the emitter is missing, termination still removes state but the
+ * validator loses the SessionEnd observable; when the store lacks
+ * revoke() (SessionStore interface variant), we silently skip.
+ */
+function terminateForBudgetExhausted(
+  sessionId: string,
+  emitter: StreamEventEmitter | undefined,
+  sessionStore: SessionStore,
+  budgetTracker: BudgetTracker
+): void {
+  if (emitter) {
+    emitter.emit({
+      session_id: sessionId,
+      type: "SessionEnd",
+      payload: { stop_reason: "BudgetExhausted" }
+    });
+  }
+  const store = sessionStore as unknown as { revoke?: (id: string) => void };
+  if (typeof store.revoke === "function") store.revoke(sessionId);
+  budgetTracker.remove(sessionId);
 }
