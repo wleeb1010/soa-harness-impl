@@ -76,7 +76,9 @@ import {
 import {
   MarkerEmitter,
   parseCrashTestMarkersEnv,
-  assertCrashTestMarkersListenerSafe
+  assertCrashTestMarkersListenerSafe,
+  parseCrashAfterMarkerEnv,
+  assertCrashAfterMarkerListenerSafe
 } from "../markers/index.js";
 import { assertBootstrapBearerListenerSafe } from "../guards/index.js";
 import type { TrustAnchor } from "../card/verify.js";
@@ -235,6 +237,14 @@ async function main() {
   const markersEnabled = parseCrashTestMarkersEnv(process.env.RUNNER_CRASH_TEST_MARKERS);
   assertCrashTestMarkersListenerSafe({ enabled: markersEnabled, host: HOST });
 
+  // §12.5.3 L-51 Finding AE — crash-after-marker kill trigger. When set,
+  // MarkerEmitter SIGKILLs the Runner immediately after the named marker
+  // fires. SV-STR-10 harness sets SOA_CRASH_AFTER_MARKER=
+  // SOA_MARK_PENDING_WRITE_DONE so the pending row lives on disk + the
+  // process dies before TOOL_INVOKE_DONE flips it to committed.
+  const crashAfterMarker = parseCrashAfterMarkerEnv(process.env.SOA_CRASH_AFTER_MARKER);
+  assertCrashAfterMarkerListenerSafe({ marker: crashAfterMarker, host: HOST });
+
   // §11.3.1 dynamic-registration env hook + production guard.
   const DYNAMIC_REG_TRIGGER = process.env.SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION;
   assertDynamicRegistrationListenerSafe({
@@ -279,7 +289,15 @@ async function main() {
     // `card.self_improvement.entrypoint_file` into the entrypoint-mismatch
     // check. See block below the card load.
   }
-  const markers = new MarkerEmitter({ enabled: markersEnabled });
+  const markers = new MarkerEmitter({
+    enabled: markersEnabled,
+    ...(crashAfterMarker !== null ? { crashAfter: crashAfterMarker } : {})
+  });
+  if (crashAfterMarker !== null) {
+    console.log(
+      `[start-runner] §12.5.3 L-51 Finding AE — SOA_CRASH_AFTER_MARKER=${crashAfterMarker} (will SIGKILL self after marker fires)`
+    );
+  }
   if (markersEnabled) {
     console.log(`[start-runner] crash-test markers enabled (RUNNER_CRASH_TEST_MARKERS=1)`);
   }

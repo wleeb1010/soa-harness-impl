@@ -49,6 +49,18 @@ export interface MarkerEmitterOptions {
    * The emitter writes one newline-terminated line per marker.
    */
   write?: (line: string) => void;
+  /**
+   * §12.5.3 L-51 Finding AE — crash-after-marker kill trigger.
+   * When set to one of the §12.5.3 marker names, the emitter issues a
+   * SIGKILL against its own PID immediately after writing that marker
+   * line. Used by SV-STR-10 validator harness to pin the kill at a
+   * deterministic on-disk state (typically SOA_MARK_PENDING_WRITE_DONE
+   * so boot-scan resume + CrashEvent emission are observable on
+   * restart). Loopback-guarded alongside RUNNER_CRASH_TEST_MARKERS.
+   */
+  crashAfter?: CrashTestMarker;
+  /** Override the self-kill for tests. Defaults to process.kill(pid, 'SIGKILL'). */
+  killSelf?: () => void;
 }
 
 /**
@@ -62,14 +74,33 @@ export interface MarkerEmitterOptions {
 export class MarkerEmitter {
   private readonly enabled: boolean;
   private readonly write: (line: string) => void;
+  private readonly crashAfter: CrashTestMarker | undefined;
+  private readonly killSelf: () => void;
+  private killed = false;
 
   constructor(opts: MarkerEmitterOptions) {
     this.enabled = opts.enabled;
     this.write = opts.write ?? ((line) => process.stderr.write(line));
+    this.crashAfter = opts.crashAfter;
+    this.killSelf =
+      opts.killSelf ??
+      (() => {
+        // SIGKILL models a hard process death — no cleanup runs, which is
+        // exactly what SV-STR-10 needs to prove boot-scan resume works
+        // against a genuinely-abandoned file. On Windows SIGKILL is
+        // translated into TerminateProcess semantics which is equivalent.
+        process.kill(process.pid, "SIGKILL");
+      });
   }
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  private maybeCrash(marker: CrashTestMarker): void {
+    if (this.crashAfter !== marker || this.killed) return;
+    this.killed = true;
+    this.killSelf();
   }
 
   pendingWriteDone(session_id: string, side_effect: number): void {
@@ -77,6 +108,7 @@ export class MarkerEmitter {
     this.write(
       `SOA_MARK_PENDING_WRITE_DONE session_id=${session_id} side_effect=${side_effect}\n`
     );
+    this.maybeCrash("SOA_MARK_PENDING_WRITE_DONE");
   }
 
   toolInvokeStart(session_id: string, side_effect: number): void {
@@ -84,6 +116,7 @@ export class MarkerEmitter {
     this.write(
       `SOA_MARK_TOOL_INVOKE_START session_id=${session_id} side_effect=${side_effect}\n`
     );
+    this.maybeCrash("SOA_MARK_TOOL_INVOKE_START");
   }
 
   toolInvokeDone(
@@ -95,6 +128,7 @@ export class MarkerEmitter {
     this.write(
       `SOA_MARK_TOOL_INVOKE_DONE session_id=${session_id} side_effect=${side_effect} result=${result}\n`
     );
+    this.maybeCrash("SOA_MARK_TOOL_INVOKE_DONE");
   }
 
   committedWriteDone(session_id: string, side_effect: number): void {
@@ -102,21 +136,25 @@ export class MarkerEmitter {
     this.write(
       `SOA_MARK_COMMITTED_WRITE_DONE session_id=${session_id} side_effect=${side_effect}\n`
     );
+    this.maybeCrash("SOA_MARK_COMMITTED_WRITE_DONE");
   }
 
   dirFsyncDone(session_id: string): void {
     if (!this.enabled) return;
     this.write(`SOA_MARK_DIR_FSYNC_DONE session_id=${session_id}\n`);
+    this.maybeCrash("SOA_MARK_DIR_FSYNC_DONE");
   }
 
   auditAppendDone(audit_record_id: string): void {
     if (!this.enabled) return;
     this.write(`SOA_MARK_AUDIT_APPEND_DONE audit_record_id=${audit_record_id}\n`);
+    this.maybeCrash("SOA_MARK_AUDIT_APPEND_DONE");
   }
 
   auditBufferWriteDone(audit_record_id: string): void {
     if (!this.enabled) return;
     this.write(`SOA_MARK_AUDIT_BUFFER_WRITE_DONE audit_record_id=${audit_record_id}\n`);
+    this.maybeCrash("SOA_MARK_AUDIT_BUFFER_WRITE_DONE");
   }
 }
 
@@ -143,4 +181,52 @@ export function assertCrashTestMarkersListenerSafe(opts: {
 /** Parse the env var value into a boolean. Only "1" enables; everything else disables. */
 export function parseCrashTestMarkersEnv(value: string | undefined): boolean {
   return value === "1";
+}
+
+/** Allowed marker-name values for the crash-after-marker env hook. */
+const CRASH_AFTER_MARKERS: ReadonlySet<string> = new Set<CrashTestMarker>([
+  "SOA_MARK_PENDING_WRITE_DONE",
+  "SOA_MARK_TOOL_INVOKE_START",
+  "SOA_MARK_TOOL_INVOKE_DONE",
+  "SOA_MARK_COMMITTED_WRITE_DONE",
+  "SOA_MARK_DIR_FSYNC_DONE",
+  "SOA_MARK_AUDIT_APPEND_DONE",
+  "SOA_MARK_AUDIT_BUFFER_WRITE_DONE"
+]);
+
+/**
+ * §12.5.3 L-51 Finding AE — parse SOA_CRASH_AFTER_MARKER. Returns the
+ * CrashTestMarker when the value matches a known §12.5.3 marker,
+ * null otherwise. Typos return null so an operator doesn't silently
+ * arm a hook they didn't intend.
+ */
+export function parseCrashAfterMarkerEnv(
+  value: string | undefined
+): CrashTestMarker | null {
+  if (value === undefined) return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return CRASH_AFTER_MARKERS.has(trimmed) ? (trimmed as CrashTestMarker) : null;
+}
+
+/** Production guard for SOA_CRASH_AFTER_MARKER. Mirrors §12.5.3 markers-env guard. */
+export class CrashAfterMarkerOnPublicListener extends Error {
+  constructor(host: string) {
+    super(
+      `CrashAfterMarkerOnPublicListener: SOA_CRASH_AFTER_MARKER is set and ` +
+        `the listener binds to non-loopback host "${host}". This env hook ` +
+        `SIGKILLs the Runner — MUST NOT be reachable by untrusted principals.`
+    );
+    this.name = "CrashAfterMarkerOnPublicListener";
+  }
+}
+
+export function assertCrashAfterMarkerListenerSafe(opts: {
+  marker: CrashTestMarker | null;
+  host: string;
+}): void {
+  if (opts.marker === null) return;
+  const host = opts.host.toLowerCase();
+  const isLoopback = host === "127.0.0.1" || host === "::1" || host === "localhost";
+  if (!isLoopback) throw new CrashAfterMarkerOnPublicListener(opts.host);
 }
