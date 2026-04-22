@@ -16,3 +16,16 @@ export {
   AgentsMdOnPublicListener,
   type LoadedAgentsMd
 } from "./agents-md.js";
+export {
+  validateAgentsMdBody,
+  resolveAgentsMdImports,
+  defaultReadFile,
+  REQUIRED_H2_SEQUENCE,
+  AgentsMdInvalid,
+  AgentsMdImportDepthExceeded,
+  AgentsMdImportCycle,
+  type AgentsMdInvalidReason,
+  type AgentsMdParseOptions,
+  type AgentsMdParseResult,
+  type ReadFileFn
+} from "./agents-md-validator.js";

@@ -24,7 +24,12 @@ import {
   assertDynamicRegistrationListenerSafe,
   loadAgentsMdDenyList,
   assertAgentsMdListenerSafe,
-  AgentsMdUnavailableStartup
+  AgentsMdUnavailableStartup,
+  validateAgentsMdBody,
+  resolveAgentsMdImports,
+  AgentsMdInvalid,
+  AgentsMdImportDepthExceeded,
+  AgentsMdImportCycle
 } from "../registry/index.js";
 import {
   AuditChain,
@@ -207,6 +212,12 @@ async function main() {
   const AGENTS_MD_PATH = process.env.SOA_RUNNER_AGENTS_MD_PATH;
   assertAgentsMdListenerSafe({ agentsMdPath: AGENTS_MD_PATH, host: HOST });
   let agentsMdDenied: Set<string> | undefined;
+  // Finding AT — collect grammar/import/entrypoint violations so the
+  // systemLog-available block downstream can emit the
+  // ConfigPrecedenceViolation-shaped record and pin /ready at 503.
+  // Exceptions are captured rather than thrown so the emission happens
+  // through the observable path (same pattern as Finding AN).
+  let agentsMdValidationErr: Error | null = null;
   if (AGENTS_MD_PATH) {
     try {
       const loaded = loadAgentsMdDenyList(AGENTS_MD_PATH);
@@ -224,6 +235,30 @@ async function main() {
         process.exit(1);
       }
       throw err;
+    }
+
+    // Finding AT / §7.2 + §7.3 full-grammar validation. Import resolution
+    // happens before body validation so cycle/depth detection runs against
+    // the full reachable graph, not just the entry file's declared imports.
+    try {
+      const resolved = resolveAgentsMdImports(AGENTS_MD_PATH);
+      validateAgentsMdBody(resolved);
+      console.log(
+        `[start-runner] AGENTS.md §7.2/§7.3 validation passed for ${AGENTS_MD_PATH}`
+      );
+    } catch (err) {
+      if (
+        err instanceof AgentsMdInvalid ||
+        err instanceof AgentsMdImportDepthExceeded ||
+        err instanceof AgentsMdImportCycle
+      ) {
+        agentsMdValidationErr = err;
+        console.error(
+          `[start-runner] Finding AT — AGENTS.md refused: ${err.message}`
+        );
+      } else {
+        throw err;
+      }
     }
   }
   const markers = new MarkerEmitter({ enabled: markersEnabled });
@@ -554,6 +589,43 @@ async function main() {
       precedenceResult.ok ? null : ("bootstrap-pending" as const)
   };
 
+  // Finding AT — surface AGENTS.md grammar/import errors on the
+  // observability channel. The error was captured pre-systemLog; we
+  // emit the record here now that the buffer exists. Same shape as
+  // Finding AN: Config/<code>/error under BOOT_SESSION_ID +
+  // readiness source pins /ready at 503 until the operator fixes
+  // AGENTS.md.
+  if (agentsMdValidationErr !== null) {
+    const err = agentsMdValidationErr;
+    let code: string;
+    let data: Record<string, unknown>;
+    if (err instanceof AgentsMdInvalid) {
+      code = "AgentsMdInvalid";
+      data = { reason: err.reason, ...err.data };
+    } else if (err instanceof AgentsMdImportDepthExceeded) {
+      code = "AgentsMdImportDepthExceeded";
+      data = { path: err.path, depth: err.depth };
+    } else if (err instanceof AgentsMdImportCycle) {
+      code = "AgentsMdImportCycle";
+      data = { path: err.path, cycle: [...err.cycle] };
+    } else {
+      code = "AgentsMdInvalid";
+      data = { reason: "unknown" };
+    }
+    systemLog.write({
+      session_id: BOOT_SESSION_ID,
+      category: "Config",
+      level: "error",
+      code,
+      message: err.message,
+      data
+    });
+  }
+  const agentsMdReadiness = {
+    check: () =>
+      agentsMdValidationErr === null ? null : ("bootstrap-pending" as const)
+  };
+
   // Finding AQ / SV-BOOT-04 — revocation file watcher. When
   // SOA_BOOTSTRAP_REVOCATION_FILE is set, poll the path at
   // RUNNER_BOOTSTRAP_POLL_TICK_MS (default 1 h). Matching
@@ -869,6 +941,9 @@ async function main() {
       // recent under BOOT_SESSION_ID; operators flip /ready to 200 by
       // fixing the Card, not by poking the Runner.
       cardPrecedenceReadiness,
+      // Finding AT — AGENTS.md §7.2/§7.3 violations pin /ready at 503
+      // alongside the Config/AgentsMd*/error record under BOOT_SESSION_ID.
+      agentsMdReadiness,
       // Finding AQ — revocation latch same semantic: /ready at 503 for
       // the remainder of the process once the revocation file is seen.
       bootstrapRevocationReadiness,
@@ -1010,7 +1085,8 @@ async function main() {
       // one). A compliant Runner with no precedence failure + no
       // revocation re-asserts §14.5.4's readiness-gate contract.
       skipReadinessGate: !precedenceResult.ok ||
-        bootstrapEnv.revocationFilePath !== undefined
+        bootstrapEnv.revocationFilePath !== undefined ||
+        agentsMdValidationErr !== null
     },
     memoryState: {
       memoryStore,
