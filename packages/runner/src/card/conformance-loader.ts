@@ -29,7 +29,7 @@ export const PLACEHOLDER_SPKI = "16dc826f86941f2b6876f4f0f59d91f0021dacbd4ff17b7
  * bump regression tests + the archaeology trail stay intact.
  */
 export const PINNED_CONFORMANCE_CARD_DIGEST =
-  "d29be9897b1faa7a8bebda10adda5d01f9243529dcb0f30de68f59c0248741ab";
+  "d13375450a36b1ca762cac64800a0cf419523631e296066a5086e3ed29dc2275";
 
 export interface LoadConformanceCardOptions {
   fixturePath: string;
