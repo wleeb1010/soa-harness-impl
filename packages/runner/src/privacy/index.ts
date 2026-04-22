@@ -27,3 +27,8 @@ export {
   type RetentionSweeperHooks,
   type RetentionCategory
 } from "./retention-sweep.js";
+export {
+  emitMemoryDeletionForbidden,
+  partitionSensitivePersonal,
+  type SensitivePersonalIncident
+} from "./system-log-emission.js";

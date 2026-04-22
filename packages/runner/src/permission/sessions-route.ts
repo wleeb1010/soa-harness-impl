@@ -14,6 +14,7 @@ import {
   parseSupportedCoreVersions,
   RUNNER_SUPPORTED_CORE_VERSIONS
 } from "../governance/index.js";
+import { partitionSensitivePersonal } from "../privacy/index.js";
 
 export interface SessionsRouteOptions {
   sessionStore: InMemorySessionStore;
@@ -394,11 +395,23 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
           sharing_scope: opts.memoryDefaultSharingScope ?? "session"
         });
         if (opts.memoryDegradation) opts.memoryDegradation.recordSuccess();
+        // §10.7 SV-PRIV-02 / Finding AG — drop sensitive-personal notes
+        // BEFORE recordLoad so state-store's invariant never trips, and
+        // emit one MemoryDeletionForbidden system-log record per
+        // forbidden note (category=Error, code=MemoryDeletionForbidden,
+        // data.reason=sensitive-class-forbidden). The safe slice still
+        // flows into in-context state; the forbidden notes are
+        // observable via GET /logs/system/recent but never persisted.
+        const partitioned = partitionSensitivePersonal(
+          hits.notes,
+          created.session_id,
+          opts.systemLog
+        );
         // Record in the memory-state store so /memory/state reflects the load.
         if (opts.memoryStore) {
           opts.memoryStore.recordLoad(
             created.session_id,
-            hits.notes.map((n) => ({
+            partitioned.safe.map((n) => ({
               note_id: n.note_id,
               summary: n.summary,
               data_class: n.data_class,
@@ -409,7 +422,7 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
                 ? { weight_graph_strength: n.weight_graph_strength }
                 : {})
             })),
-            hits.notes.length
+            partitioned.safe.length
           );
         }
       } catch (err) {
