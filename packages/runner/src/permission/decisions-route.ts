@@ -649,29 +649,6 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       });
     }
 
-    // §15 PostToolUse hook: advisory — log via the hook's own stderr /
-    // stdout but do NOT mutate the response body. Covers SV-HOOK-03
-    // (PostToolUse invocation) and SV-HOOK-04 (non-zero exit logged).
-    if (opts.hookConfig?.postToolUseCommand && opts.hookConfig.postToolUseCommand.length > 0) {
-      const turnId = opts.hookConfig.turnIdFn?.() ?? `turn_${randomBytes(6).toString("hex")}`;
-      const outcome: HookOutcome = await runHook({
-        command: opts.hookConfig.postToolUseCommand,
-        stdin: {
-          hook: "PostToolUse",
-          session_id: sessionId,
-          turn_id: turnId,
-          tool: { name: toolEntry.name, risk_class: toolEntry.risk_class, args_digest: argsDigest },
-          capability: sessionRecord.activeMode,
-          handler: "Interactive",
-          result: { ok: handlerAccepted, output_digest: `sha256:${written.this_hash}` }
-        }
-      });
-      // Advisory — audit this in future via a PostHookOutcome event; for
-      // M3-T6 we simply void the outcome. Future milestone may emit an
-      // audit row or StreamEvent for operator visibility.
-      void outcome;
-    }
-
     // §13.1 budget tracking — fire after the committed-phase bracket-
     // persist write so /budget/projection advances in lockstep with the
     // session's turn count. Without real LLM dispatch yet (M3 scope
@@ -727,6 +704,81 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
               : {})
           }
         });
+      }
+    }
+
+    // §15 PostToolUse hook + §14.1 PostToolUseOutcome — advisory at the
+    // response-body level (exit codes don't flip decision back to Deny)
+    // but emits a §14.1 PostToolUseOutcome StreamEvent with the hook's
+    // view of the tool result. Ordering (SV-HOOK-07):
+    //   PermissionDecision → PreToolUseOutcome → [ToolResult] →
+    //   PostToolUseOutcome. Fires ONLY when the emitter is wired; raw
+    //   hook output still reaches the hook's own stderr/stdout either way.
+    //
+    // §15.3 stdout.replace_result: canonicalize the substituted result
+    // (JCS-RFC-8785), re-fingerprint, and carry both before/after digests
+    // in the event payload — Finding M / SV-HOOK-06.
+    if (opts.hookConfig?.postToolUseCommand && opts.hookConfig.postToolUseCommand.length > 0) {
+      const turnId = opts.hookConfig.turnIdFn?.() ?? `turn_${randomBytes(6).toString("hex")}`;
+      // In M3 there's no real tool dispatcher yet — the Runner uses the
+      // audit-row this_hash as a synthetic output_digest so the
+      // before/after contract is still well-defined. When the M4
+      // dispatcher lands, substitute the real tool-result digest here.
+      const outputDigestBefore = `sha256:${written.this_hash}`;
+      const hookOutcome: HookOutcome = await runHook({
+        command: opts.hookConfig.postToolUseCommand,
+        stdin: {
+          hook: "PostToolUse",
+          session_id: sessionId,
+          turn_id: turnId,
+          tool: { name: toolEntry.name, risk_class: toolEntry.risk_class, args_digest: argsDigest },
+          capability: sessionRecord.activeMode,
+          handler: "Interactive",
+          result: { ok: handlerAccepted, output_digest: outputDigestBefore }
+        }
+      });
+
+      if (opts.emitter) {
+        const replaceResult = hookOutcome.stdout?.replace_result;
+        if (replaceResult !== undefined) {
+          const outputDigestAfter =
+            `sha256:${createHash("sha256").update(jcsBytes(replaceResult)).digest("hex")}`;
+          opts.emitter.emit({
+            session_id: sessionId,
+            type: "PostToolUseOutcome",
+            payload: {
+              tool_call_id: toolCallId,
+              tool_name: toolEntry.name,
+              outcome: "replace_result",
+              ...(hookOutcome.stdout?.reason !== undefined
+                ? { reason: hookOutcome.stdout.reason }
+                : {}),
+              output_digest_before: outputDigestBefore,
+              output_digest_after: outputDigestAfter
+            }
+          });
+        } else {
+          // `pass` is the §14.1 enum value for "hook acknowledged
+          // without substitution" — covers clean exit 0, advisory
+          // non-zero exits, and timeouts. The failure reason (when
+          // present) surfaces via payload.reason so the validator can
+          // still audit hook health without a separate error event.
+          opts.emitter.emit({
+            session_id: sessionId,
+            type: "PostToolUseOutcome",
+            payload: {
+              tool_call_id: toolCallId,
+              tool_name: toolEntry.name,
+              outcome: "pass",
+              ...(hookOutcome.stdout?.reason !== undefined
+                ? { reason: hookOutcome.stdout.reason }
+                : hookOutcome.reason !== undefined
+                  ? { reason: hookOutcome.reason }
+                  : {}),
+              output_digest_before: outputDigestBefore
+            }
+          });
+        }
       }
     }
 
