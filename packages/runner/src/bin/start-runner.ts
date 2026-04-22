@@ -39,7 +39,9 @@ import { SystemLogBuffer } from "../system-log/index.js";
 import {
   InMemoryMemoryStateStore,
   MemoryMcpClient,
-  MemoryDegradationTracker
+  MemoryDegradationTracker,
+  MemoryReadinessProbe,
+  runStartupMemoryProbe
 } from "../memory/index.js";
 import { BudgetTracker } from "../budget/index.js";
 import {
@@ -438,8 +440,29 @@ async function main() {
     ? new MemoryMcpClient({ endpoint: MEMORY_MCP_ENDPOINT })
     : undefined;
   const memoryDegradation = MEMORY_MCP_ENDPOINT ? new MemoryDegradationTracker(3) : undefined;
+  // Finding S / SV-MEM-03 — the readiness probe is always present so
+  // composeReadiness() sees a stable shape; when Memory MCP isn't wired
+  // it markReady()'s immediately (no dependency to probe).
+  const memoryReadiness = new MemoryReadinessProbe();
   if (MEMORY_MCP_ENDPOINT) {
     console.log(`[start-runner] Memory MCP client wired to ${MEMORY_MCP_ENDPOINT}`);
+  } else {
+    // No Memory MCP — skip the §8.3 startup probe; deployments without
+    // memory wiring MUST NOT gate /ready on a non-existent dependency.
+    memoryReadiness.markReady();
+  }
+
+  // Finding S: run the startup probe BEFORE binding the public listener.
+  // On persistent failure the probe flips memoryReadiness to
+  // `unavailable`; composeReadiness below keeps /ready at 503 with
+  // reason=memory-mcp-unavailable until the Runner is restarted with a
+  // repaired dependency. §8.3 line 581 forbids fail-open to empty memory.
+  if (MEMORY_MCP_ENDPOINT && memoryClient) {
+    await runStartupMemoryProbe({
+      client: memoryClient,
+      probe: memoryReadiness,
+      systemLog
+    });
   }
 
   // Build the ResumeContext before startRunner so both the state-route
@@ -469,10 +492,17 @@ async function main() {
     privateKey,
     x5c,
     ...(skipCardSchemaValidation ? { skipCardSchemaValidation: true } : {}),
-    readiness: composeReadiness(boot, {
-      // §10.5.1 unreachable-halt → /ready flips 503 audit-sink-unreachable.
-      check: () => auditSink.readinessReason()
-    }),
+    readiness: composeReadiness(
+      boot,
+      {
+        // §10.5.1 unreachable-halt → /ready flips 503 audit-sink-unreachable.
+        check: () => auditSink.readinessReason()
+      },
+      // Finding S / SV-MEM-03: /ready stays 503 memory-mcp-unavailable
+      // until the §8.3 startup probe succeeds. Inert when no Memory MCP
+      // was configured (markReady fires at probe construction above).
+      memoryReadiness
+    ),
     host: HOST,
     port: PORT,
     ...(registry

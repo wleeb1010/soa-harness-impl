@@ -23,3 +23,11 @@ export {
   type SearchedNote,
   type WriteMemoryParams
 } from "./mcp-client.js";
+export {
+  MemoryReadinessProbe,
+  MEMORY_READINESS_NOT_CONFIGURED
+} from "./readiness-probe.js";
+export {
+  runStartupMemoryProbe,
+  type StartupMemoryProbeOptions
+} from "./startup-probe.js";
