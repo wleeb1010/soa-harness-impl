@@ -9,6 +9,7 @@ import type { Control } from "../registry/types.js";
 import type { MarkerEmitter } from "../markers/index.js";
 import type { StreamEventEmitter } from "../stream/index.js";
 import { runHook, type HookOutcome } from "../hook/index.js";
+import type { BudgetTracker } from "../budget/index.js";
 import {
   SessionPersister,
   SessionFormatIncompatible,
@@ -98,6 +99,17 @@ export interface PermissionsDecisionsRouteOptions {
     postToolUseCommand?: readonly string[];
     turnIdFn?: () => string;
   };
+  /**
+   * §13.1 budget tracker — `recordTurn()` fires after every successful
+   * committed decision so `/budget/projection` advances in lockstep with
+   * the session's turn count. In M3 the LLM-dispatch layer hasn't wired
+   * yet, so the per-turn token cost comes from `budgetPerTurnEstimate`
+   * (default 512). When a real dispatcher lands, replace this with the
+   * actual API-reported token counts.
+   */
+  budgetTracker?: BudgetTracker;
+  /** Per-turn token estimate fed to BudgetTracker.recordTurn. Default 512. */
+  budgetPerTurnEstimate?: number;
 }
 
 const WINDOW_MS = 60_000;
@@ -582,6 +594,18 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       // M3-T6 we simply void the outcome. Future milestone may emit an
       // audit row or StreamEvent for operator visibility.
       void outcome;
+    }
+
+    // §13.1 budget tracking — fire after the committed-phase bracket-
+    // persist write so /budget/projection advances in lockstep with the
+    // session's turn count. Without real LLM dispatch yet (M3 scope
+    // stops short of tool invocation), the per-turn cost is a stable
+    // constant — validators observe a reliable delta per decision.
+    // When the dispatcher lands, replace with API-reported token counts.
+    if (opts.budgetTracker) {
+      opts.budgetTracker.recordTurn(sessionId, {
+        actual_total_tokens: opts.budgetPerTurnEstimate ?? 512
+      });
     }
 
     // §14.1 PermissionDecision — emit AFTER the commit write completes so

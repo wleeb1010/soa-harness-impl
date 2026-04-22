@@ -137,6 +137,9 @@ export interface BuildRunnerOptions {
       postToolUseCommand?: readonly string[];
       turnIdFn?: () => string;
     };
+    /** M3-T4 §13.1 turn-accounting — recordTurn() fires after each committed decision. */
+    budgetTracker?: BudgetTracker;
+    budgetPerTurnEstimate?: number;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/sink-events
@@ -374,7 +377,11 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.toolPoolHash !== undefined ? { toolPoolHash: pd.toolPoolHash } : {}),
       ...(pd.cardVersion !== undefined ? { cardVersion: pd.cardVersion } : {}),
       ...(pd.emitter !== undefined ? { emitter: pd.emitter } : {}),
-      ...(pd.hookConfig !== undefined ? { hookConfig: pd.hookConfig } : {})
+      ...(pd.hookConfig !== undefined ? { hookConfig: pd.hookConfig } : {}),
+      ...(pd.budgetTracker !== undefined ? { budgetTracker: pd.budgetTracker } : {}),
+      ...(pd.budgetPerTurnEstimate !== undefined
+        ? { budgetPerTurnEstimate: pd.budgetPerTurnEstimate }
+        : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
   }

@@ -12,6 +12,7 @@ import {
 import { AuditChain } from "../src/audit/index.js";
 import { ToolRegistry } from "../src/registry/index.js";
 import { MarkerEmitter } from "../src/markers/index.js";
+import { BudgetTracker } from "../src/budget/index.js";
 
 // §12.2 L-31 tests: POST /permissions/decisions now runs the bracket-
 // persist protocol around every call — pending side_effect persisted,
@@ -343,6 +344,74 @@ describe("POST /permissions/decisions — §12.2 L-31 bracket-persist", () => {
       expect(committed).toBe(`SOA_MARK_COMMITTED_WRITE_DONE session_id=${SESSION} side_effect=0\n`);
     } finally {
       await ctx.app.close();
+    }
+  });
+
+  it("Finding K: committed decision advances BudgetTracker state (/budget/projection observable delta)", async () => {
+    const store = new InMemorySessionStore();
+    store.register(SESSION, BEARER, { activeMode: "WorkspaceWrite", canDecide: true });
+    const { emitter } = makeMarkers();
+    const chain = new AuditChain(() => FROZEN_NOW, { markers: emitter });
+    const persister = new (await import("../src/session/index.js")).SessionPersister({
+      sessionDir: dir,
+      markers: emitter
+    });
+    const registry = new (await import("../src/registry/index.js")).ToolRegistry([
+      { name: "fs__read_file", risk_class: "ReadOnly", default_control: "AutoAllow" },
+      { name: "fs__write_file", risk_class: "Mutating", default_control: "Prompt" }
+    ]);
+    const tracker = new BudgetTracker({ projectionWindow: 10, maxTokensPerRun: 200_000 });
+    tracker.initFor(SESSION);
+    const app = (await import("fastify")).fastify();
+    await app.register(
+      (await import("../src/permission/index.js")).permissionsDecisionsPlugin,
+      {
+        registry,
+        sessionStore: store,
+        chain,
+        readiness: { check: () => null },
+        clock: () => FROZEN_NOW,
+        activeCapability: "WorkspaceWrite",
+        runnerVersion: "1.0",
+        persister,
+        markers: emitter,
+        toolPoolHash: "sha256:findingk-test-0000000000000000000000000000000000000000000000000000",
+        cardVersion: "1.0.0",
+        budgetTracker: tracker,
+        budgetPerTurnEstimate: 250
+      }
+    );
+    try {
+      const before = tracker.getProjection(SESSION)!.cumulative_tokens_consumed;
+      expect(before).toBe(0);
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/permissions/decisions",
+        headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+        payload: {
+          tool: "fs__read_file",
+          session_id: SESSION,
+          args_digest: "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+        }
+      });
+      expect(res.statusCode).toBe(201);
+      const after = tracker.getProjection(SESSION)!.cumulative_tokens_consumed;
+      expect(after).toBe(250); // per-turn estimate injected into options
+      // Second decision — delta should advance again.
+      await app.inject({
+        method: "POST",
+        url: "/permissions/decisions",
+        headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+        payload: {
+          tool: "fs__read_file",
+          session_id: SESSION,
+          args_digest: "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+        }
+      });
+      expect(tracker.getProjection(SESSION)!.cumulative_tokens_consumed).toBe(500);
+    } finally {
+      await app.close();
     }
   });
 

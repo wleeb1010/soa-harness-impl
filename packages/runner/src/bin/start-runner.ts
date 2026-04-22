@@ -494,6 +494,9 @@ async function main() {
                 ? (card as { version: string }).version
                 : "1.0",
             emitter: streamEmitter,
+            // §13.1 wire turn-accounting to the decision path so
+            // /budget/projection advances per committed decision.
+            budgetTracker,
             // §15 hooks — operator supplies command lines via env.
             ...((): {
               hookConfig?: {
