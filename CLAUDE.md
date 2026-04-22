@@ -25,11 +25,25 @@ Example queries during implementation:
 - Implementing PDA verification? → `get_neighbors(node='ui_section_11_4')` returns the full normative context in one hop
 - Need to know what's normatively required for Agent Card? → `get_community` on the Agent Card node returns the §6 cluster + dependencies
 
+### `graphify-impl` (this repo's doc + citation graph)
+Query this for questions about:
+- Which docs in this repo reference a spec section or test ID (`/logs/system/recent` refs, STATUS.md citations, plan-doc dependencies)
+- Cross-repo file references (when a doc points at `soa-harness-specification/...` or `soa-validate/...`)
+- Heading structure across all tracked docs (README/CLAUDE/STATUS/CONTRIBUTING/COORDINATION/docs/**/*.md/packages/*/README.md/docs/plans/*.md)
+- Orphan docs (no inbound citation — candidates for pruning or cross-linking)
+
+Example queries:
+- "Which docs mention §10.6.2?" → `query_graph` on that spec-section node returns every impl doc citing it
+- "What touches HR-02?" → `get_neighbors(node='test_hr_02')` returns the docs discussing that test
+- "Which plans reference the handler CRL?" → `query_graph` on the handler CRL heading returns all inbound doc citations
+
 ### `CodeGraphContext` (per-project, auto-indexes this repo)
 Query this for questions about:
 - TypeScript code structure within this monorepo
 - Cross-package imports, function-call chains, dead code
 - `find_code`, `find_most_complex_functions`, `analyze_code_relationships`
+
+**Routing rule:** for "what docs reference X?" questions, query `graphify-impl`. For "what does spec section X say?" or "which spec tests cover X?", query `graphify-spec`. For TS code structure, query `CodeGraphContext`. **Prefer MCP over grep** for any of these.
 
 ## Code-generation guardrails
 
