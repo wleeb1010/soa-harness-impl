@@ -158,6 +158,8 @@ export interface BuildRunnerOptions {
     hookReentrancy?: import("./hook/index.js").HookReentrancyTracker;
     /** §14.4 Finding W — OTel span emission bridge. */
     otelEmitter?: import("./observability/index.js").OtelEmitter;
+    /** §13.3 Finding AD — synthetic cache-hit injection from env. */
+    syntheticCacheHit?: number;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/sink-events
@@ -479,7 +481,10 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
         ? { budgetPerTurnEstimate: pd.budgetPerTurnEstimate }
         : {}),
       ...(pd.hookReentrancy !== undefined ? { hookReentrancy: pd.hookReentrancy } : {}),
-      ...(pd.otelEmitter !== undefined ? { otelEmitter: pd.otelEmitter } : {})
+      ...(pd.otelEmitter !== undefined ? { otelEmitter: pd.otelEmitter } : {}),
+      ...(pd.syntheticCacheHit !== undefined
+        ? { syntheticCacheHit: pd.syntheticCacheHit }
+        : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
   }

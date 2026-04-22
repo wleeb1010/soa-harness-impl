@@ -113,6 +113,14 @@ export interface PermissionsDecisionsRouteOptions {
   /** Per-turn token estimate fed to BudgetTracker.recordTurn. Default 512. */
   budgetPerTurnEstimate?: number;
   /**
+   * Finding AD / SV-BUD-04 — synthetic cache-hit injection value.
+   * When set (from RUNNER_SYNTHETIC_CACHE_HIT env var), recordTurn
+   * stamps prompt_tokens_cached=completion_tokens_cached=<value>
+   * on each committed TurnRecord. Unset → zero-cache M3 default.
+   * Loopback-guarded at bin startup.
+   */
+  syntheticCacheHit?: number;
+  /**
    * §15 reentrancy guard (Finding N / SV-HOOK-08). When set, every
    * PreToolUse/PostToolUse runHook call registers its child PID with
    * the tracker for the owning session; inbound requests carrying an
@@ -774,14 +782,20 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     if (opts.budgetTracker) {
       // Finding P / SV-BUD-04: populate cache-accounting fields at
       // turn-commit even in M3 (pre-dispatcher). Without a real LLM
-      // call path, cached counts are zero — but the fields MUST be
-      // present in the TurnRecord so /budget/projection surfaces
-      // deterministic cache_accounting totals (§13.3) instead of
-      // leaving the validator's probe reading undefined.
+      // call path, cached counts default to zero — but the fields
+      // MUST be present in the TurnRecord so /budget/projection
+      // surfaces deterministic cache_accounting totals (§13.3)
+      // instead of leaving the validator's probe reading undefined.
+      //
+      // Finding AD / SV-BUD-04 synthetic-cache-hit hook: when the
+      // Runner was started with RUNNER_SYNTHETIC_CACHE_HIT=<n>,
+      // stamp both cache fields to <n> so the validator can exercise
+      // non-zero cache_accounting totals without a real LLM.
+      const cacheValue = opts.syntheticCacheHit ?? 0;
       opts.budgetTracker.recordTurn(sessionId, {
         actual_total_tokens: opts.budgetPerTurnEstimate ?? 512,
-        prompt_tokens_cached: 0,
-        completion_tokens_cached: 0
+        prompt_tokens_cached: cacheValue,
+        completion_tokens_cached: cacheValue
       });
       const snapshot = opts.budgetTracker.getProjection(sessionId);
       if (

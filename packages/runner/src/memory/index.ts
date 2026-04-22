@@ -36,3 +36,9 @@ export {
   type ConsolidationSchedulerOptions,
   type ConsolidationOutcome
 } from "./consolidation-scheduler.js";
+export {
+  parseConsolidationEnv,
+  assertConsolidationHooksListenerSafe,
+  ConsolidationHookOnPublicListener,
+  type ConsolidationEnvConfig
+} from "./consolidation-env-guard.js";

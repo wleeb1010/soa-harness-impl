@@ -42,9 +42,15 @@ import {
   MemoryDegradationTracker,
   MemoryReadinessProbe,
   runStartupMemoryProbe,
-  ConsolidationScheduler
+  ConsolidationScheduler,
+  parseConsolidationEnv,
+  assertConsolidationHooksListenerSafe
 } from "../memory/index.js";
-import { BudgetTracker } from "../budget/index.js";
+import {
+  BudgetTracker,
+  parseSyntheticCacheHitEnv,
+  assertSyntheticCacheHitListenerSafe
+} from "../budget/index.js";
 import {
   MarkerEmitter,
   parseCrashTestMarkersEnv,
@@ -506,23 +512,54 @@ async function main() {
     });
   }
 
-  // Finding U / SV-MEM-05 — §8.4 consolidation scheduler. Wakes every
-  // 5 min to check the 24 h elapsed-time trigger; also exposes
-  // recordNoteWritten(session_id) for the future M4 dispatcher to call
-  // after each write_memory so the 100-note-per-session threshold
-  // advances. Only active when Memory MCP is wired.
+  // Finding U / SV-MEM-05 — §8.4 consolidation scheduler. Default
+  // 24 h elapsed-time trigger + 100-note-per-session threshold.
+  //
+  // Finding AC / §8.4.1 test hooks — RUNNER_CONSOLIDATION_TICK_MS +
+  // RUNNER_CONSOLIDATION_ELAPSED_MS override the poll interval and
+  // elapsed threshold respectively. Production guard refuses startup
+  // when either env is set and the listener binds to a non-loopback
+  // host (same pattern as §11.3.1 dynamic registration).
+  const consolidationEnv = parseConsolidationEnv(process.env);
+  assertConsolidationHooksListenerSafe({ env: consolidationEnv, host: HOST });
+
+  // Finding AD / SV-BUD-04 — synthetic cache-hit injection env hook.
+  // When RUNNER_SYNTHETIC_CACHE_HIT=<n> is set (loopback-only per the
+  // production guard), every committed recordTurn stamps both cache
+  // fields to <n>. Lets validators exercise non-zero
+  // cache_accounting totals without a real LLM round-trip.
+  const syntheticCacheCfg = parseSyntheticCacheHitEnv(process.env);
+  assertSyntheticCacheHitListenerSafe({ cfg: syntheticCacheCfg, host: HOST });
+  if (syntheticCacheCfg.value !== undefined) {
+    console.log(
+      `[start-runner] synthetic cache-hit hook active: every recordTurn stamps ${syntheticCacheCfg.value} into prompt_tokens_cached + completion_tokens_cached`
+    );
+  }
   const consolidationScheduler =
     MEMORY_MCP_ENDPOINT && memoryClient
       ? new ConsolidationScheduler({
           client: memoryClient,
           systemLog,
-          clock
+          clock,
+          ...(consolidationEnv.tickIntervalMs !== undefined
+            ? { tickIntervalMs: consolidationEnv.tickIntervalMs }
+            : {}),
+          ...(consolidationEnv.intervalMs !== undefined
+            ? { intervalMs: consolidationEnv.intervalMs }
+            : {})
         })
       : undefined;
   if (consolidationScheduler) {
     consolidationScheduler.start();
+    const tickMs = consolidationEnv.tickIntervalMs ?? 5 * 60 * 1000;
+    const elapsedMs = consolidationEnv.intervalMs ?? 24 * 60 * 60 * 1000;
+    const hookNote =
+      consolidationEnv.tickIntervalMs !== undefined ||
+      consolidationEnv.intervalMs !== undefined
+        ? " [§8.4.1 test hooks active]"
+        : "";
     console.log(
-      `[start-runner] Memory consolidation scheduler started (24h interval, 100-note threshold)`
+      `[start-runner] Memory consolidation scheduler started (tick=${tickMs}ms, elapsed=${elapsedMs}ms, 100-note threshold)${hookNote}`
     );
   }
 
@@ -732,6 +769,10 @@ async function main() {
             // §14.4 Finding W — OTel spans emitted at the decision
             // call-site, read back by /observability/otel-spans/recent.
             otelEmitter,
+            // Finding AD / §13.3 — synthetic cache-hit injection.
+            ...(syntheticCacheCfg.value !== undefined
+              ? { syntheticCacheHit: syntheticCacheCfg.value }
+              : {}),
             // §15 hooks — operator supplies command lines via env.
             ...((): {
               hookConfig?: {

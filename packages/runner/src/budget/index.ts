@@ -6,3 +6,9 @@ export {
   type ProjectionSnapshot,
   type SessionBudgetState
 } from "./tracker.js";
+export {
+  parseSyntheticCacheHitEnv,
+  assertSyntheticCacheHitListenerSafe,
+  SyntheticCacheHitOnPublicListener,
+  type SyntheticCacheHitConfig
+} from "./synthetic-cache-hook.js";
