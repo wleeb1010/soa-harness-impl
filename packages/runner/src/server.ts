@@ -192,7 +192,7 @@ export interface BuildRunnerOptions {
     requestsPerMinute?: number;
     registeredAt?: Date;
   };
-  /** M3-T2: GET /events/recent (§14.5) polling channel for the §14.1 25-type enum. */
+  /** M3-T2: GET /events/recent (§14.5) polling channel for the §14.1 27-type enum. */
   eventsRecent?: {
     emitter: StreamEventEmitter;
     sessionStore: SessionStore;

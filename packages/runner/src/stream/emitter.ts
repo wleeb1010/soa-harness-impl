@@ -1,10 +1,13 @@
 /**
  * §14.1 StreamEvent closed enum + in-process emitter.
  *
- * The 25-type enum is EXACTLY as pinned in §14.1 lines 1884-1896 of the
- * Core spec. Any other value at emit-side raises StreamEventTypeInvalid
- * BEFORE the event lands in the per-session ring buffer — no unknown
- * types can leak to /events/recent (§14.5) or §14.3 SSE transport.
+ * The 27-type enum is EXACTLY as pinned in §14.1 of the Core spec
+ * (L-35 grew the set from 25 → 27 by adding PreToolUseOutcome +
+ * PostToolUseOutcome, both trust_class=system Runner-chrome events
+ * emitted by the §15 hook-outcome pipeline). Any other value at emit-side
+ * raises StreamEventTypeInvalid BEFORE the event lands in the per-session
+ * ring buffer — no unknown types can leak to /events/recent (§14.5) or
+ * §14.3 SSE transport.
  *
  * Per-session monotonic sequence; unique event_id per event per process.
  *
@@ -42,14 +45,16 @@ export const STREAM_EVENT_TYPES = [
   "SelfImprovementAccepted",
   "SelfImprovementRejected",
   "SelfImprovementOrphaned",
-  "CrashEvent"
+  "CrashEvent",
+  "PreToolUseOutcome",
+  "PostToolUseOutcome"
 ] as const;
 
 export type StreamEventType = (typeof STREAM_EVENT_TYPES)[number];
 
 const STREAM_EVENT_TYPE_SET: ReadonlySet<string> = new Set<string>(STREAM_EVENT_TYPES);
 
-/** True when `value` is one of the 25 canonical §14.1 types. Exposed for tests. */
+/** True when `value` is one of the 27 canonical §14.1 types. Exposed for tests. */
 export function isStreamEventType(value: unknown): value is StreamEventType {
   return typeof value === "string" && STREAM_EVENT_TYPE_SET.has(value);
 }
@@ -59,7 +64,7 @@ export class StreamEventTypeInvalid extends Error {
   readonly attempted: string;
   constructor(type: string) {
     super(
-      `StreamEvent.type "${type}" is not in the §14.1 closed 25-type enum; ` +
+      `StreamEvent.type "${type}" is not in the §14.1 closed 27-type enum; ` +
         `the emitter refuses to record it. Adding a value is a spec change.`
     );
     this.name = "StreamEventTypeInvalid";

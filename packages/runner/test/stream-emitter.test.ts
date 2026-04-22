@@ -9,13 +9,16 @@ import {
 const FROZEN_NOW = new Date("2026-04-21T23:00:00.000Z");
 const SESSION = "ses_streamfixture0000001";
 
-describe("StreamEventEmitter — §14.1 25-type enum", () => {
-  it("exports exactly 25 canonical types", () => {
-    expect(STREAM_EVENT_TYPES).toHaveLength(25);
+describe("StreamEventEmitter — §14.1 27-type enum", () => {
+  it("exports exactly 27 canonical types", () => {
+    expect(STREAM_EVENT_TYPES).toHaveLength(27);
     // Spot-check required-by-§14.1 names.
     expect(STREAM_EVENT_TYPES).toContain("SessionStart");
     expect(STREAM_EVENT_TYPES).toContain("SessionEnd");
     expect(STREAM_EVENT_TYPES).toContain("CrashEvent");
+    // L-35 additions (Runner-chrome hook-outcome events):
+    expect(STREAM_EVENT_TYPES).toContain("PreToolUseOutcome");
+    expect(STREAM_EVENT_TYPES).toContain("PostToolUseOutcome");
     // NOT in the enum — these were rev-1 plan exemplars that the spec
     // doesn't actually declare as StreamEvent types:
     expect(STREAM_EVENT_TYPES).not.toContain("SessionCreated");
