@@ -1,5 +1,48 @@
 # Status — soa-harness-impl
 
+## 2026-04-21 (M3 Week 3 Day 1 — T-11 version errata + T-11b Week-4 scaffolds)
+
+- **Done:** `T-11` + `T-11b` shipped. **`T-11`**: Runner package version
+  bumped 0.0.0 → 1.0.0 with §19.4 errata notation; new
+  `release-manifest.json` at repo root declaring the nine §X.Y
+  observability additions this impl ships (§8.6, §10.5.1, §11.3.1,
+  §11.4, §12.5.1, §12.5.3, §12.5.4, §13.5, §14.5) + pin cross-ref to
+  `soa-validate.lock`; README gets a Version section with endpoint +
+  env-hook inventory. **`T-11b`**: new `docs/data-inventory.md` scaffold
+  per §10.7 point 1 — enumerates personal-data fields per primitive
+  with retention categories and legal-basis placeholders. Documents
+  the privacy.delete_subject / privacy.export_subject registration
+  path via either static-fixture or §11.3.1 dynamic watcher,
+  unblocking validator V-13 pre-wire.
+- **Active:** T-7 (SV-CARD/PERM/BOOT/SIGN remainders, 43 tests),
+  T-8 (Policy/manifest block, 16 tests), T-9 (SV-AGENTS, 7 tests),
+  T-10 (testable-today HRs, 6 tests). Shifted to validator-driven
+  discovery — the handlers are pre-wired and probe paths that already
+  exist in the impl; gap fills are reactive.
+- **Blocked:** None.
+- **Pin:** `5e97277` (unchanged).
+- **Scoreboard:** 388 repo-wide tests green (unchanged — T-11/T-11b
+  are config + docs, no behavioral drift). M3 impl coverage at **≥53**
+  (Week-1 core + T-4/T-5/T-6 + T-3 scaffolds). T-11b unblocks ~5
+  additional SV-PRIV/SV-GOV handlers for Week 4.
+
+<!-- machine-readable -->
+```json
+{
+  "week": 3,
+  "day": 1,
+  "t_tasks_landed": ["T-11", "T-11b"],
+  "t_tasks_active": ["T-7", "T-8", "T-9", "T-10"],
+  "artifacts_added": ["docs/data-inventory.md", "release-manifest.json"],
+  "runner_version": "1.0.0",
+  "spec_pin": "5e97277",
+  "tests_green_total": 388,
+  "m3_impl_coverage_estimate": 53,
+  "week_3_mode": "validator-driven-discovery"
+}
+```
+<!-- /machine-readable -->
+
 ## 2026-04-21 (M3 Week 2 Day 1-2 — T-4 Budget + T-5 Dynamic MCP + T-6 Hooks)
 
 - **Done:** `T-4`, `T-5`, `T-6` all shipped. **`T-4`**: `BudgetTracker`
