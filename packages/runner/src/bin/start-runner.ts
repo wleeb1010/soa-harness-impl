@@ -89,6 +89,7 @@ import {
   assertHandlerEnvListenerSafe,
   loadOverlapKeypairs,
   appendSuspectDecisionsForKid,
+  buildPublicKeyFromSpki,
   type HandlerKeyEntry
 } from "../attestation/index.js";
 
@@ -1354,12 +1355,31 @@ async function main() {
             ...(card.permissions?.policyEndpoint !== undefined
               ? { policyEndpoint: card.permissions.policyEndpoint }
               : {}),
-            ...(conformanceHandlerKey !== null
-              ? {
-                  resolvePdaVerifyKey: async (kid: string) =>
-                    kid === "soa-conformance-test-handler-v1.0" ? conformanceHandlerKey : null
+            // §10.6.3 L-50 Finding BB-ext-2 — dynamic PDA verifier lookup.
+            // Dynamically-enrolled kids arrive with base64url-DER SPKI
+            // bytes in the registry; construct a node KeyObject per kid
+            // so jose.compactVerify can check signatures. The pinned
+            // conformance kid keeps its resolver entry (SPKI not stored
+            // in the registry for that kid — the PEM was loaded at boot
+            // into conformanceHandlerKey).
+            resolvePdaVerifyKey: async (kid: string) => {
+              if (kid === "soa-conformance-test-handler-v1.0" && conformanceHandlerKey !== null) {
+                return conformanceHandlerKey;
+              }
+              const entry = handlerKeyRegistry.get(kid);
+              if (entry !== undefined && entry.spki_hex.length > 0) {
+                try {
+                  return buildPublicKeyFromSpki(entry.spki_hex);
+                } catch (err) {
+                  console.error(
+                    `[start-runner] failed to build PublicKey for enrolled kid=${kid}: ` +
+                      (err instanceof Error ? err.message : String(err))
+                  );
+                  return null;
                 }
-              : {}),
+              }
+              return null;
+            },
             // §10.6 L-48 BD/BE/BF — age + revocation gates on the PDA
             // verify path. Registry carries enrolled_at + rotation
             // overlap + revocation set; assertUsable fires at each

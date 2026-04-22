@@ -26,6 +26,7 @@ export {
   parseHandlerEnv,
   assertHandlerEnvListenerSafe,
   loadOverlapKeypairs,
+  buildPublicKeyFromSpki,
   type HandlerKeyEntry,
   type HandlerKeyExpiredInfo,
   type HandlerAlgo,

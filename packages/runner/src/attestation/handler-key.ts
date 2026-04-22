@@ -19,6 +19,7 @@
  */
 
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
+import { createPublicKey, type KeyObject } from "node:crypto";
 import { join } from "node:path";
 
 const LOOPBACK_HOSTS = new Set([
@@ -296,6 +297,25 @@ export interface OverlapKeyManifest {
  * `spki` field directly in manifest.json OR a sibling `public.pem`.
  * Manifest parse errors abort the load (fail-startup per §10.6.2).
  */
+/**
+ * §10.6.3 L-50 Finding BB-ext-2 — construct a verify-time KeyObject
+ * from the SPKI bytes stored at enrollment. Enrollment accepts
+ * base64url DER SPKI; we decode + build via node:crypto's
+ * createPublicKey. Hex-encoded SPKI (legacy default-handler entries)
+ * is also accepted so callers can pass whichever they carry.
+ */
+export function buildPublicKeyFromSpki(spki: string): KeyObject {
+  if (spki.length === 0) {
+    throw new Error("buildPublicKeyFromSpki: empty SPKI");
+  }
+  // Detect hex — strict 2-char-per-byte with only [0-9a-fA-F].
+  const isHex = /^[0-9a-fA-F]+$/.test(spki) && spki.length % 2 === 0;
+  const der = isHex
+    ? Buffer.from(spki, "hex")
+    : Buffer.from(spki.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  return createPublicKey({ key: der, format: "der", type: "spki" });
+}
+
 export function loadOverlapKeypairs(overlapDir: string): HandlerKeyEntry[] {
   if (!existsSync(overlapDir)) {
     throw new Error(

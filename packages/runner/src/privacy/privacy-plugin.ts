@@ -135,7 +135,10 @@ export const privacyPlugin: FastifyPluginAsync<PrivacyRouteOptions> = async (app
       reason: `subject=${subject_id} scope=${scope} legal_basis=${legal_basis}`,
       subject_id,
       signer_key_id: operator_kid,
-      timestamp: now.toISOString()
+      timestamp: now.toISOString(),
+      // §10.5.6 L-50 BI-impl-ext — operator admin rows default to
+      // standard-90d since no user-session activeMode applies.
+      retention_class: "standard-90d"
     });
 
     if (opts.systemLog) {

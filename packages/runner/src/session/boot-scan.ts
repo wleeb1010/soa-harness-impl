@@ -65,6 +65,14 @@ export interface ScanOutcomeEntry {
     | "failed-read"
     | "failed-resume";
   detail?: string;
+  /**
+   * §10.5.6 L-50 BI-impl-ext — granted activeMode snapshot from the
+   * persisted session file. Used to derive retention_class on the
+   * RUNNER_RESUME audit row so every record carries the retention
+   * tag per spec. Optional because failed-read outcomes have no
+   * readable file.
+   */
+  activeMode?: string;
 }
 
 export interface ScanAndResumeOptions {
@@ -112,9 +120,15 @@ export async function scanAndResumeInProgressSessions(
     try {
       const raw = await opts.persister.readSessionForResume(sessionId);
       const status = readWorkflowStatus(raw);
+      const activeMode = readSessionActiveMode(raw);
 
       if (TERMINAL_STATUSES.has(status)) {
-        outcomes.push({ session_id: sessionId, status, action: "skipped-terminal" });
+        outcomes.push({
+          session_id: sessionId,
+          status,
+          action: "skipped-terminal",
+          ...(activeMode !== undefined ? { activeMode } : {})
+        });
         continue;
       }
       // Any non-terminal value MUST be in the §12.1 IN_PROGRESS enum; an
@@ -137,7 +151,8 @@ export async function scanAndResumeInProgressSessions(
           session_id: sessionId,
           status,
           action: resumed.kind === "migrated" ? "migrated" : "resumed",
-          detail: `${resumed.sideEffects.length} side_effect(s) processed`
+          detail: `${resumed.sideEffects.length} side_effect(s) processed`,
+          ...(activeMode !== undefined ? { activeMode } : {})
         });
 
         // An "open bracket" at boot-scan time means the pre-resume
@@ -177,7 +192,8 @@ export async function scanAndResumeInProgressSessions(
             session_id: sessionId,
             status,
             action: "failed-read",
-            detail: err.reason
+            detail: err.reason,
+            ...(activeMode !== undefined ? { activeMode } : {})
           });
           continue;
         }
@@ -185,7 +201,8 @@ export async function scanAndResumeInProgressSessions(
           session_id: sessionId,
           status,
           action: "failed-resume",
-          detail: describeResumeFailure(err)
+          detail: describeResumeFailure(err),
+          ...(activeMode !== undefined ? { activeMode } : {})
         });
         // §12.5 step 2: CardVersionDrift terminates the session. Mark the
         // file Failed so a subsequent scan treats it as skipped-terminal
@@ -272,6 +289,12 @@ function buildResumeAuditBody(outcome: ScanOutcomeEntry): Record<string, unknown
     outcome.detail !== undefined && outcome.detail.length > 0
       ? `resume:${outcome.action}:${outcome.status} (${outcome.detail})`
       : `resume:${outcome.action}:${outcome.status}`;
+  // §10.5.6 L-50 BI-impl-ext — retention_class carries through resume-
+  // lifecycle rows so every chain record is tagged uniformly. Pre-
+  // resume activeMode from the persisted session is the canonical
+  // source; we fall back to standard-90d when the file was unreadable.
+  const retentionClass =
+    outcome.activeMode === "DangerFullAccess" ? "dfa-365d" : "standard-90d";
   return {
     id: `aud_${randomBytes(6).toString("hex")}`,
     session_id: outcome.session_id,
@@ -283,8 +306,16 @@ function buildResumeAuditBody(outcome: ScanOutcomeEntry): Record<string, unknown
     handler: "Autonomous",
     decision: decisionForAction[outcome.action],
     reason,
-    signer_key_id: ""
+    signer_key_id: "",
+    retention_class: retentionClass
   };
+}
+
+/** Pull activeMode from a freshly-read PersistedSession shape. */
+function readSessionActiveMode(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const mode = (raw as { activeMode?: unknown }).activeMode;
+  return typeof mode === "string" ? mode : undefined;
 }
 
 /** Inspect a persisted session object for its workflow.status field. */

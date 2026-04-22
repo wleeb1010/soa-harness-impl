@@ -64,13 +64,20 @@ export function appendSuspectDecisionsForKid(
     const suspectId = `aud_${randomBytes(6).toString("hex")}`;
     const sessionId = typeof row["session_id"] === "string" ? (row["session_id"] as string) : "none";
     const subjectId = typeof row["subject_id"] === "string" ? (row["subject_id"] as string) : "none";
+    // §10.5.6 L-50 BI-impl-ext — inherit retention_class from the
+    // referenced row so every record in the chain carries the tag.
+    const referencedRetention =
+      typeof row["retention_class"] === "string"
+        ? (row["retention_class"] as string)
+        : "standard-90d";
     chain.append({
       id: suspectId,
       session_id: sessionId,
       subject_id: subjectId,
       decision: "SuspectDecision",
       reason: "kid-revoked-24h-window",
-      referenced_audit_id: referencedId
+      referenced_audit_id: referencedId,
+      retention_class: referencedRetention
     });
     appendedIds.push(suspectId);
   }
