@@ -80,6 +80,9 @@ export interface BuildRunnerOptions {
     memoryStore?: InMemoryMemoryStateStore;
     /** M3-T4 budget tracker init on bootstrap. */
     budgetTracker?: BudgetTracker;
+    /** M3-T13 HR-17 — Memory MCP prefetch + MemoryDegraded emission. */
+    memoryClient?: import("./memory/mcp-client.js").MemoryMcpClient;
+    memoryDegradation?: import("./memory/mcp-client.js").MemoryDegradationTracker;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -259,7 +262,9 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.emitter !== undefined ? { emitter: sb.emitter } : {}),
       ...(sb.agentName !== undefined ? { agentName: sb.agentName } : {}),
       ...(sb.memoryStore !== undefined ? { memoryStore: sb.memoryStore } : {}),
-      ...(sb.budgetTracker !== undefined ? { budgetTracker: sb.budgetTracker } : {})
+      ...(sb.budgetTracker !== undefined ? { budgetTracker: sb.budgetTracker } : {}),
+      ...(sb.memoryClient !== undefined ? { memoryClient: sb.memoryClient } : {}),
+      ...(sb.memoryDegradation !== undefined ? { memoryDegradation: sb.memoryDegradation } : {})
     });
   }
 

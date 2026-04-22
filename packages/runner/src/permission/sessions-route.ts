@@ -6,6 +6,7 @@ import { InMemorySessionStore } from "./session-store.js";
 import type { SessionPersister, PersistedSession } from "../session/index.js";
 import type { StreamEventEmitter } from "../stream/index.js";
 import type { InMemoryMemoryStateStore } from "../memory/index.js";
+import { MemoryTimeout, type MemoryMcpClient, type MemoryDegradationTracker } from "../memory/index.js";
 import type { BudgetTracker } from "../budget/index.js";
 
 export interface SessionsRouteOptions {
@@ -64,6 +65,15 @@ export interface SessionsRouteOptions {
   memoryStore?: InMemoryMemoryStateStore;
   /** M3-T4 Budget tracker — initFor() called at session bootstrap. */
   budgetTracker?: BudgetTracker;
+  /**
+   * M3-T13 HR-17 — when configured, each new session attempts one
+   * Memory MCP prefetch (§8.2). On MemoryTimeout, the runner emits
+   * SessionEnd{stop_reason:"MemoryDegraded"} per §8.3.1 before the
+   * 201 returns. HR-17 choreography: 3 sessions × TIMEOUT_AFTER_N_CALLS=0
+   * → 3 SessionEnd events with MemoryDegraded stop_reason.
+   */
+  memoryClient?: MemoryMcpClient;
+  memoryDegradation?: MemoryDegradationTracker;
 }
 
 const WINDOW_MS = 60_000;
@@ -253,6 +263,56 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
           resumed: false
         }
       });
+    }
+
+    // M3-T13 HR-17 §8.3 — attempt a Memory MCP prefetch. Timeout emits
+    // SessionEnd{stop_reason:"MemoryDegraded"} per §8.3.1. The 201 still
+    // returns (session was created + persisted); the client sees the
+    // degradation on their next /events/recent poll.
+    if (opts.memoryClient && opts.emitter) {
+      try {
+        const hits = await opts.memoryClient.searchMemories({
+          query: userSub,
+          limit: 5,
+          sharing_scope: "session"
+        });
+        if (opts.memoryDegradation) opts.memoryDegradation.recordSuccess();
+        // Record in the memory-state store so /memory/state reflects the load.
+        if (opts.memoryStore) {
+          opts.memoryStore.recordLoad(
+            created.session_id,
+            hits.notes.map((n) => ({
+              note_id: n.note_id,
+              summary: n.summary,
+              data_class: n.data_class,
+              composite_score: n.composite_score,
+              ...(n.weight_semantic !== undefined ? { weight_semantic: n.weight_semantic } : {}),
+              ...(n.weight_recency !== undefined ? { weight_recency: n.weight_recency } : {}),
+              ...(n.weight_graph_strength !== undefined
+                ? { weight_graph_strength: n.weight_graph_strength }
+                : {})
+            })),
+            hits.notes.length
+          );
+        }
+      } catch (err) {
+        if (err instanceof MemoryTimeout) {
+          if (opts.memoryDegradation) opts.memoryDegradation.recordFailure();
+          // §8.3.1 — SessionEnd with stop_reason=MemoryDegraded.
+          opts.emitter.emit({
+            session_id: created.session_id,
+            type: "SessionEnd",
+            payload: { stop_reason: "MemoryDegraded" }
+          });
+        } else {
+          // Non-timeout error: log but don't degrade; future milestone
+          // may expand the failure taxonomy (auth, schema, etc.).
+          console.warn(
+            `[sessions] Memory MCP non-timeout error for ${created.session_id}:`,
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      }
     }
 
     return reply.code(201).send({

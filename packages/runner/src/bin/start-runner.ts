@@ -30,7 +30,11 @@ import {
 } from "../session/index.js";
 import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
-import { InMemoryMemoryStateStore } from "../memory/index.js";
+import {
+  InMemoryMemoryStateStore,
+  MemoryMcpClient,
+  MemoryDegradationTracker
+} from "../memory/index.js";
 import { BudgetTracker } from "../budget/index.js";
 import {
   MarkerEmitter,
@@ -338,6 +342,20 @@ async function main() {
   // recording wires in when the tool-invocation dispatch path lands.
   const budgetTracker = new BudgetTracker({ projectionWindow: 10, maxTokensPerRun: 200_000 });
 
+  // M3-T13 HR-17 — Memory MCP client (conditional on env). When
+  // SOA_RUNNER_MEMORY_MCP_ENDPOINT is set, each new session attempts a
+  // prefetch; on MemoryTimeout the runner emits SessionEnd{stop_reason:
+  // "MemoryDegraded"} per §8.3.1. The mock lives at :8001 in the default
+  // test harness; production deployments point at the real MCP server.
+  const MEMORY_MCP_ENDPOINT = process.env["SOA_RUNNER_MEMORY_MCP_ENDPOINT"];
+  const memoryClient = MEMORY_MCP_ENDPOINT
+    ? new MemoryMcpClient({ endpoint: MEMORY_MCP_ENDPOINT })
+    : undefined;
+  const memoryDegradation = MEMORY_MCP_ENDPOINT ? new MemoryDegradationTracker(3) : undefined;
+  if (MEMORY_MCP_ENDPOINT) {
+    console.log(`[start-runner] Memory MCP client wired to ${MEMORY_MCP_ENDPOINT}`);
+  }
+
   // Build the ResumeContext before startRunner so both the state-route
   // plugin (lazy-hydrate) and the post-boot scan share the same ctx.
   const cardVersionForResume =
@@ -411,7 +429,9 @@ async function main() {
                 ? ((card as { name: string }).name)
                 : "soa-harness-runner",
             memoryStore,
-            budgetTracker
+            budgetTracker,
+            ...(memoryClient !== undefined ? { memoryClient } : {}),
+            ...(memoryDegradation !== undefined ? { memoryDegradation } : {})
           }
         }
       : {}),

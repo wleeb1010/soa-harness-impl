@@ -13,3 +13,13 @@ export {
   memoryStatePlugin,
   type MemoryStateRouteOptions
 } from "./state-route.js";
+export {
+  MemoryMcpClient,
+  MemoryDegradationTracker,
+  MemoryTimeout,
+  MemoryToolError,
+  type MemoryMcpClientOptions,
+  type SearchMemoriesQuery,
+  type SearchedNote,
+  type WriteMemoryParams
+} from "./mcp-client.js";
