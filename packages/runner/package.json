@@ -1,8 +1,8 @@
 {
   "name": "@soa-harness/runner",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "SOA-Harness Runner — HTTP surface, trust bootstrap, Agent Card, StreamEvents, permission resolver, attestation, audit, probes.",
+  "description": "SOA-Harness Runner — HTTP surface, trust bootstrap, Agent Card, StreamEvents, permission resolver, attestation, audit, probes. §19.4 errata: v1.0 includes all §X.Y Observability additions pinned in MANIFEST.supplementary_artifacts at release time; see soa-validate.lock for the authoritative pin.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",

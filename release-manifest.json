@@ -1,0 +1,23 @@
+{
+  "$schema": "https://soa-harness.org/schemas/v1.0/release-manifest.schema.json",
+  "name": "soa-harness-impl",
+  "runner_version": "1.0",
+  "description": "SOA-Harness reference implementation — Runner binary + workspace packages. Tracks the spec commit pinned in soa-validate.lock.",
+  "errata": {
+    "policy": "§19.4 — consuming Runner v1.0 includes all §X.Y Observability additions pinned in the spec MANIFEST.supplementary_artifacts at the time of the release. The spec commit pinned in soa-validate.lock is authoritative for exactly which schemas, fixtures, and normative sections ship with this binary.",
+    "tracked_additions": [
+      { "section": "§8.6", "description": "Memory state observability endpoint" },
+      { "section": "§13.5", "description": "Budget projection observability endpoint" },
+      { "section": "§14.5", "description": "Minimum StreamEvent observability channel" },
+      { "section": "§11.4", "description": "Dynamic tool-registry observability endpoint" },
+      { "section": "§11.3.1", "description": "Runtime tool-addition test hook" },
+      { "section": "§10.5.1", "description": "Runtime audit-sink failure state machine" },
+      { "section": "§12.5.1", "description": "Session state observability endpoint" },
+      { "section": "§12.5.3", "description": "Crash-test marker protocol" },
+      { "section": "§12.5.4", "description": "Audit-sink event channel" }
+    ]
+  },
+  "published_at": "2026-04-21",
+  "pinned_spec_commit": "5e9727782dcbb5b8c93cd260718517271eafd756",
+  "pinned_spec_manifest_sha256": "d211c3c94436fb43afc5c616284f35b6993d2fdfb9bcd45af09a8696aef3103e"
+}

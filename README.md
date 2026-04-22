@@ -2,7 +2,40 @@
 
 Reference implementation of **[SOA-Harness v1.0](https://github.com/wleeb1010/soa-harness-specification)** — the formal spec for secure autonomous agents.
 
-> **Status (2026-04-20): pre-M1 scaffold.** No functional code yet. See `~/.claude/plans/put-a-plan-together-glittery-hartmanis.md` for milestone schedule. First working Runner ships with M1 (target: 6 weeks from kickoff).
+> **Status (2026-04-21):** M1 + M2 complete; M3 Week 2 shipped. Runner
+> version `1.0`. 13 endpoints live on :7700; memory MCP mock shipped
+> as a separate workspace package.
+
+## Version
+
+Current Runner version: **`1.0`**.
+
+Per §19.4 version-policy errata: consuming v1.0 of this implementation
+includes all §X.Y Observability additions pinned in the spec
+`MANIFEST.supplementary_artifacts` at the time of the release. The spec
+commit pinned in `soa-validate.lock` is authoritative for exactly which
+schemas, fixtures, and normative sections ship with this binary.
+
+### M3-era observability endpoints (v1.0)
+
+- `GET /memory/state/:session_id` (§8.6)
+- `GET /budget/projection?session_id=<sid>` (§13.5)
+- `GET /tools/registered` (§11.4)
+- `GET /events/recent?session_id=<sid>` (§14.5)
+
+### M3-era test hooks (loopback only; production-guarded)
+
+- `SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION=<path>` (§11.3.1)
+- `SOA_MEMORY_MCP_MOCK_TIMEOUT_AFTER_N_CALLS=<n>` (memory-mcp-mock)
+- `SOA_MEMORY_MCP_MOCK_RETURN_ERROR=<tool_name>` (memory-mcp-mock)
+- `SOA_MEMORY_MCP_MOCK_SEED=<path>` (memory-mcp-mock)
+- `SOA_PRE_TOOL_USE_HOOK=<command>` (§15)
+- `SOA_POST_TOOL_USE_HOOK=<command>` (§15)
+
+Existing guards (M1 / M2): `RUNNER_TEST_CLOCK`,
+`SOA_RUNNER_AUDIT_SINK_FAILURE_MODE`, `RUNNER_CRASH_TEST_MARKERS`.
+
+See `docs/data-inventory.md` for the §10.7 data inventory.
 
 ## What's here
 
