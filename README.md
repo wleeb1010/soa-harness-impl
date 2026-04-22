@@ -1,6 +1,6 @@
 # soa-harness-impl
 
-Reference implementation of **[SOA-Harness v1.0](https://github.com/wleeb1010/soa-harness-specification)** — the formal spec for secure autonomous agents.
+Reference implementation of **[SOA-Harness v1.0](https://github.com/wleeb1010/soa-harness-specification)** — the formal spec for Secure Operating Agents (SOA).
 
 > **Status (2026-04-21):** M1 + M2 complete; M3 Week 2 shipped. Runner
 > version `1.0`. 13 endpoints live on :7700; memory MCP mock shipped
