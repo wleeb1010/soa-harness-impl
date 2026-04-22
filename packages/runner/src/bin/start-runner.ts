@@ -110,6 +110,13 @@ function demoCrlFetcher(now: () => Date): CrlFetcher {
 interface CardShape {
   security?: { trustAnchors?: TrustAnchor[] };
   permissions?: { activeMode?: Capability; toolRequirements?: Record<string, Control>; policyEndpoint?: string };
+  /**
+   * §7 Agent Card — token-budget configuration. Finding O (SV-BUD-02):
+   * Runner MUST honor card-supplied maxTokensPerRun rather than defaulting
+   * to a hardcoded literal. projectionWindow has the same card-driven
+   * contract but is less exercised by conformance.
+   */
+  tokenBudget?: { maxTokensPerRun?: number; projectionWindow?: number };
 }
 
 async function main() {
@@ -381,7 +388,30 @@ async function main() {
   // M3-T4 Budget tracker — §13.1 p95-over-W projection state. Each
   // session gets zero-state initialized at §12.6 bootstrap; real turn
   // recording wires in when the tool-invocation dispatch path lands.
-  const budgetTracker = new BudgetTracker({ projectionWindow: 10, maxTokensPerRun: 200_000 });
+  //
+  // Finding O / SV-BUD-02: maxTokensPerRun is a §7 required Agent Card
+  // field — Runner MUST read card.tokenBudget.maxTokensPerRun (pattern
+  // enforced at card-schema load time) rather than defaulting to a
+  // hardcoded literal. Keep a fallback for cards that predate §7 field
+  // (shouldn't happen at this pin; belt-and-suspenders).
+  const cardMax =
+    typeof card.tokenBudget?.maxTokensPerRun === "number"
+      ? card.tokenBudget.maxTokensPerRun
+      : undefined;
+  const cardWindow =
+    typeof card.tokenBudget?.projectionWindow === "number"
+      ? card.tokenBudget.projectionWindow
+      : undefined;
+  const budgetTracker = new BudgetTracker({
+    projectionWindow: cardWindow ?? 10,
+    ...(cardMax !== undefined ? { maxTokensPerRun: cardMax } : {})
+  });
+  if (cardMax !== undefined) {
+    console.log(
+      `[start-runner] BudgetTracker wired to card.tokenBudget.maxTokensPerRun=${cardMax}` +
+        (cardWindow !== undefined ? ` (projectionWindow=${cardWindow})` : "")
+    );
+  }
 
   // M3-T13 HR-17 — Memory MCP client (conditional on env). When
   // SOA_RUNNER_MEMORY_MCP_ENDPOINT is set, each new session attempts a

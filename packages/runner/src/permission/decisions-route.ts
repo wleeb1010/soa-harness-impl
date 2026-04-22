@@ -754,8 +754,16 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     // before the budget tripped); subsequent requests from the same
     // bearer fail at auth because the session record is gone.
     if (opts.budgetTracker) {
+      // Finding P / SV-BUD-04: populate cache-accounting fields at
+      // turn-commit even in M3 (pre-dispatcher). Without a real LLM
+      // call path, cached counts are zero — but the fields MUST be
+      // present in the TurnRecord so /budget/projection surfaces
+      // deterministic cache_accounting totals (§13.3) instead of
+      // leaving the validator's probe reading undefined.
       opts.budgetTracker.recordTurn(sessionId, {
-        actual_total_tokens: opts.budgetPerTurnEstimate ?? 512
+        actual_total_tokens: opts.budgetPerTurnEstimate ?? 512,
+        prompt_tokens_cached: 0,
+        completion_tokens_cached: 0
       });
       const snapshot = opts.budgetTracker.getProjection(sessionId);
       if (
