@@ -1,0 +1,30 @@
+{
+  "$comment": "Project-local MCP config. CodeGraphContext builds a Neo4j-backed code graph for TS/JS files in this repo; queried via `cgc find/analyze` CLI or mcp__codegraphcontext__* tools when Claude Code loads this config. See scripts/cgc-refresh.sh for the post-commit refresh hook.",
+  "mcpServers": {
+    "CodeGraphContext": {
+      "command": "C:\\Users\\wbrumbalow\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\cgc.EXE",
+      "args": ["mcp", "start"],
+      "env": {
+        "DEFAULT_DATABASE": "neo4j",
+        "INDEX_VARIABLES": "true",
+        "ALLOW_DB_DELETION": "false",
+        "DEBUG_LOGS": "false",
+        "ENABLE_APP_LOGS": "CRITICAL",
+        "LIBRARY_LOG_LEVEL": "WARNING",
+        "MAX_FILE_SIZE_MB": "10",
+        "IGNORE_TEST_FILES": "false",
+        "IGNORE_HIDDEN_FILES": "true",
+        "ENABLE_AUTO_WATCH": "false",
+        "COMPLEXITY_THRESHOLD": "10",
+        "MAX_DEPTH": "unlimited",
+        "PARALLEL_WORKERS": "4",
+        "CACHE_ENABLED": "true",
+        "IGNORE_DIRS": "node_modules,venv,.venv,env,.env,dist,build,target,out,.git,.idea,.vscode,__pycache__,logs,sessions",
+        "INDEX_SOURCE": "true",
+        "SCIP_INDEXER": "false",
+        "SCIP_LANGUAGES": "typescript",
+        "SKIP_EXTERNAL_RESOLUTION": "false"
+      }
+    }
+  }
+}
