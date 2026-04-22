@@ -34,6 +34,7 @@ import {
 import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
 import { HookReentrancyTracker } from "../hook/index.js";
+import { OtelSpanStore, BackpressureState } from "../observability/index.js";
 import {
   InMemoryMemoryStateStore,
   MemoryMcpClient,
@@ -372,6 +373,14 @@ async function main() {
   // with 403 hook-reentrancy + SessionEnd{stop_reason:"HookReentrancy"}.
   const hookReentrancy = new HookReentrancyTracker();
 
+  // L-36 §14.5.2 OTel span ring buffer + §14.5.3 process-global
+  // backpressure state. Producer-side wiring (OTel SDK integration,
+  // buffer-overrun detection) lands in M4; M3 endpoints serve cold-state
+  // empty buffers + zero counters so the validator's SV-STR-06/07/08
+  // probes pin on the schema shape independent of producer timing.
+  const otelSpanStore = new OtelSpanStore();
+  const backpressureState = new BackpressureState({ clock });
+
   // M3-T1 Memory state store — per-session zero-state initialized at
   // §12.6 bootstrap. Full §8 client (search / write / consolidate /
   // aging) fills in incrementally as SV-MEM-01..08 wire up.
@@ -537,6 +546,19 @@ async function main() {
       clock,
       runnerVersion: "1.0"
     },
+    otelSpansRecent: {
+      store: otelSpanStore,
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
+    },
+    backpressureStatus: {
+      state: backpressureState,
+      sessionStore,
+      clock,
+      runnerVersion: "1.0",
+      ...(BOOTSTRAP_BEARER !== undefined ? { bootstrapBearer: BOOTSTRAP_BEARER } : {})
+    },
     memoryState: {
       memoryStore,
       sessionStore,
@@ -638,6 +660,8 @@ async function main() {
   if (registry) console.log(`  GET http://${HOST}:${PORT}/tools/registered`);
   console.log(`  GET http://${HOST}:${PORT}/events/recent?session_id=<id>&after=<eid>&limit=<n>`);
   console.log(`  GET http://${HOST}:${PORT}/memory/state/<session_id>`);
+  console.log(`  GET http://${HOST}:${PORT}/observability/otel-spans/recent?session_id=<id>&after=<span_id>&limit=<n>`);
+  console.log(`  GET http://${HOST}:${PORT}/observability/backpressure`);
   if (registry) {
     console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
     console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);

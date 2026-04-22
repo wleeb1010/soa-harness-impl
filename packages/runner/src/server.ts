@@ -24,7 +24,12 @@ import {
   AuditSink
 } from "./audit/index.js";
 import { sessionStatePlugin, SessionPersister } from "./session/index.js";
-import { budgetProjectionPlugin, toolsRegisteredPlugin } from "./observability/index.js";
+import {
+  budgetProjectionPlugin,
+  toolsRegisteredPlugin,
+  otelSpansRecentPlugin,
+  backpressureStatusPlugin
+} from "./observability/index.js";
 import { eventsRecentPlugin, StreamEventEmitter } from "./stream/index.js";
 import { memoryStatePlugin, InMemoryMemoryStateStore } from "./memory/index.js";
 import { BudgetTracker } from "./budget/index.js";
@@ -212,6 +217,25 @@ export interface BuildRunnerOptions {
     runnerVersion?: string;
     requestsPerMinute?: number;
   };
+  /** L-36 §14.5.2: GET /observability/otel-spans/recent — session-scoped OTel ring. */
+  otelSpansRecent?: {
+    store: import("./observability/index.js").OtelSpanStore;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    defaultLimit?: number;
+    maxLimit?: number;
+  };
+  /** L-36 §14.5.3: GET /observability/backpressure — process-global pressure snapshot. */
+  backpressureStatus?: {
+    state: import("./observability/index.js").BackpressureState;
+    sessionStore: SessionStore;
+    bootstrapBearer?: string;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+  };
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -360,6 +384,33 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(er.requestsPerMinute !== undefined ? { requestsPerMinute: er.requestsPerMinute } : {}),
       ...(er.defaultLimit !== undefined ? { defaultLimit: er.defaultLimit } : {}),
       ...(er.maxLimit !== undefined ? { maxLimit: er.maxLimit } : {})
+    });
+  }
+
+  if (opts.otelSpansRecent !== undefined) {
+    const os = opts.otelSpansRecent;
+    await app.register(otelSpansRecentPlugin, {
+      store: os.store,
+      sessionStore: os.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: os.clock,
+      ...(os.runnerVersion !== undefined ? { runnerVersion: os.runnerVersion } : {}),
+      ...(os.requestsPerMinute !== undefined ? { requestsPerMinute: os.requestsPerMinute } : {}),
+      ...(os.defaultLimit !== undefined ? { defaultLimit: os.defaultLimit } : {}),
+      ...(os.maxLimit !== undefined ? { maxLimit: os.maxLimit } : {})
+    });
+  }
+
+  if (opts.backpressureStatus !== undefined) {
+    const bs = opts.backpressureStatus;
+    await app.register(backpressureStatusPlugin, {
+      state: bs.state,
+      sessionStore: bs.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: bs.clock,
+      ...(bs.bootstrapBearer !== undefined ? { bootstrapBearer: bs.bootstrapBearer } : {}),
+      ...(bs.runnerVersion !== undefined ? { runnerVersion: bs.runnerVersion } : {}),
+      ...(bs.requestsPerMinute !== undefined ? { requestsPerMinute: bs.requestsPerMinute } : {})
     });
   }
 
