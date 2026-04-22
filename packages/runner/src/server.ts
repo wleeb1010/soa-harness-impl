@@ -131,6 +131,12 @@ export interface BuildRunnerOptions {
     cardVersion?: string;
     /** M3-T2 §14.1 StreamEvent emitter — fires PermissionDecision post-commit. */
     emitter?: StreamEventEmitter;
+    /** M3-T6 §15 hooks — PreToolUse before resolver, PostToolUse advisory post-commit. */
+    hookConfig?: {
+      preToolUseCommand?: readonly string[];
+      postToolUseCommand?: readonly string[];
+      turnIdFn?: () => string;
+    };
   };
   /**
    * Optional — when present the Runner exposes GET /audit/sink-events
@@ -367,7 +373,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.markers !== undefined ? { markers: pd.markers } : {}),
       ...(pd.toolPoolHash !== undefined ? { toolPoolHash: pd.toolPoolHash } : {}),
       ...(pd.cardVersion !== undefined ? { cardVersion: pd.cardVersion } : {}),
-      ...(pd.emitter !== undefined ? { emitter: pd.emitter } : {})
+      ...(pd.emitter !== undefined ? { emitter: pd.emitter } : {}),
+      ...(pd.hookConfig !== undefined ? { hookConfig: pd.hookConfig } : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
   }

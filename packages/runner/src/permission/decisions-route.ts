@@ -8,6 +8,7 @@ import type { ToolRegistry } from "../registry/index.js";
 import type { Control } from "../registry/types.js";
 import type { MarkerEmitter } from "../markers/index.js";
 import type { StreamEventEmitter } from "../stream/index.js";
+import { runHook, type HookOutcome } from "../hook/index.js";
 import {
   SessionPersister,
   SessionFormatIncompatible,
@@ -82,6 +83,21 @@ export interface PermissionsDecisionsRouteOptions {
    * headless calls (per §14.1.1 PermissionDecision payload schema).
    */
   emitter?: StreamEventEmitter;
+  /**
+   * M3-T6 §15 hooks pipeline. When preToolUseCommand is set, the hook
+   * fires BEFORE the resolver — Deny short-circuits to 403
+   * PermissionDenied reason=hook-deny (no audit row, no side_effect);
+   * Prompt forces the final decision into Prompt regardless of the
+   * resolver's output. When postToolUseCommand is set, the hook fires
+   * AFTER the commit write and is advisory (its decision is logged
+   * but does not mutate the response body — §15.3 PostToolUse role
+   * per the Runner is acknowledge/error/retry).
+   */
+  hookConfig?: {
+    preToolUseCommand?: readonly string[];
+    postToolUseCommand?: readonly string[];
+    turnIdFn?: () => string;
+  };
 }
 
 const WINDOW_MS = 60_000;
@@ -292,6 +308,35 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       });
     }
 
+    // §15 PreToolUse hook: fires BEFORE the resolver. Deny short-circuits
+    // to 403 with no audit row / no side_effect. Prompt forces the final
+    // decision's user-facing outcome into Prompt even when the resolver
+    // would have AutoAllow'd.
+    let preHookForcedPrompt = false;
+    if (opts.hookConfig?.preToolUseCommand && opts.hookConfig.preToolUseCommand.length > 0) {
+      const turnId = opts.hookConfig.turnIdFn?.() ?? `turn_${randomBytes(6).toString("hex")}`;
+      const outcome = await runHook({
+        command: opts.hookConfig.preToolUseCommand,
+        stdin: {
+          hook: "PreToolUse",
+          session_id: sessionId,
+          turn_id: turnId,
+          tool: { name: toolEntry.name, risk_class: toolEntry.risk_class, args_digest: argsDigest },
+          capability: sessionRecord.activeMode,
+          handler: "Interactive"
+        }
+      });
+      if (outcome.decision === "Deny") {
+        return reply.code(403).send({
+          error: "PermissionDenied",
+          reason: "hook-deny",
+          ...(outcome.reason ? { hook_reason: outcome.reason } : {}),
+          ...(outcome.stdout?.reason ? { hook_detail: outcome.stdout.reason } : {})
+        });
+      }
+      if (outcome.decision === "Prompt") preHookForcedPrompt = true;
+    }
+
     // §12.2 L-31 bracket-persist: when the persister bundle is wired, read
     // the session file + check for an idempotency cache hit before running
     // the decision pipeline. Cache hits return the original decision +
@@ -379,8 +424,8 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
 
     // PDA handling
     let handlerAccepted = true;
-    let finalDecision = resolverDecision;
-    let finalReason = resolverResponse.reason;
+    let finalDecision = preHookForcedPrompt ? "Prompt" as const : resolverDecision;
+    let finalReason = preHookForcedPrompt ? "hook-forced-prompt" : resolverResponse.reason;
     let pdaSignerKid: string | undefined;
 
     if (pdaJws !== null && pdaJws !== undefined) {
@@ -514,6 +559,29 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       await opts.persister!.writeSession(bracketSession, {
         markerPhase: { kind: "committed", side_effect: sideEffectIndex }
       });
+    }
+
+    // §15 PostToolUse hook: advisory — log via the hook's own stderr /
+    // stdout but do NOT mutate the response body. Covers SV-HOOK-03
+    // (PostToolUse invocation) and SV-HOOK-04 (non-zero exit logged).
+    if (opts.hookConfig?.postToolUseCommand && opts.hookConfig.postToolUseCommand.length > 0) {
+      const turnId = opts.hookConfig.turnIdFn?.() ?? `turn_${randomBytes(6).toString("hex")}`;
+      const outcome: HookOutcome = await runHook({
+        command: opts.hookConfig.postToolUseCommand,
+        stdin: {
+          hook: "PostToolUse",
+          session_id: sessionId,
+          turn_id: turnId,
+          tool: { name: toolEntry.name, risk_class: toolEntry.risk_class, args_digest: argsDigest },
+          capability: sessionRecord.activeMode,
+          handler: "Interactive",
+          result: { ok: handlerAccepted, output_digest: `sha256:${written.this_hash}` }
+        }
+      });
+      // Advisory — audit this in future via a PostHookOutcome event; for
+      // M3-T6 we simply void the outcome. Future milestone may emit an
+      // audit row or StreamEvent for operator visibility.
+      void outcome;
     }
 
     // §14.1 PermissionDecision — emit AFTER the commit write completes so

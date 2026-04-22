@@ -471,7 +471,29 @@ async function main() {
               typeof (card as { version?: unknown }).version === "string"
                 ? (card as { version: string }).version
                 : "1.0",
-            emitter: streamEmitter
+            emitter: streamEmitter,
+            // §15 hooks — operator supplies command lines via env.
+            ...((): {
+              hookConfig?: {
+                preToolUseCommand?: readonly string[];
+                postToolUseCommand?: readonly string[];
+              };
+            } => {
+              const pre = process.env["SOA_PRE_TOOL_USE_HOOK"];
+              const post = process.env["SOA_POST_TOOL_USE_HOOK"];
+              if (!pre && !post) return {};
+              const parse = (s: string | undefined): readonly string[] | undefined =>
+                s && s.trim().length > 0 ? s.split(/\s+/) : undefined;
+              const preCmd = parse(pre);
+              const postCmd = parse(post);
+              const hookConfig: {
+                preToolUseCommand?: readonly string[];
+                postToolUseCommand?: readonly string[];
+              } = {};
+              if (preCmd !== undefined) hookConfig.preToolUseCommand = preCmd;
+              if (postCmd !== undefined) hookConfig.postToolUseCommand = postCmd;
+              return { hookConfig };
+            })()
           }
         }
       : {}),
