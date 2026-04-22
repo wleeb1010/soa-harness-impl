@@ -26,6 +26,7 @@ import {
 import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
 import { InMemoryMemoryStateStore } from "../memory/index.js";
+import { BudgetTracker } from "../budget/index.js";
 import {
   MarkerEmitter,
   parseCrashTestMarkersEnv,
@@ -310,6 +311,11 @@ async function main() {
     }
   });
 
+  // M3-T4 Budget tracker — §13.1 p95-over-W projection state. Each
+  // session gets zero-state initialized at §12.6 bootstrap; real turn
+  // recording wires in when the tool-invocation dispatch path lands.
+  const budgetTracker = new BudgetTracker({ projectionWindow: 10, maxTokensPerRun: 200_000 });
+
   // Build the ResumeContext before startRunner so both the state-route
   // plugin (lazy-hydrate) and the post-boot scan share the same ctx.
   const cardVersionForResume =
@@ -382,7 +388,8 @@ async function main() {
               typeof (card as { name?: unknown }).name === "string"
                 ? ((card as { name: string }).name)
                 : "soa-harness-runner",
-            memoryStore
+            memoryStore,
+            budgetTracker
           }
         }
       : {}),
@@ -408,7 +415,8 @@ async function main() {
     budgetProjection: {
       sessionStore,
       clock,
-      runnerVersion: "1.0"
+      runnerVersion: "1.0",
+      tracker: budgetTracker
     },
     eventsRecent: {
       emitter: streamEmitter,

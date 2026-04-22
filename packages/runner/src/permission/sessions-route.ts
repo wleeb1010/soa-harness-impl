@@ -6,6 +6,7 @@ import { InMemorySessionStore } from "./session-store.js";
 import type { SessionPersister, PersistedSession } from "../session/index.js";
 import type { StreamEventEmitter } from "../stream/index.js";
 import type { InMemoryMemoryStateStore } from "../memory/index.js";
+import type { BudgetTracker } from "../budget/index.js";
 
 export interface SessionsRouteOptions {
   sessionStore: InMemorySessionStore;
@@ -61,6 +62,8 @@ export interface SessionsRouteOptions {
    * body from the moment the session exists.
    */
   memoryStore?: InMemoryMemoryStateStore;
+  /** M3-T4 Budget tracker — initFor() called at session bootstrap. */
+  budgetTracker?: BudgetTracker;
 }
 
 const WINDOW_MS = 60_000;
@@ -231,6 +234,9 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
     // write / consolidate) lands incrementally alongside SV-MEM-01..08.
     if (opts.memoryStore) {
       opts.memoryStore.initFor({ session_id: created.session_id });
+    }
+    if (opts.budgetTracker) {
+      opts.budgetTracker.initFor(created.session_id);
     }
 
     // §14.1 SessionStart after persist-before-201 so the event sequence

@@ -27,6 +27,7 @@ import { sessionStatePlugin, SessionPersister } from "./session/index.js";
 import { budgetProjectionPlugin, toolsRegisteredPlugin } from "./observability/index.js";
 import { eventsRecentPlugin, StreamEventEmitter } from "./stream/index.js";
 import { memoryStatePlugin, InMemoryMemoryStateStore } from "./memory/index.js";
+import { BudgetTracker } from "./budget/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -77,6 +78,8 @@ export interface BuildRunnerOptions {
     agentName?: string;
     /** M3-T1 Memory state init on bootstrap. */
     memoryStore?: InMemoryMemoryStateStore;
+    /** M3-T4 budget tracker init on bootstrap. */
+    budgetTracker?: BudgetTracker;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -158,13 +161,15 @@ export interface BuildRunnerOptions {
     /** L-29 lazy-hydrate calls resume_session when present. */
     resumeCtx?: import("./session/resume.js").ResumeContext;
   };
-  /** M3-T3 scaffold: GET /budget/projection (§13.5) — placeholder body. */
+  /** M3-T3 scaffold + M3-T4: GET /budget/projection (§13.5). */
   budgetProjection?: {
     sessionStore: SessionStore;
     clock: Clock;
     runnerVersion?: string;
     requestsPerMinute?: number;
     defaultMaxTokensPerRun?: number;
+    /** M3-T4 real projection state. Omit for T-3-scaffold placeholder behavior. */
+    tracker?: BudgetTracker;
   };
   /** M3-T3 scaffold: GET /tools/registered (§11.4) — static-fixture only. */
   toolsRegistered?: {
@@ -244,7 +249,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.cardVersion !== undefined ? { cardVersion: sb.cardVersion } : {}),
       ...(sb.emitter !== undefined ? { emitter: sb.emitter } : {}),
       ...(sb.agentName !== undefined ? { agentName: sb.agentName } : {}),
-      ...(sb.memoryStore !== undefined ? { memoryStore: sb.memoryStore } : {})
+      ...(sb.memoryStore !== undefined ? { memoryStore: sb.memoryStore } : {}),
+      ...(sb.budgetTracker !== undefined ? { budgetTracker: sb.budgetTracker } : {})
     });
   }
 
@@ -297,7 +303,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(bp.requestsPerMinute !== undefined ? { requestsPerMinute: bp.requestsPerMinute } : {}),
       ...(bp.defaultMaxTokensPerRun !== undefined
         ? { defaultMaxTokensPerRun: bp.defaultMaxTokensPerRun }
-        : {})
+        : {}),
+      ...(bp.tracker !== undefined ? { tracker: bp.tracker } : {})
     });
   }
 
