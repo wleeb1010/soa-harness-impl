@@ -65,6 +65,10 @@ on a non-loopback interface:
 | `RUNNER_SYNTHETIC_CACHE_HIT` | §13.3 / SV-BUD-04 | Per-decision cache-token increment |
 | `RUNNER_RETENTION_SWEEP_TICK_MS` | §10.7.3 / SV-PRIV-04 | Retention-sweep tick-poll override |
 | `RUNNER_RETENTION_SWEEP_INTERVAL_MS` | §10.7.3 / SV-PRIV-04 | Retention-sweep firing interval override |
+| `SOA_BOOTSTRAP_DNSSEC_TXT` | §5.3.3 / SV-BOOT-03 | Pinned DNSSEC TXT fixture in place of live resolver |
+| `RUNNER_BOOTSTRAP_POLL_TICK_MS` | §5.3.3 / SV-BOOT-04 | Revocation-poll cadence override |
+| `SOA_BOOTSTRAP_REVOCATION_FILE` | §5.3.3 / SV-BOOT-04 | Revocation file the poller watches each tick |
+| `SOA_BOOTSTRAP_SECONDARY_CHANNEL` | §5.3.3 / SV-BOOT-05 | Secondary-channel fixture for split-brain detection |
 
 These hooks are Experimental in the sense of §19.3 — they exist
 solely for conformance testing and MAY change in any release

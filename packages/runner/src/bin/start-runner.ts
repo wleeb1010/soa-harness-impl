@@ -1,7 +1,14 @@
 import { readFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { importPKCS8, type CryptoKey, type KeyObject } from "jose";
-import { loadInitialTrust } from "../bootstrap/index.js";
+import {
+  loadInitialTrust,
+  parseBootstrapEnv,
+  assertBootstrapEnvHooksListenerSafe,
+  loadDnssecBootstrap,
+  detectSplitBrain,
+  RevocationPoller
+} from "../bootstrap/index.js";
 import { startRunner } from "../server.js";
 import { generateEd25519KeyPair, generateSelfSignedEd25519Cert } from "../card/cert.js";
 import { loadConformanceCard } from "../card/conformance-loader.js";
@@ -177,6 +184,11 @@ async function main() {
   const AUDIT_SINK_FAILURE_MODE = process.env.SOA_RUNNER_AUDIT_SINK_FAILURE_MODE;
   assertAuditSinkEnvListenerSafe({ envValue: AUDIT_SINK_FAILURE_MODE, host: HOST });
 
+  // §5.3.3 Findings AP/AQ/AR — bootstrap testability env hooks.
+  // Parsed up front so the guard fires before any fixture read.
+  const bootstrapEnv = parseBootstrapEnv(process.env);
+  assertBootstrapEnvHooksListenerSafe({ env: bootstrapEnv, host: HOST });
+
   // §12.5.3 crash-test marker emission + production guard.
   const markersEnabled = parseCrashTestMarkersEnv(process.env.RUNNER_CRASH_TEST_MARKERS);
   assertCrashTestMarkersListenerSafe({ enabled: markersEnabled, host: HOST });
@@ -230,11 +242,39 @@ async function main() {
   // RUNNER_TRUST_PATH. Both map to the §5.3 initial-trust.json source.
   const trustPath = process.env.RUNNER_INITIAL_TRUST ?? TRUST_PATH;
   const expectedPublisherKid = process.env.RUNNER_EXPECTED_PUBLISHER_KID;
-  const trust = loadInitialTrust({
-    path: trustPath,
-    now: clock(),
-    ...(expectedPublisherKid !== undefined ? { expectedPublisherKid } : {})
-  });
+  // Finding AP / SV-BOOT-03 — when SOA_BOOTSTRAP_DNSSEC_TXT is set, the
+  // pinned fixture replaces the normal initial-trust.json read.
+  // Validator drives the three scenarios (valid, empty, missing-ad-bit)
+  // through this path; missing-AD and empty cases raise
+  // HostHardeningInsufficient exactly as a live DNSSEC resolver failure
+  // would.
+  let trust;
+  if (bootstrapEnv.dnssecTxtPath !== undefined) {
+    console.log(
+      `[start-runner] §5.3.3 Finding AP — loading bootstrap anchor from DNSSEC fixture ${bootstrapEnv.dnssecTxtPath}`
+    );
+    trust = loadDnssecBootstrap({
+      path: bootstrapEnv.dnssecTxtPath,
+      ...(expectedPublisherKid !== undefined ? { expectedPublisherKid } : {})
+    });
+  } else {
+    trust = loadInitialTrust({
+      path: trustPath,
+      now: clock(),
+      ...(expectedPublisherKid !== undefined ? { expectedPublisherKid } : {})
+    });
+  }
+  // Finding AR / SV-BOOT-05 — multi-channel split-brain detection.
+  // When SOA_BOOTSTRAP_SECONDARY_CHANNEL is set, compare the secondary
+  // against the authoritative trust. Disagreement raises
+  // HostHardeningInsufficient(bootstrap-split-brain) per §5.3.2 rule 2.
+  if (bootstrapEnv.secondaryChannelPath !== undefined) {
+    detectSplitBrain({
+      authoritative: trust,
+      secondaryPath: bootstrapEnv.secondaryChannelPath,
+      authoritativeChannel: trust.channel ?? "sdk-pinned"
+    });
+  }
   const { privateKey, x5c } = await resolveKeyAndX5c(trust.publisher_kid);
 
   // Card source: when RUNNER_CARD_FIXTURE is set, load the pinned conformance
@@ -514,6 +554,50 @@ async function main() {
       precedenceResult.ok ? null : ("bootstrap-pending" as const)
   };
 
+  // Finding AQ / SV-BOOT-04 — revocation file watcher. When
+  // SOA_BOOTSTRAP_REVOCATION_FILE is set, poll the path at
+  // RUNNER_BOOTSTRAP_POLL_TICK_MS (default 1 h). Matching
+  // publisher_kid flips the Runner into the §5.3.1 revocation
+  // refusal state: write a Config/bootstrap-revoked/error record
+  // under BOOT_SESSION_ID and pin /ready at 503.
+  let bootstrapRevoked = false;
+  let revocationPoller: RevocationPoller | undefined;
+  if (bootstrapEnv.revocationFilePath !== undefined) {
+    revocationPoller = new RevocationPoller({
+      filePath: bootstrapEnv.revocationFilePath,
+      expectedPublisherKid: trust.publisher_kid,
+      tickMs: bootstrapEnv.pollTickMs ?? 60 * 60 * 1000,
+      onRevoked: (record) => {
+        bootstrapRevoked = true;
+        systemLog.write({
+          session_id: BOOT_SESSION_ID,
+          category: "Config",
+          level: "error",
+          code: "bootstrap-revoked",
+          message:
+            `Bootstrap anchor ${trust.publisher_kid} revoked via file ` +
+            `${bootstrapEnv.revocationFilePath}`,
+          data: {
+            publisher_kid: record.publisher_kid,
+            reason: record.reason ?? "unspecified",
+            revoked_at: record.revoked_at ?? new Date().toISOString()
+          }
+        });
+        console.error(
+          `[start-runner] Finding AQ — bootstrap revocation observed for publisher_kid=${record.publisher_kid}; /ready pinned at 503`
+        );
+      },
+      log: (m) => console.log(m)
+    });
+    revocationPoller.start();
+    console.log(
+      `[start-runner] §5.3.3 Finding AQ — revocation poller active (file=${bootstrapEnv.revocationFilePath}, tick=${bootstrapEnv.pollTickMs ?? 3600000}ms)`
+    );
+  }
+  const bootstrapRevocationReadiness = {
+    check: () => (bootstrapRevoked ? ("bootstrap-pending" as const) : null)
+  };
+
   // M3-T1 Memory state store — per-session zero-state initialized at
   // §12.6 bootstrap. Full §8 client (search / write / consolidate /
   // aging) fills in incrementally as SV-MEM-01..08 wire up.
@@ -785,6 +869,9 @@ async function main() {
       // recent under BOOT_SESSION_ID; operators flip /ready to 200 by
       // fixing the Card, not by poking the Runner.
       cardPrecedenceReadiness,
+      // Finding AQ — revocation latch same semantic: /ready at 503 for
+      // the remainder of the process once the revocation file is seen.
+      bootstrapRevocationReadiness,
       boot,
       {
         // §10.5.1 unreachable-halt → /ready flips 503 audit-sink-unreachable.
@@ -914,13 +1001,16 @@ async function main() {
       sessionStore,
       clock,
       runnerVersion: "1.0",
-      // Finding AN — when the Card fails §10.3 precedence, /ready is
-      // pinned at 503 for the Runner's lifetime. The System Event Log
-      // is how operators observe the ConfigPrecedenceViolation record
-      // that explains the refusal, so the endpoint bypasses readiness
-      // gating here (boot-session scope only — §14.5.4's readiness
-      // gate still applies in a Runner with a compliant Card).
-      skipReadinessGate: !precedenceResult.ok
+      // Finding AN / AQ — when the Card fails §10.3 precedence OR the
+      // bootstrap anchor is revoked at runtime, /ready is pinned at
+      // 503 for the Runner's lifetime. The System Event Log is how
+      // operators observe the record that explains the refusal, so
+      // the endpoint bypasses readiness gating in those states (the
+      // gate closure is a permanent terminal state, not a transient
+      // one). A compliant Runner with no precedence failure + no
+      // revocation re-asserts §14.5.4's readiness-gate contract.
+      skipReadinessGate: !precedenceResult.ok ||
+        bootstrapEnv.revocationFilePath !== undefined
     },
     memoryState: {
       memoryStore,

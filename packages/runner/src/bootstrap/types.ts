@@ -23,7 +23,13 @@ export type BootstrapFailReason =
   | "bootstrap-malformed"
   | "bootstrap-invalid-schema"
   | "bootstrap-expired"
-  | "bootstrap-channel-unsupported";
+  | "bootstrap-channel-unsupported"
+  /** §5.3.2 rule 1 — SOA_BOOTSTRAP_CHANNEL env var absent. */
+  | "bootstrap-channel-undeclared"
+  /** §5.3.1 / Finding AQ — revocation file observed with matching publisher_kid. */
+  | "bootstrap-revoked"
+  /** §5.3.2 rule 2 / Finding AR — dissenting publisher on secondary channel. */
+  | "bootstrap-split-brain";
 
 export class HostHardeningInsufficient extends Error {
   override readonly name = "HostHardeningInsufficient";
