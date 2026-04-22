@@ -491,6 +491,8 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       const residencyPayload = residencyAuditPayload(decision);
       // Append the residency audit row regardless of allow/deny so the
       // full decision trail is preserved per §10.7.2 #4.
+      // §10.5.6 L-50 BI-impl — retention_class derived from the
+      // session's granted activeMode stamped on every audit row.
       opts.chain.append({
         session_id: sessionId,
         decision: "ResidencyCheck",
@@ -501,7 +503,9 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
             ? ` sub_reason=${residencyPayload.sub_reason}`
             : ""),
         timestamp: opts.clock().toISOString(),
-        residency: residencyPayload
+        residency: residencyPayload,
+        retention_class:
+          sessionRecord.activeMode === "DangerFullAccess" ? "dfa-365d" : "standard-90d"
       });
       if (decision.outcome === "deny") {
         return reply.code(403).send({

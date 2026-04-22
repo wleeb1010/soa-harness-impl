@@ -26,7 +26,14 @@ export interface HandlerRevocationFileEntry {
 }
 
 export interface HandlerCrlPollerOptions {
-  filePath: string;
+  /**
+   * Revocation file path. When undefined, the poller still fires
+   * refresh ticks (L-50 Finding BE-ext: /logs/system/recent
+   * crl-refresh-complete observability is required independent of
+   * whether a revocation file exists). Only when set does the poller
+   * attempt to read + dispatch revocations.
+   */
+  filePath?: string;
   registry: HandlerKeyRegistry;
   tickMs: number;
   clock: Clock;
@@ -44,7 +51,7 @@ export interface HandlerCrlPollerOptions {
 }
 
 export class HandlerCrlPoller {
-  private readonly filePath: string;
+  private readonly filePath: string | undefined;
   private readonly registry: HandlerKeyRegistry;
   private readonly tickMs: number;
   private readonly clock: Clock;
@@ -96,7 +103,7 @@ export class HandlerCrlPoller {
   tick(): void {
     const nowIso = this.clock().toISOString();
     let record: HandlerRevocationFileEntry | null = null;
-    if (existsSync(this.filePath)) {
+    if (this.filePath !== undefined && existsSync(this.filePath)) {
       try {
         record = JSON.parse(readFileSync(this.filePath, "utf8")) as HandlerRevocationFileEntry;
       } catch (err) {

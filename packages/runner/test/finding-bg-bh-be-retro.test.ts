@@ -41,13 +41,15 @@ describe("Finding BG — POST /handlers/enroll", () => {
           kid: "h1",
           spki: "deadbeef",
           algo: "EdDSA",
-          issued_at: FROZEN_NOW.toISOString()
+          issued_at: FROZEN_NOW.toISOString(),
+          role: "Interactive"
         }
       });
       expect(res.statusCode).toBe(201);
-      const body = JSON.parse(res.body) as { enrolled: boolean; kid: string };
+      const body = JSON.parse(res.body) as { enrolled: boolean; kid: string; role: string };
       expect(body.enrolled).toBe(true);
       expect(body.kid).toBe("h1");
+      expect(body.role).toBe("Interactive");
       expect(reg.has("h1")).toBe(true);
     } finally {
       await app.close();
@@ -72,7 +74,8 @@ describe("Finding BG — POST /handlers/enroll", () => {
           kid: "h1",
           spki: "bb",
           algo: "EdDSA",
-          issued_at: FROZEN_NOW.toISOString()
+          issued_at: FROZEN_NOW.toISOString(),
+          role: "Interactive"
         }
       });
       expect(res.statusCode).toBe(409);
@@ -94,7 +97,8 @@ describe("Finding BG — POST /handlers/enroll", () => {
           kid: "h-rs256",
           spki: "aa",
           algo: "RS256",
-          issued_at: FROZEN_NOW.toISOString()
+          issued_at: FROZEN_NOW.toISOString(),
+          role: "Interactive"
         }
       });
       expect(res.statusCode).toBe(400);
@@ -116,7 +120,8 @@ describe("Finding BG — POST /handlers/enroll", () => {
           kid: "h-rs",
           spki: "aa",
           algo: "RS3072",
-          issued_at: FROZEN_NOW.toISOString()
+          issued_at: FROZEN_NOW.toISOString(),
+          role: "Interactive"
         }
       });
       expect(res.statusCode).toBe(201);
@@ -142,6 +147,77 @@ describe("Finding BG — POST /handlers/enroll", () => {
     }
   });
 
+  it("missing role → 400 RoleRejected (BB-ext §10.6.3 L-50)", async () => {
+    const reg = new HandlerKeyRegistry();
+    const app = await newEnrollApp(reg);
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/handlers/enroll",
+        headers: { authorization: `Bearer ${OPERATOR_BEARER}`, "content-type": "application/json" },
+        payload: {
+          kid: "h-no-role",
+          spki: "aa",
+          algo: "EdDSA",
+          issued_at: FROZEN_NOW.toISOString()
+        }
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe("RoleRejected");
+      expect(reg.has("h-no-role")).toBe(false);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("unknown role → 400 RoleRejected (BB-ext)", async () => {
+    const reg = new HandlerKeyRegistry();
+    const app = await newEnrollApp(reg);
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/handlers/enroll",
+        headers: { authorization: `Bearer ${OPERATOR_BEARER}`, "content-type": "application/json" },
+        payload: {
+          kid: "h-bad-role",
+          spki: "aa",
+          algo: "EdDSA",
+          issued_at: FROZEN_NOW.toISOString(),
+          role: "Admin"
+        }
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe("RoleRejected");
+      expect(JSON.parse(res.body).detail).toMatch(/Interactive.*Coordinator.*Autonomous/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("role=Autonomous enrolls + registry binds role (BB-ext — unblocks SV-PERM-03/04)", async () => {
+    const reg = new HandlerKeyRegistry();
+    const app = await newEnrollApp(reg);
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/handlers/enroll",
+        headers: { authorization: `Bearer ${OPERATOR_BEARER}`, "content-type": "application/json" },
+        payload: {
+          kid: "h-auto",
+          spki: "aa",
+          algo: "EdDSA",
+          issued_at: FROZEN_NOW.toISOString(),
+          role: "Autonomous"
+        }
+      });
+      expect(res.statusCode).toBe(201);
+      expect(JSON.parse(res.body).role).toBe("Autonomous");
+      expect(reg.get("h-auto")?.role).toBe("Autonomous");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("non-operator bearer → 403", async () => {
     const reg = new HandlerKeyRegistry();
     const app = await newEnrollApp(reg);
@@ -154,7 +230,8 @@ describe("Finding BG — POST /handlers/enroll", () => {
           kid: "h1",
           spki: "aa",
           algo: "EdDSA",
-          issued_at: FROZEN_NOW.toISOString()
+          issued_at: FROZEN_NOW.toISOString(),
+          role: "Interactive"
         }
       });
       expect(res.statusCode).toBe(403);

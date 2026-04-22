@@ -804,40 +804,47 @@ async function main() {
   // only the named kid's verify path denies). Each refresh records a
   // crl-refresh-complete row under BOOT_SESSION_ID so SV-PERM-14
   // observes the cadence.
-  let handlerCrlPoller: HandlerCrlPoller | undefined;
+  // §10.6.2 L-50 Finding BE-ext — poller runs unconditionally so the
+  // crl-refresh-complete observability row (§10.6.2 #last paragraph)
+  // fires on every tick whether or not a revocation file is present.
+  // The file path, when set, adds revocation dispatch on top.
   const handlerCrlTickMs = handlerEnv.crlPollTickMs ?? 60 * 60 * 1000;
-  if (bootstrapEnv.revocationFilePath !== undefined) {
-    handlerCrlPoller = new HandlerCrlPoller({
-      filePath: bootstrapEnv.revocationFilePath,
-      registry: handlerKeyRegistry,
-      tickMs: handlerCrlTickMs,
-      clock,
-      systemLog,
-      bootSessionId: BOOT_SESSION_ID,
-      // §10.6.5 L-48 Finding BE-retroactive — scan back 24h + append
-      // SuspectDecision admin-rows for every decision signed by the
-      // newly-revoked kid. Original rows immutable (WORM); the flag
-      // lives in the referencing rows.
-      onHandlerRevoked: (kid, record) => {
-        const result = appendSuspectDecisionsForKid({
-          chain,
-          kid,
-          clock,
-          ...(record.revoked_at !== undefined ? { revokedAtIso: record.revoked_at } : {})
-        });
-        if (result.flagged > 0) {
-          console.log(
-            `[start-runner] §10.6.5 appended ${result.flagged} SuspectDecision row(s) for kid=${kid}`
-          );
-        }
-      },
-      log: (m) => console.log(m)
-    });
-    handlerCrlPoller.start();
-    console.log(
-      `[start-runner] §10.6.2 handler CRL poller active (file=${bootstrapEnv.revocationFilePath}, tick=${handlerCrlTickMs}ms)`
-    );
-  }
+  const handlerCrlPoller = new HandlerCrlPoller({
+    registry: handlerKeyRegistry,
+    tickMs: handlerCrlTickMs,
+    clock,
+    systemLog,
+    bootSessionId: BOOT_SESSION_ID,
+    ...(bootstrapEnv.revocationFilePath !== undefined
+      ? { filePath: bootstrapEnv.revocationFilePath }
+      : {}),
+    // §10.6.5 L-48 Finding BE-retroactive — scan back 24h + append
+    // SuspectDecision admin-rows for every decision signed by the
+    // newly-revoked kid. Original rows immutable (WORM); the flag
+    // lives in the referencing rows.
+    onHandlerRevoked: (kid, record) => {
+      const result = appendSuspectDecisionsForKid({
+        chain,
+        kid,
+        clock,
+        ...(record.revoked_at !== undefined ? { revokedAtIso: record.revoked_at } : {})
+      });
+      if (result.flagged > 0) {
+        console.log(
+          `[start-runner] §10.6.5 appended ${result.flagged} SuspectDecision row(s) for kid=${kid}`
+        );
+      }
+    },
+    log: (m) => console.log(m)
+  });
+  handlerCrlPoller.start();
+  // Fire an immediate tick so /logs/system/recent carries a refresh
+  // row at boot time — SV-PERM-14 polls without waiting a full tick.
+  handlerCrlPoller.tick();
+  console.log(
+    `[start-runner] §10.6.2 handler CRL poller active ` +
+      `(file=${bootstrapEnv.revocationFilePath ?? "<none>"}, tick=${handlerCrlTickMs}ms)`
+  );
 
   // M3-T1 Memory state store — per-session zero-state initialized at
   // §12.6 bootstrap. Full §8 client (search / write / consolidate /

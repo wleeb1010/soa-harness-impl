@@ -20,8 +20,14 @@ import {
   AlgorithmRejected,
   HandlerKidConflict,
   HandlerKeyRegistry,
-  isHandlerAlgo
+  HANDLER_ROLES,
+  isHandlerAlgo,
+  type HandlerRole
 } from "./handler-key.js";
+
+function isHandlerRole(value: unknown): value is HandlerRole {
+  return typeof value === "string" && (HANDLER_ROLES as readonly string[]).includes(value);
+}
 
 export interface HandlerEnrollRouteOptions {
   registry: HandlerKeyRegistry;
@@ -62,6 +68,7 @@ export const handlerEnrollPlugin: FastifyPluginAsync<HandlerEnrollRouteOptions> 
     const spki = body["spki"];
     const algo = body["algo"];
     const issuedAt = body["issued_at"];
+    const roleRaw = body["role"];
     if (
       typeof kid !== "string" ||
       kid.length === 0 ||
@@ -81,12 +88,25 @@ export const handlerEnrollPlugin: FastifyPluginAsync<HandlerEnrollRouteOptions> 
       });
     }
 
+    // §10.6.3 L-50 Finding BB-ext — `role` required on enroll and
+    // bound to the §10.4 role taxonomy. Missing or unknown → 400
+    // RoleRejected so §10.4.2 responder-kid checks have canonical
+    // metadata to read when this kid later signs.
+    if (!isHandlerRole(roleRaw)) {
+      return reply.code(400).send({
+        error: "RoleRejected",
+        detail: `role not in {${HANDLER_ROLES.join(", ")}}`
+      });
+    }
+    const role: HandlerRole = roleRaw;
+
     try {
       opts.registry.enroll({
         kid,
         spki_hex: spki,
         algo,
-        enrolled_at: issuedAt
+        enrolled_at: issuedAt,
+        role
       });
     } catch (err) {
       if (err instanceof HandlerKidConflict) {
@@ -109,6 +129,7 @@ export const handlerEnrollPlugin: FastifyPluginAsync<HandlerEnrollRouteOptions> 
       enrolled: true,
       kid,
       issued_at: issuedAt,
+      role,
       runner_version: runnerVersion
     });
   });

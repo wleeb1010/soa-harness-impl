@@ -227,6 +227,28 @@ describe("Finding BD/BE/BF — HandlerCrlPoller", () => {
     }
   });
 
+  it("BE-ext: poller with NO filePath still emits crl-refresh-complete each tick (SV-PERM-14)", () => {
+    const reg = new HandlerKeyRegistry();
+    const sys = new SystemLogBuffer({ clock: () => T_REF });
+    const poller = new HandlerCrlPoller({
+      // No filePath at all.
+      registry: reg,
+      tickMs: 100,
+      clock: () => T_REF,
+      systemLog: sys,
+      bootSessionId: BOOT_SESSION_ID,
+      setInterval: () => null as unknown as ReturnType<typeof setInterval>,
+      clearInterval: () => undefined
+    });
+    poller.tick();
+    poller.tick();
+    const snap = sys.snapshot(BOOT_SESSION_ID);
+    expect(snap.length).toBe(2);
+    expect(snap[0]?.code).toBe("crl-refresh-complete");
+    expect(snap[1]?.code).toBe("crl-refresh-complete");
+    expect(snap[0]?.data?.["revoked_count"]).toBe(0);
+  });
+
   it("handler_kid entry in file → revokes registry + fires onHandlerRevoked", () => {
     const reg = new HandlerKeyRegistry();
     reg.enroll({
