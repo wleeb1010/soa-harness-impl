@@ -55,6 +55,32 @@ NEVER edit the spec repo from this session. Protocol:
 ### The spec changed something that affects you
 Spec session will open a GitHub issue on this repo announcing: "Spec commit <sha> affects <your component>. Please bump `soa-validate.lock`." You review the delta, bump the lock, update impl code as needed.
 
+### Pin-bump checklist
+
+Every pin bump MUST run the steps below before pushing. Skipping any
+step is how Finding AK landed — vendored schemas drifted against the
+new spec and the Card plugin rejected a normative field.
+
+1. Edit `soa-validate.lock`: update `spec_commit_sha`,
+   `spec_manifest_sha256`, append a `pin_history` entry documenting
+   what the bump adopts.
+2. Run `pnpm -w build`. This cascades:
+   - `packages/schemas` re-runs `scripts/build-validators.mjs` which
+     re-fetches schemas from the pinned spec commit, regenerates
+     `src/schemas/vendored/*.schema.json` + `src/registry.ts`, then
+     `tsc -b` refreshes `dist/`. The vendored tree is git-ignored;
+     freshness depends on this step running after every pin bump.
+   - Every downstream package rebuilds against the new validator
+     registry, surfacing any type drift at compile time.
+3. Run `pnpm -w test`. Schema-level drift (e.g., a new required
+   field, a tightened pattern) shows up as a failing integration
+   test before it reaches the validator.
+4. Bounce `:7700` via `scripts/dev-runner.sh bounce` so validator
+   probes see the new binary + new vendored schemas.
+5. Commit the pin change. Generated files stay out of the commit —
+   they regenerate on every fresh clone via `pnpm install`'s
+   prebuild hook.
+
 ## The MCP connection model (simple version)
 
 - `graphify-spec` is a stdio subprocess, NOT a network service
