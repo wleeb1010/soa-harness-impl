@@ -143,6 +143,8 @@ export interface BuildRunnerOptions {
     /** M3-T4 §13.1 turn-accounting — recordTurn() fires after each committed decision. */
     budgetTracker?: BudgetTracker;
     budgetPerTurnEstimate?: number;
+    /** §15 Finding N — shared hook reentrancy tracker. */
+    hookReentrancy?: import("./hook/index.js").HookReentrancyTracker;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/sink-events
@@ -386,7 +388,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(pd.budgetTracker !== undefined ? { budgetTracker: pd.budgetTracker } : {}),
       ...(pd.budgetPerTurnEstimate !== undefined
         ? { budgetPerTurnEstimate: pd.budgetPerTurnEstimate }
-        : {})
+        : {}),
+      ...(pd.hookReentrancy !== undefined ? { hookReentrancy: pd.hookReentrancy } : {})
     };
     await app.register(permissionsDecisionsPlugin, routeOpts);
   }

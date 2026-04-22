@@ -19,6 +19,21 @@ export interface RunHookOptions {
   cwd?: string;
   /** Optional environment; merged into process.env. */
   env?: Record<string, string | undefined>;
+  /**
+   * §15 reentrancy-guard binding (Finding N / SV-HOOK-08). When set,
+   * `onSpawn(pid)` fires after a successful spawn and `onExit()` fires
+   * on either `close` or `error` — exactly once per invocation. The
+   * decisions-route uses these to register + deregister the child with
+   * a HookReentrancyTracker so inbound /permissions/decisions requests
+   * carrying the hook's PID are recognized as reentrancy and rejected.
+   *
+   * onSpawn() does NOT fire when `command` is empty / the spawn throws
+   * synchronously. onExit() DOES fire for every resolved code path
+   * (timeout, crash, normal exit) after a successful spawn, so the
+   * tracker's end() call stays balanced with its begin().
+   */
+  onSpawn?: (pid: number) => void;
+  onExit?: () => void;
 }
 
 const STDERR_SAMPLE_BYTES = 2048;
@@ -96,6 +111,16 @@ export async function runHook(opts: RunHookOptions): Promise<HookOutcome> {
       return;
     }
 
+    // §15 reentrancy-guard bookkeeping — fire onSpawn once the child
+    // has a PID; balance with onExit on every completion path below.
+    let exitFired = false;
+    const fireExit = (): void => {
+      if (exitFired) return;
+      exitFired = true;
+      opts.onExit?.();
+    };
+    if (child.pid !== undefined) opts.onSpawn?.(child.pid);
+
     let timedOut = false;
     let stdoutBuf = "";
     let stderrBuf = "";
@@ -122,6 +147,7 @@ export async function runHook(opts: RunHookOptions): Promise<HookOutcome> {
 
     child.on("error", (err) => {
       clearTimeout(timer);
+      fireExit();
       resolve({
         kind,
         decision: "Deny",
@@ -136,6 +162,7 @@ export async function runHook(opts: RunHookOptions): Promise<HookOutcome> {
 
     child.on("close", (code, signal) => {
       clearTimeout(timer);
+      fireExit();
       if (timedOut) {
         resolve({
           kind,

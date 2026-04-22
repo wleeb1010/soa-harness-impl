@@ -8,3 +8,4 @@ export {
   type HookStdin,
   type HookStdout
 } from "./types.js";
+export { HookReentrancyTracker, type HookReentrancyEvent } from "./reentrancy.js";

@@ -9,7 +9,7 @@ import type { ToolRegistry } from "../registry/index.js";
 import type { Control } from "../registry/types.js";
 import type { MarkerEmitter } from "../markers/index.js";
 import type { StreamEventEmitter } from "../stream/index.js";
-import { runHook, type HookOutcome } from "../hook/index.js";
+import { runHook, type HookOutcome, type HookReentrancyTracker } from "../hook/index.js";
 import type { BudgetTracker } from "../budget/index.js";
 import {
   SessionPersister,
@@ -111,6 +111,16 @@ export interface PermissionsDecisionsRouteOptions {
   budgetTracker?: BudgetTracker;
   /** Per-turn token estimate fed to BudgetTracker.recordTurn. Default 512. */
   budgetPerTurnEstimate?: number;
+  /**
+   * §15 reentrancy guard (Finding N / SV-HOOK-08). When set, every
+   * PreToolUse/PostToolUse runHook call registers its child PID with
+   * the tracker for the owning session; inbound requests carrying an
+   * `x-soa-hook-pid` header that names an in-flight PID are rejected
+   * with 403 hook-reentrancy AND the owning session is terminated
+   * (SessionEnd{stop_reason:"HookReentrancy"} + bearer revocation).
+   * Omit to preserve pre-Finding-N behavior.
+   */
+  hookReentrancy?: HookReentrancyTracker;
 }
 
 const WINDOW_MS = 60_000;
@@ -254,6 +264,44 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
   app.post("/permissions/decisions", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
 
+    // §15 Finding N / SV-HOOK-08 — reentrancy guard. Requests carrying a
+    // `x-soa-hook-pid` header that matches any currently-in-flight
+    // PreToolUse or PostToolUse child PID are blocked BEFORE auth /
+    // readiness / rate-limit gates: the misbehaving hook would otherwise
+    // consume a decision slot and corrupt the bracket-persist state. The
+    // owning session (not necessarily the one named in the body) is
+    // terminated with a §14.1 SessionEnd event and its bearer is
+    // revoked so subsequent requests from the hook fail at auth.
+    if (opts.hookReentrancy) {
+      const hdr = request.headers["x-soa-hook-pid"];
+      const raw = Array.isArray(hdr) ? hdr[0] : hdr;
+      const candidatePid = typeof raw === "string" ? Number.parseInt(raw, 10) : NaN;
+      if (Number.isFinite(candidatePid) && candidatePid > 0) {
+        const owningSession = opts.hookReentrancy.sessionForPid(candidatePid);
+        if (owningSession !== null) {
+          if (opts.emitter) {
+            opts.emitter.emit({
+              session_id: owningSession,
+              type: "SessionEnd",
+              payload: { stop_reason: "HookReentrancy" }
+            });
+          }
+          // Revoke the bearer so any subsequent request from the hook
+          // (including the one we're about to 403) fails at auth on
+          // retry. `revoke` is idempotent.
+          const store = opts.sessionStore as unknown as { revoke?: (id: string) => void };
+          if (typeof store.revoke === "function") store.revoke(owningSession);
+          return reply.code(403).send({
+            error: "PermissionDenied",
+            reason: "hook-reentrancy",
+            detail:
+              `request carries x-soa-hook-pid=${candidatePid} which matches an in-flight hook ` +
+              `for session ${owningSession}; session terminated with stop_reason=HookReentrancy`
+          });
+        }
+      }
+    }
+
     // 503 pre-boot (§10.3.2 inherits /ready gate)
     const notReady = opts.readiness.check();
     if (notReady !== null) {
@@ -353,6 +401,7 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       | null = null;
     if (opts.hookConfig?.preToolUseCommand && opts.hookConfig.preToolUseCommand.length > 0) {
       const turnId = opts.hookConfig.turnIdFn?.() ?? `turn_${randomBytes(6).toString("hex")}`;
+      let trackedPreHookPid: number | null = null;
       const outcome = await runHook({
         command: opts.hookConfig.preToolUseCommand,
         stdin: {
@@ -362,7 +411,21 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           tool: { name: toolEntry.name, risk_class: toolEntry.risk_class, args_digest: argsDigest },
           capability: sessionRecord.activeMode,
           handler: "Interactive"
-        }
+        },
+        ...(opts.hookReentrancy
+          ? {
+              onSpawn: (pid: number): void => {
+                trackedPreHookPid = pid;
+                opts.hookReentrancy!.begin(sessionId, pid);
+              },
+              onExit: (): void => {
+                if (trackedPreHookPid !== null) {
+                  opts.hookReentrancy!.end(sessionId, trackedPreHookPid);
+                  trackedPreHookPid = null;
+                }
+              }
+            }
+          : {})
       });
       if (outcome.decision === "Deny") {
         // §14.1 PreToolUseOutcome: emit BEFORE the 403 return so the
@@ -725,6 +788,7 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       // before/after contract is still well-defined. When the M4
       // dispatcher lands, substitute the real tool-result digest here.
       const outputDigestBefore = `sha256:${written.this_hash}`;
+      let trackedPostHookPid: number | null = null;
       const hookOutcome: HookOutcome = await runHook({
         command: opts.hookConfig.postToolUseCommand,
         stdin: {
@@ -735,7 +799,21 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           capability: sessionRecord.activeMode,
           handler: "Interactive",
           result: { ok: handlerAccepted, output_digest: outputDigestBefore }
-        }
+        },
+        ...(opts.hookReentrancy
+          ? {
+              onSpawn: (pid: number): void => {
+                trackedPostHookPid = pid;
+                opts.hookReentrancy!.begin(sessionId, pid);
+              },
+              onExit: (): void => {
+                if (trackedPostHookPid !== null) {
+                  opts.hookReentrancy!.end(sessionId, trackedPostHookPid);
+                  trackedPostHookPid = null;
+                }
+              }
+            }
+          : {})
       });
 
       if (opts.emitter) {

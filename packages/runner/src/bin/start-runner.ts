@@ -33,6 +33,7 @@ import {
 } from "../session/index.js";
 import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
+import { HookReentrancyTracker } from "../hook/index.js";
 import {
   InMemoryMemoryStateStore,
   MemoryMcpClient,
@@ -357,6 +358,13 @@ async function main() {
   // Budget emission sites.
   const streamEmitter = new StreamEventEmitter({ clock });
 
+  // §15 Finding N / SV-HOOK-08 — per-Runner hook reentrancy tracker.
+  // Passed to the decisions plugin so every Pre/PostToolUse runHook
+  // invocation registers + deregisters its child PID; inbound requests
+  // carrying x-soa-hook-pid matching an in-flight hook are rejected
+  // with 403 hook-reentrancy + SessionEnd{stop_reason:"HookReentrancy"}.
+  const hookReentrancy = new HookReentrancyTracker();
+
   // M3-T1 Memory state store — per-session zero-state initialized at
   // §12.6 bootstrap. Full §8 client (search / write / consolidate /
   // aging) fills in incrementally as SV-MEM-01..08 wire up.
@@ -550,6 +558,8 @@ async function main() {
             // §13.1 wire turn-accounting to the decision path so
             // /budget/projection advances per committed decision.
             budgetTracker,
+            // §15 Finding N — share one tracker across the process.
+            hookReentrancy,
             // §15 hooks — operator supplies command lines via env.
             ...((): {
               hookConfig?: {
