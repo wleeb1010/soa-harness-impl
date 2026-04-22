@@ -28,3 +28,10 @@ export {
   type LoadExternalCardJwsOptions,
   type LoadedExternalJws
 } from "./external-jws-loader.js";
+export {
+  checkCardPrecedence,
+  type CardPrecedenceCheckInput,
+  type CardPrecedenceCheckResult,
+  type CardPrecedenceViolation,
+  type CardPrecedenceSnapshot
+} from "./precedence-guard.js";

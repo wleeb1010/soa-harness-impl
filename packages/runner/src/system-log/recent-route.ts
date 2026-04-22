@@ -41,6 +41,14 @@ export interface SystemLogRecentRouteOptions {
   requestsPerMinute?: number;
   defaultLimit?: number;
   maxLimit?: number;
+  /**
+   * Finding AN — when true, the endpoint serves records even under
+   * /ready=503. The System Event Log is the observability channel for
+   * why the Runner is refusing; gating it blocks the validator from
+   * reading the ConfigPrecedenceViolation record that explains the
+   * refusal. Default false (spec §14.5.4 readiness-gate behavior).
+   */
+  skipReadinessGate?: boolean;
 }
 
 class PerBearerLimiter {
@@ -90,9 +98,11 @@ export const systemLogRecentPlugin: FastifyPluginAsync<SystemLogRecentRouteOptio
   app.get("/logs/system/recent", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
 
-    const notReady = opts.readiness.check();
-    if (notReady !== null) {
-      return reply.code(503).send({ status: "not-ready", reason: notReady });
+    if (opts.skipReadinessGate !== true) {
+      const notReady = opts.readiness.check();
+      if (notReady !== null) {
+        return reply.code(503).send({ status: "not-ready", reason: notReady });
+      }
     }
 
     const bearer = extractBearer(request);

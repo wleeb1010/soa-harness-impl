@@ -288,6 +288,8 @@ export interface BuildRunnerOptions {
     requestsPerMinute?: number;
     defaultLimit?: number;
     maxLimit?: number;
+    /** Finding AN — allow reads under /ready=503. */
+    skipReadinessGate?: boolean;
   };
   fastifyOptions?: FastifyServerOptions;
 }
@@ -501,7 +503,10 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sl.runnerVersion !== undefined ? { runnerVersion: sl.runnerVersion } : {}),
       ...(sl.requestsPerMinute !== undefined ? { requestsPerMinute: sl.requestsPerMinute } : {}),
       ...(sl.defaultLimit !== undefined ? { defaultLimit: sl.defaultLimit } : {}),
-      ...(sl.maxLimit !== undefined ? { maxLimit: sl.maxLimit } : {})
+      ...(sl.maxLimit !== undefined ? { maxLimit: sl.maxLimit } : {}),
+      ...(sl.skipReadinessGate !== undefined
+        ? { skipReadinessGate: sl.skipReadinessGate }
+        : {})
     });
   }
 

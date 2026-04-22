@@ -5,6 +5,7 @@ import { loadInitialTrust } from "../bootstrap/index.js";
 import { startRunner } from "../server.js";
 import { generateEd25519KeyPair, generateSelfSignedEd25519Cert } from "../card/cert.js";
 import { loadConformanceCard } from "../card/conformance-loader.js";
+import { checkCardPrecedence } from "../card/precedence-guard.js";
 import { createClock } from "../clock/index.js";
 import { CrlCache, type Crl, type CrlFetcher } from "../crl/index.js";
 import { BootOrchestrator } from "../boot/index.js";
@@ -479,6 +480,40 @@ async function main() {
   // surfaces them. Buffer is session-scoped + category-filtered.
   const systemLog = new SystemLogBuffer({ clock });
 
+  // Finding AN / SV-CARD-10 — §10.3 three-axis precedence guard.
+  // A Card that loosens a lower-precedence axis against a higher one
+  // (explore agentType + non-ReadOnly activeMode, or a Card
+  // toolRequirement denied at the AGENTS.md layer) is refused: we
+  // write a Config/ConfigPrecedenceViolation/error log record per
+  // violation under BOOT_SESSION_ID and pin /ready at 503 so the
+  // Runner never advertises readiness until an operator fixes the
+  // Card.
+  const precedenceResult = checkCardPrecedence({
+    card: card as CardShape,
+    ...(agentsMdDenied !== undefined ? { agentsMdDenied } : {})
+  });
+  if (!precedenceResult.ok) {
+    for (const v of precedenceResult.violations) {
+      systemLog.write({
+        session_id: BOOT_SESSION_ID,
+        category: "Config",
+        level: "error",
+        code: "ConfigPrecedenceViolation",
+        message: v.message,
+        data: { axis: v.axis, ...v.detail }
+      });
+    }
+    console.error(
+      `[start-runner] Finding AN — Agent Card refused: ${precedenceResult.violations
+        .map((v) => v.message)
+        .join(" | ")}`
+    );
+  }
+  const cardPrecedenceReadiness = {
+    check: () =>
+      precedenceResult.ok ? null : ("bootstrap-pending" as const)
+  };
+
   // M3-T1 Memory state store — per-session zero-state initialized at
   // §12.6 bootstrap. Full §8 client (search / write / consolidate /
   // aging) fills in incrementally as SV-MEM-01..08 wire up.
@@ -744,6 +779,12 @@ async function main() {
     x5c,
     ...(skipCardSchemaValidation ? { skipCardSchemaValidation: true } : {}),
     readiness: composeReadiness(
+      // Finding AN / SV-CARD-10 — a Card that violates §10.3 three-axis
+      // precedence pins /ready at 503 for the Runner's whole lifetime.
+      // The ConfigPrecedenceViolation record is already in /logs/system/
+      // recent under BOOT_SESSION_ID; operators flip /ready to 200 by
+      // fixing the Card, not by poking the Runner.
+      cardPrecedenceReadiness,
       boot,
       {
         // §10.5.1 unreachable-halt → /ready flips 503 audit-sink-unreachable.
@@ -872,7 +913,14 @@ async function main() {
       buffer: systemLog,
       sessionStore,
       clock,
-      runnerVersion: "1.0"
+      runnerVersion: "1.0",
+      // Finding AN — when the Card fails §10.3 precedence, /ready is
+      // pinned at 503 for the Runner's lifetime. The System Event Log
+      // is how operators observe the ConfigPrecedenceViolation record
+      // that explains the refusal, so the endpoint bypasses readiness
+      // gating here (boot-session scope only — §14.5.4's readiness
+      // gate still applies in a Runner with a compliant Card).
+      skipReadinessGate: !precedenceResult.ok
     },
     memoryState: {
       memoryStore,
