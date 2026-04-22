@@ -125,10 +125,17 @@ interface CardShape {
   /** §14.4 observability config — Finding W reads requiredResourceAttrs. */
   observability?: { otelExporter?: string; requiredResourceAttrs?: string[] };
   /**
-   * §8.5 memory config — Finding V reads default_sharing_scope. Enum
-   * values: "none" | "session" | "project" | "tenant" (SharingPolicy).
+   * §7.318 memory config — Finding AA/SV-MEM-06 canonical key is
+   * `sharing_policy`. Legacy `default_sharing_scope` name accepted as
+   * a fallback so pre-L-40 card fixtures still resolve without a spec
+   * rewrite. Enum values: "none" | "session" | "project" | "tenant"
+   * (SharingPolicy).
    */
-  memory?: { default_sharing_scope?: "none" | "session" | "project" | "tenant" };
+  memory?: {
+    sharing_policy?: "none" | "session" | "project" | "tenant";
+    /** @deprecated L-40 renamed to `sharing_policy`; retained for old fixtures. */
+    default_sharing_scope?: "none" | "session" | "project" | "tenant";
+  };
 }
 
 async function main() {
@@ -603,10 +610,14 @@ async function main() {
             ...(memoryClient !== undefined ? { memoryClient } : {}),
             ...(memoryDegradation !== undefined ? { memoryDegradation } : {}),
             systemLog,
-            // Finding V / SV-MEM-06 — honor card.memory.default_sharing_scope.
-            ...(card.memory?.default_sharing_scope !== undefined
-              ? { memoryDefaultSharingScope: card.memory.default_sharing_scope }
-              : {}),
+            // Finding V + AA / SV-MEM-06 — §7.318 canonical key is
+            // `sharing_policy`; legacy `default_sharing_scope` accepted
+            // as fallback so pre-L-40 card fixtures still resolve.
+            ...((): { memoryDefaultSharingScope?: "none" | "session" | "project" | "tenant" } => {
+              const scope =
+                card.memory?.sharing_policy ?? card.memory?.default_sharing_scope;
+              return scope !== undefined ? { memoryDefaultSharingScope: scope } : {};
+            })(),
             // Finding Q / SV-BUD-05 — stamp card.tokenBudget.billingTag on
             // every new session (record + persisted file + bearer scope).
             ...(typeof card.tokenBudget?.billingTag === "string"

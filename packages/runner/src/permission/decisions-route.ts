@@ -693,6 +693,14 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
     // endpoint IS the write path.
     const recordId = auditRecordId();
     const recordedAt = opts.clock().toISOString();
+    // Finding AB / SV-BUD-05 — L-40 extended audit-records-response.schema
+    // with an OPTIONAL billing_tag field; hash-chain content MUST include
+    // the field when present AND MUST exclude when absent (no "" placeholder).
+    // chain.append serializes the full record for hash computation, so a
+    // conditional spread ({...(sessionBillingTag !== undefined ? {billing_tag}
+    // : {})}) is the correct shape — the key is literally absent in the
+    // canonical JCS bytes when the session carries no billing_tag.
+    const sessionBillingTag = sessionRecord.billing_tag;
     const written = opts.chain.append({
       id: recordId,
       timestamp: recordedAt,
@@ -705,17 +713,9 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
       handler: "Interactive", // M1: handler role is Agent Card config; hardcode until T-?? lands
       decision: finalDecision,
       reason: finalReason,
-      signer_key_id: pdaSignerKid ?? ""
+      signer_key_id: pdaSignerKid ?? "",
+      ...(sessionBillingTag !== undefined ? { billing_tag: sessionBillingTag } : {})
     });
-    // Finding Q billing_tag attribution — intentionally NOT embedded on
-    // the audit row. audit-records-response.schema.json has
-    // additionalProperties:false, so adding billing_tag would either
-    // (a) break the pinned schema on the wire, or (b) break hash-chain
-    // verification (consumers recompute this_hash from response fields;
-    // stripping billing_tag at serve-time would desync). For M3,
-    // billing attribution is a session-join: audit row carries session_id,
-    // session record carries billing_tag. A spec-side schema extension
-    // at the next pin bump flips this to row-embedded.
 
     // §10.5.1 — degraded-buffering / unreachable-halt: persist the just-
     // appended row to the fsync-backed local queue. In healthy this is a
@@ -814,7 +814,12 @@ export const permissionsDecisionsPlugin: FastifyPluginAsync<
           decision: decisionAllowOrDeny,
           scope: "once",
           signer_kid: pdaSignerKid ?? "runtime-resolver",
-          reason: finalReason
+          reason: finalReason,
+          // Finding AB / SV-BUD-05 — L-40 adds OPTIONAL billing_tag to
+          // PermissionDecision payload. Runner attaches at emit time;
+          // not part of signed PDA bytes (canonical_decision.jws is
+          // unchanged). Absent when the session has no billing_tag.
+          ...(sessionBillingTag !== undefined ? { billing_tag: sessionBillingTag } : {})
         }
       });
       permissionDecisionEventId = pd.event_id;
