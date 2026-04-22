@@ -8,6 +8,7 @@ import type { StreamEventEmitter } from "../stream/index.js";
 import type { InMemoryMemoryStateStore } from "../memory/index.js";
 import { MemoryTimeout, type MemoryMcpClient, type MemoryDegradationTracker } from "../memory/index.js";
 import type { BudgetTracker } from "../budget/index.js";
+import type { SystemLogBuffer } from "../system-log/index.js";
 
 export interface SessionsRouteOptions {
   sessionStore: InMemorySessionStore;
@@ -74,6 +75,15 @@ export interface SessionsRouteOptions {
    */
   memoryClient?: MemoryMcpClient;
   memoryDegradation?: MemoryDegradationTracker;
+  /**
+   * §14.2 System Event Log — Finding T (SV-MEM-04) writes per-timeout
+   * MemoryDegraded records here without terminating the session. Only
+   * 3-consecutive timeouts (tracked by MemoryDegradationTracker) escalate
+   * to SessionEnd{stop_reason:"MemoryDegraded"}. Omit to preserve the
+   * pre-L-38 single-strike behavior (kept so legacy tests don't rely on
+   * the log buffer being wired).
+   */
+  systemLog?: SystemLogBuffer;
 }
 
 const WINDOW_MS = 60_000;
@@ -297,13 +307,44 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
         }
       } catch (err) {
         if (err instanceof MemoryTimeout) {
+          // Finding T / SV-MEM-04 — §8.3 two-tier behavior:
+          //   per-timeout (non-terminal): write MemoryDegraded System
+          //     Event Log record (level=warn, category=MemoryDegraded)
+          //     and CONTINUE with stale slice (the session was already
+          //     persisted at 201; the 201 response flows normally).
+          //   3-consecutive (terminal): emit SessionEnd with
+          //     stop_reason=MemoryDegraded per §8.3.1.
+          // MemoryDegradationTracker.isDegraded() crosses the threshold
+          // strictly after recordFailure() advances the counter.
           if (opts.memoryDegradation) opts.memoryDegradation.recordFailure();
-          // §8.3.1 — SessionEnd with stop_reason=MemoryDegraded.
-          opts.emitter.emit({
-            session_id: created.session_id,
-            type: "SessionEnd",
-            payload: { stop_reason: "MemoryDegraded" }
-          });
+          const failureCount = opts.memoryDegradation?.currentCount() ?? 1;
+          const threshold = opts.memoryDegradation?.threshold ?? 3;
+
+          if (opts.systemLog) {
+            opts.systemLog.write({
+              session_id: created.session_id,
+              category: "MemoryDegraded",
+              level: "warn",
+              code: "memory-timeout",
+              message:
+                `Memory MCP searchMemories timed out (consecutive failure ` +
+                `${failureCount}/${threshold}); continuing with stale slice`,
+              data: {
+                tool: err.tool,
+                consecutive_failures: failureCount,
+                threshold
+              }
+            });
+          }
+
+          if (opts.memoryDegradation?.isDegraded()) {
+            // Threshold crossed — terminate the session per §8.3.1.
+            opts.emitter.emit({
+              session_id: created.session_id,
+              type: "SessionEnd",
+              payload: { stop_reason: "MemoryDegraded" }
+            });
+          }
         } else {
           // Non-timeout error: log but don't degrade; future milestone
           // may expand the failure taxonomy (auth, schema, etc.).

@@ -35,6 +35,7 @@ import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
 import { HookReentrancyTracker } from "../hook/index.js";
 import { OtelSpanStore, BackpressureState } from "../observability/index.js";
+import { SystemLogBuffer } from "../system-log/index.js";
 import {
   InMemoryMemoryStateStore,
   MemoryMcpClient,
@@ -381,6 +382,11 @@ async function main() {
   const otelSpanStore = new OtelSpanStore();
   const backpressureState = new BackpressureState({ clock });
 
+  // L-38 §14.2/§14.5.4 System Event Log buffer. Finding T writes
+  // per-timeout MemoryDegraded records here; GET /logs/system/recent
+  // surfaces them. Buffer is session-scoped + category-filtered.
+  const systemLog = new SystemLogBuffer({ clock });
+
   // M3-T1 Memory state store — per-session zero-state initialized at
   // §12.6 bootstrap. Full §8 client (search / write / consolidate /
   // aging) fills in incrementally as SV-MEM-01..08 wire up.
@@ -511,7 +517,8 @@ async function main() {
             memoryStore,
             budgetTracker,
             ...(memoryClient !== undefined ? { memoryClient } : {}),
-            ...(memoryDegradation !== undefined ? { memoryDegradation } : {})
+            ...(memoryDegradation !== undefined ? { memoryDegradation } : {}),
+            systemLog
           }
         }
       : {}),
@@ -558,6 +565,12 @@ async function main() {
       clock,
       runnerVersion: "1.0",
       ...(BOOTSTRAP_BEARER !== undefined ? { bootstrapBearer: BOOTSTRAP_BEARER } : {})
+    },
+    systemLogRecent: {
+      buffer: systemLog,
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
     },
     memoryState: {
       memoryStore,
@@ -662,6 +675,7 @@ async function main() {
   console.log(`  GET http://${HOST}:${PORT}/memory/state/<session_id>`);
   console.log(`  GET http://${HOST}:${PORT}/observability/otel-spans/recent?session_id=<id>&after=<span_id>&limit=<n>`);
   console.log(`  GET http://${HOST}:${PORT}/observability/backpressure`);
+  console.log(`  GET http://${HOST}:${PORT}/logs/system/recent?session_id=<id>&category=<c1,c2>&after=<slog_id>&limit=<n>`);
   if (registry) {
     console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
     console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);

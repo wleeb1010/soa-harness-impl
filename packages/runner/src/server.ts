@@ -88,6 +88,8 @@ export interface BuildRunnerOptions {
     /** M3-T13 HR-17 — Memory MCP prefetch + MemoryDegraded emission. */
     memoryClient?: import("./memory/mcp-client.js").MemoryMcpClient;
     memoryDegradation?: import("./memory/mcp-client.js").MemoryDegradationTracker;
+    /** L-38 Finding T — per-timeout MemoryDegraded log records. */
+    systemLog?: import("./system-log/index.js").SystemLogBuffer;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -236,6 +238,16 @@ export interface BuildRunnerOptions {
     runnerVersion?: string;
     requestsPerMinute?: number;
   };
+  /** L-38 §14.5.4: GET /logs/system/recent — System Event Log polling surface. */
+  systemLogRecent?: {
+    buffer: import("./system-log/index.js").SystemLogBuffer;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    defaultLimit?: number;
+    maxLimit?: number;
+  };
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -290,7 +302,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.memoryStore !== undefined ? { memoryStore: sb.memoryStore } : {}),
       ...(sb.budgetTracker !== undefined ? { budgetTracker: sb.budgetTracker } : {}),
       ...(sb.memoryClient !== undefined ? { memoryClient: sb.memoryClient } : {}),
-      ...(sb.memoryDegradation !== undefined ? { memoryDegradation: sb.memoryDegradation } : {})
+      ...(sb.memoryDegradation !== undefined ? { memoryDegradation: sb.memoryDegradation } : {}),
+      ...(sb.systemLog !== undefined ? { systemLog: sb.systemLog } : {})
     });
   }
 
@@ -411,6 +424,21 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(bs.bootstrapBearer !== undefined ? { bootstrapBearer: bs.bootstrapBearer } : {}),
       ...(bs.runnerVersion !== undefined ? { runnerVersion: bs.runnerVersion } : {}),
       ...(bs.requestsPerMinute !== undefined ? { requestsPerMinute: bs.requestsPerMinute } : {})
+    });
+  }
+
+  if (opts.systemLogRecent !== undefined) {
+    const sl = opts.systemLogRecent;
+    const { systemLogRecentPlugin } = await import("./system-log/index.js");
+    await app.register(systemLogRecentPlugin, {
+      buffer: sl.buffer,
+      sessionStore: sl.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: sl.clock,
+      ...(sl.runnerVersion !== undefined ? { runnerVersion: sl.runnerVersion } : {}),
+      ...(sl.requestsPerMinute !== undefined ? { requestsPerMinute: sl.requestsPerMinute } : {}),
+      ...(sl.defaultLimit !== undefined ? { defaultLimit: sl.defaultLimit } : {}),
+      ...(sl.maxLimit !== undefined ? { maxLimit: sl.maxLimit } : {})
     });
   }
 

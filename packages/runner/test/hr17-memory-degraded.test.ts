@@ -15,6 +15,7 @@ import {
   MemoryDegradationTracker
 } from "../src/memory/index.js";
 import { BudgetTracker } from "../src/budget/index.js";
+import { SystemLogBuffer } from "../src/system-log/index.js";
 
 const FROZEN_NOW = new Date("2026-04-22T10:00:00.000Z");
 const BOOTSTRAP_BEARER = "hr17-bootstrap-bearer";
@@ -52,6 +53,7 @@ async function buildRunner(memoryEndpoint: string, sessionDir: string) {
   const budgetTracker = new BudgetTracker();
   const memoryClient = new MemoryMcpClient({ endpoint: memoryEndpoint, timeoutMs: 300 });
   const memoryDegradation = new MemoryDegradationTracker(3);
+  const systemLog = new SystemLogBuffer({ clock: () => FROZEN_NOW });
 
   await app.register(sessionsBootstrapPlugin, {
     sessionStore,
@@ -68,7 +70,8 @@ async function buildRunner(memoryEndpoint: string, sessionDir: string) {
     memoryStore,
     budgetTracker,
     memoryClient,
-    memoryDegradation
+    memoryDegradation,
+    systemLog
   });
 
   await app.register(eventsRecentPlugin, {
@@ -79,7 +82,7 @@ async function buildRunner(memoryEndpoint: string, sessionDir: string) {
     runnerVersion: "1.0"
   });
 
-  return { app, sessionStore, emitter, memoryDegradation };
+  return { app, sessionStore, emitter, memoryDegradation, systemLog };
 }
 
 describe("HR-17 — Memory MCP timeouts → SessionEnd{stop_reason:MemoryDegraded}", () => {
@@ -94,7 +97,7 @@ describe("HR-17 — Memory MCP timeouts → SessionEnd{stop_reason:MemoryDegrade
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("3 sessions vs TIMEOUT-ALWAYS mock → 3 SessionEnd events with stop_reason=MemoryDegraded", async () => {
+  it("Finding T two-tier gating — first 2 timeouts log only; 3rd crosses threshold and emits SessionEnd{MemoryDegraded}", async () => {
     mock = await buildMemoryMock("timeout-always");
     const runner = await buildRunner(mock.endpoint, dir);
     try {
@@ -117,33 +120,34 @@ describe("HR-17 — Memory MCP timeouts → SessionEnd{stop_reason:MemoryDegrade
         sessionIds.push(body.session_id);
       }
 
-      // Each session's event stream should contain BOTH SessionStart
-      // (sequence=0) AND SessionEnd{stop_reason:"MemoryDegraded"} (sequence=1).
-      for (const sid of sessionIds) {
-        const events = runner.emitter.snapshot(sid);
-        expect(events).toHaveLength(2);
-        expect(events[0]?.type).toBe("SessionStart");
-        expect(events[1]?.type).toBe("SessionEnd");
-        expect((events[1]?.payload as { stop_reason?: string }).stop_reason).toBe(
-          "MemoryDegraded"
-        );
-      }
+      // §8.3 two-tier semantics (L-38 Finding T):
+      //   - Sessions 1 + 2 (failure count 1/3, 2/3): SessionStart ONLY.
+      //     Memory degradation logged to the System Event Log but session
+      //     continues with a stale (empty) slice.
+      //   - Session 3 (failure count crosses 3/3 threshold): SessionStart
+      //     + SessionEnd{stop_reason:"MemoryDegraded"} per §8.3.1.
+      const first = runner.emitter.snapshot(sessionIds[0]!);
+      expect(first.map((e) => e.type)).toEqual(["SessionStart"]);
+      const second = runner.emitter.snapshot(sessionIds[1]!);
+      expect(second.map((e) => e.type)).toEqual(["SessionStart"]);
+      const third = runner.emitter.snapshot(sessionIds[2]!);
+      expect(third.map((e) => e.type)).toEqual(["SessionStart", "SessionEnd"]);
+      expect((third[1]?.payload as { stop_reason?: string }).stop_reason).toBe(
+        "MemoryDegraded"
+      );
 
-      // §8.3 three-consecutive-failures tracker: after 3 sessions, counter
-      // is at 3; runner-wide degradation flag is set.
+      // Counter reached the threshold.
       expect(runner.memoryDegradation.currentCount()).toBe(3);
       expect(runner.memoryDegradation.isDegraded()).toBe(true);
 
-      // /events/recent observes the same events for each session.
-      const bearers = [];
+      // System Event Log accumulated one MemoryDegraded record PER session
+      // (3 total), each with level=warn + code=memory-timeout. Category
+      // filter confirms §14.5.4 closed-enum membership.
       for (const sid of sessionIds) {
-        // Get the bearer from the internal store (test shortcut; in real
-        // harnesses the validator holds the bearer from the POST response).
-        const entry = (runner.sessionStore as unknown as {
-          records: Map<string, { bearerHash: string }>;
-        }).records.get(sid);
-        expect(entry).toBeDefined();
-        bearers.push(entry);
+        const logs = runner.systemLog.snapshot(sid, new Set(["MemoryDegraded"] as const));
+        expect(logs).toHaveLength(1);
+        expect(logs[0]?.level).toBe("warn");
+        expect(logs[0]?.code).toBe("memory-timeout");
       }
     } finally {
       await runner.app.close();
