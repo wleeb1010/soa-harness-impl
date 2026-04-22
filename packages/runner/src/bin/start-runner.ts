@@ -1091,7 +1091,11 @@ async function main() {
       emitter: streamEmitter,
       sessionStore,
       clock,
-      runnerVersion: "1.0"
+      runnerVersion: "1.0",
+      // §14.5.5 Finding AE — bootstrap bearer grants admin:read so
+      // SV-STR-10 can poll /events/recent?type=CrashEvent across all
+      // sessions post-restart (pre-crash bearers are gone).
+      ...(BOOTSTRAP_BEARER !== undefined ? { bootstrapBearer: BOOTSTRAP_BEARER } : {})
     },
     otelSpansRecent: {
       store: otelSpanStore,
@@ -1285,7 +1289,11 @@ async function main() {
       resumeCtx,
       chain,
       log: (msg) => console.log(msg),
-      clock
+      clock,
+      // Finding AE / SV-STR-10 — emit CrashEvent per resumed session with
+      // an open bracket so /events/recent?type=CrashEvent surfaces the
+      // record (admin:read scope — pre-crash session bearers are gone).
+      emitter: streamEmitter
     });
     // §12.5 L-29 + SV-SESS-02: if any session file on disk is corrupt or
     // violates session.schema (including a bad workflow.status), the

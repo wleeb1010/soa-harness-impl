@@ -23,9 +23,15 @@
 import { createHash, randomBytes } from "node:crypto";
 import { jcs } from "@soa-harness/core";
 import { SessionPersister, SessionFormatIncompatible } from "./persist.js";
-import { resumeSession, type ResumeContext, CardVersionDrift } from "./resume.js";
+import {
+  resumeSession,
+  type ResumeContext,
+  type ResumedSideEffect,
+  CardVersionDrift
+} from "./resume.js";
 import { ToolPoolStale } from "../registry/index.js";
 import type { AuditChain } from "../audit/index.js";
+import type { StreamEventEmitter } from "../stream/index.js";
 
 /** Non-terminal workflow statuses — sessions to auto-resume. */
 export const IN_PROGRESS_STATUSES = new Set<string>([
@@ -70,6 +76,15 @@ export interface ScanAndResumeOptions {
   log?: (msg: string) => void;
   /** Clock for audit timestamps. Falls back to resumeCtx.clock. */
   clock?: () => Date;
+  /**
+   * §14.1 / §14.5.5 Finding AE — when present, emit a `CrashEvent`
+   * StreamEvent for every session whose persisted state carried an
+   * open bracket (≥1 `pending` or `inflight` side_effect prior to
+   * resume). The event lands in the per-session ring buffer and is
+   * readable via /events/recent (§14.5) — under `admin:read` scope
+   * post-restart since the session's original bearer is gone.
+   */
+  emitter?: StreamEventEmitter;
 }
 
 /**
@@ -110,6 +125,13 @@ export async function scanAndResumeInProgressSessions(
       // (A bogus status isn't "unknown" — it's invalid.)
 
       try {
+        // Finding AE / SV-STR-10 — snapshot the pre-resume side_effects
+        // before resumeSession mutates pending→committed / inflight→
+        // compensated. last_committed_event_id in the CrashEvent payload
+        // MUST reflect the state that existed at the moment the Runner
+        // was killed, not the post-recovery state.
+        const preResumeSideEffects = readSideEffectsSnapshot(raw);
+
         const resumed = await resumeSession(opts.persister, sessionId, opts.resumeCtx);
         outcomes.push({
           session_id: sessionId,
@@ -117,6 +139,35 @@ export async function scanAndResumeInProgressSessions(
           action: resumed.kind === "migrated" ? "migrated" : "resumed",
           detail: `${resumed.sideEffects.length} side_effect(s) processed`
         });
+
+        // An "open bracket" at boot-scan time means the pre-resume
+        // session carried ≥1 side_effect whose phase was `pending` or
+        // `inflight`. Sessions that had only `committed` + `compensated`
+        // rows pre-resume replayed nothing — no crash recovery happened
+        // — and MUST NOT emit a CrashEvent.
+        if (opts.emitter !== undefined) {
+          const openBracketActions = resumed.sideEffects.filter(
+            (se) =>
+              se.action === "replayed" ||
+              se.action === "compensated" ||
+              se.action === "compensation-gap"
+          );
+          if (openBracketActions.length > 0) {
+            const payload = buildCrashEventPayload(
+              resumed.session,
+              preResumeSideEffects,
+              openBracketActions
+            );
+            opts.emitter.emit({
+              session_id: sessionId,
+              type: "CrashEvent",
+              payload,
+              ...(typeof payload["workflow_state_id"] === "string"
+                ? { workflow_state_id: payload["workflow_state_id"] as string }
+                : {})
+            });
+          }
+        }
       } catch (err) {
         // SessionFormatIncompatible from step 1 is treated as a format
         // failure (failed-read reason=<specific>), so scanHasHardFailure
@@ -300,6 +351,91 @@ const HARD_FAILURE_REASONS: ReadonlySet<string> = new Set([
   "schema-violation",
   "bad-format-version"
 ]);
+
+/** Shape of the raw pre-resume side_effect snapshot passed to the payload builder. */
+interface PreResumeSideEffectSnapshot {
+  phase: string;
+  idempotency_key: string;
+}
+
+/**
+ * Pull a defensive copy of the workflow.side_effects phases + keys
+ * from a freshly-read persisted session. Runs BEFORE resumeSession
+ * mutates the in-place object so `last_committed_event_id` in a
+ * CrashEvent reflects the pre-crash state, not the post-recovery one.
+ */
+function readSideEffectsSnapshot(raw: unknown): PreResumeSideEffectSnapshot[] {
+  if (!raw || typeof raw !== "object") return [];
+  const workflow = (raw as { workflow?: unknown }).workflow;
+  if (!workflow || typeof workflow !== "object") return [];
+  const arr = (workflow as { side_effects?: unknown }).side_effects;
+  if (!Array.isArray(arr)) return [];
+  const out: PreResumeSideEffectSnapshot[] = [];
+  for (const row of arr) {
+    if (row && typeof row === "object") {
+      const phase = (row as { phase?: unknown }).phase;
+      const key = (row as { idempotency_key?: unknown }).idempotency_key;
+      if (typeof phase === "string" && typeof key === "string") {
+        out.push({ phase, idempotency_key: key });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Build a §14.1.1 CrashEvent payload from the resumed session + the
+ * pre-resume side_effects snapshot + the subset of resume actions that
+ * indicate an open bracket existed. Required fields per schema:
+ * reason, workflow_state_id, last_committed_event_id. Optional
+ * stack_hint carries a concise description of the observed bracket
+ * state — validators read it for operator forensics without relying
+ * on the exact string shape.
+ */
+function buildCrashEventPayload(
+  session: Record<string, unknown>,
+  preResumeSideEffects: readonly PreResumeSideEffectSnapshot[],
+  openBracketActions: readonly ResumedSideEffect[]
+): Record<string, unknown> {
+  const workflow = (session["workflow"] ?? {}) as { task_id?: unknown };
+  const workflowStateId =
+    typeof workflow.task_id === "string" && workflow.task_id.length > 0
+      ? workflow.task_id
+      : typeof session["session_id"] === "string"
+        ? (session["session_id"] as string)
+        : "unknown";
+
+  // Last committed event PRE-resume: the most recent side_effect whose
+  // phase was `committed` at the time the Runner was killed. Post-
+  // resume state is inappropriate here — resume flips pending→
+  // committed, which would surface a just-replayed row as "last
+  // committed" even though it was open at the crash instant.
+  const lastCommitted = [...preResumeSideEffects]
+    .reverse()
+    .find((se) => se.phase === "committed");
+  const lastCommittedEventId =
+    lastCommitted !== undefined && lastCommitted.idempotency_key.length > 0
+      ? lastCommitted.idempotency_key
+      : "none";
+
+  const tallies = openBracketActions.reduce<Record<string, number>>((acc, se) => {
+    acc[se.action] = (acc[se.action] ?? 0) + 1;
+    return acc;
+  }, {});
+  const stackHint =
+    `resume-with-open-bracket: ` +
+    Object.entries(tallies)
+      .sort()
+      .map(([k, v]) => `${k}=${v}`)
+      .join(", ");
+
+  return {
+    reason: "resume-with-open-bracket",
+    workflow_state_id: workflowStateId,
+    last_committed_event_id: lastCommittedEventId,
+    stack_hint: stackHint.slice(0, 4096)
+  };
+}
 
 function summarize(outcomes: ScanOutcomeEntry[]): string {
   const counts = new Map<string, number>();

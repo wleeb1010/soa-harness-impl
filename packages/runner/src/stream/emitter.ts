@@ -156,4 +156,13 @@ export class StreamEventEmitter {
   hasSession(session_id: string): boolean {
     return this.events.has(session_id);
   }
+
+  /**
+   * Session IDs this emitter has recorded at least one event for.
+   * Used by §14.5.5 admin-scope cross-session reads; callers iterate
+   * and call snapshot(session_id) to collect the per-session buffers.
+   */
+  sessionIds(): readonly string[] {
+    return [...this.events.keys()];
+  }
 }

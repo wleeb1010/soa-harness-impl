@@ -253,6 +253,10 @@ export interface BuildRunnerOptions {
     requestsPerMinute?: number;
     defaultLimit?: number;
     maxLimit?: number;
+    /** §14.5.5 admin:read bearer (Finding AE / SV-STR-10). */
+    bootstrapBearer?: string;
+    /** §14.5.5 admin:read rate limit, default 60 rpm. */
+    adminRequestsPerMinute?: number;
   };
   /** M3-T1: GET /memory/state/:session_id (§8.6). */
   memoryState?: {
@@ -463,7 +467,11 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(er.runnerVersion !== undefined ? { runnerVersion: er.runnerVersion } : {}),
       ...(er.requestsPerMinute !== undefined ? { requestsPerMinute: er.requestsPerMinute } : {}),
       ...(er.defaultLimit !== undefined ? { defaultLimit: er.defaultLimit } : {}),
-      ...(er.maxLimit !== undefined ? { maxLimit: er.maxLimit } : {})
+      ...(er.maxLimit !== undefined ? { maxLimit: er.maxLimit } : {}),
+      ...(er.bootstrapBearer !== undefined ? { bootstrapBearer: er.bootstrapBearer } : {}),
+      ...(er.adminRequestsPerMinute !== undefined
+        ? { adminRequestsPerMinute: er.adminRequestsPerMinute }
+        : {})
     });
   }
 

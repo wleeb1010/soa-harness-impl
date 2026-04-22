@@ -2,12 +2,22 @@
  * §14.5 GET /events/recent — polling-friendly StreamEvent observability.
  *
  * Query params:
- *   session_id=<sid>       required — scope the read to one session
+ *   session_id=<sid>       required for sessions:read scope; OPTIONAL
+ *                          under admin:read (§14.5.5 L-47). When omitted
+ *                          the response returns events across ALL
+ *                          sessions in the current process boot.
  *   after=<event_id>       optional — pagination anchor
  *   limit=<n>              optional — 1..1000, default 100
+ *   type=<StreamEventType> optional under admin:read — narrows result
+ *                          to the named §14.1 closed-enum type
+ *                          (e.g. ?type=CrashEvent for SV-STR-10).
+ *                          Unknown value → 400.
  *
- * Auth: session bearer for THIS session (sessions:read:<sid>).
- * Rate limit: 120 rpm per bearer (matches /sessions/:id/state).
+ * Auth: EITHER sessions:read:<sid> (session bearer) OR admin:read
+ * (bootstrap bearer). Both → admin (broader). Neither → 401.
+ * Rate limit:
+ *   - sessions:read  → 120 rpm per bearer
+ *   - admin:read     → 60 rpm per bearer (matches §14.5.3 / §10.5.3)
  * Readiness gate: 503 with §5.4 closed-enum reason when pre-boot.
  *
  * Body: events-recent-response.schema.json (pinned). Drift → 500.
@@ -21,10 +31,11 @@ import { registry as schemaRegistry } from "@soa-harness/schemas";
 import type { Clock } from "../clock/index.js";
 import type { ReadinessProbe } from "../probes/index.js";
 import type { SessionStore } from "../permission/session-store.js";
-import type { StreamEventEmitter, EmittedEvent } from "./emitter.js";
+import { STREAM_EVENT_TYPES, type StreamEventEmitter, type EmittedEvent } from "./emitter.js";
 
 const SESSION_ID_RE = /^ses_[A-Za-z0-9]{16,}$/;
 const WINDOW_MS = 60_000;
+const STREAM_EVENT_TYPE_SET: ReadonlySet<string> = new Set<string>(STREAM_EVENT_TYPES);
 
 export interface EventsRecentRouteOptions {
   emitter: StreamEventEmitter;
@@ -35,6 +46,16 @@ export interface EventsRecentRouteOptions {
   requestsPerMinute?: number;
   defaultLimit?: number;
   maxLimit?: number;
+  /**
+   * §14.5.5 admin:read bearer (Finding AE). When a request bears this
+   * exact token, admin-scope semantics apply: session_id becomes
+   * OPTIONAL, type filter is honored, rate limit drops to
+   * adminRequestsPerMinute (default 60). Same bearer convention as
+   * §14.5.3 backpressure + §10.5.3 audit-records admin surfaces.
+   */
+  bootstrapBearer?: string;
+  /** Per-bearer rate limit under admin:read (default 60). */
+  adminRequestsPerMinute?: number;
 }
 
 class PerBearerLimiter {
@@ -75,7 +96,8 @@ export const eventsRecentPlugin: FastifyPluginAsync<EventsRecentRouteOptions> = 
   const runnerVersion = opts.runnerVersion ?? "1.0";
   const defaultLimit = opts.defaultLimit ?? 100;
   const maxLimit = opts.maxLimit ?? 1000;
-  const limiter = new PerBearerLimiter(opts.requestsPerMinute ?? 120, opts.clock);
+  const sessionLimiter = new PerBearerLimiter(opts.requestsPerMinute ?? 120, opts.clock);
+  const adminLimiter = new PerBearerLimiter(opts.adminRequestsPerMinute ?? 60, opts.clock);
   const responseValidator = schemaRegistry["events-recent-response"];
 
   app.get("/events/recent", async (request, reply) => {
@@ -89,42 +111,78 @@ export const eventsRecentPlugin: FastifyPluginAsync<EventsRecentRouteOptions> = 
     const bearer = extractBearer(request);
     if (!bearer) return reply.code(401).send({ error: "missing-or-invalid-bearer" });
 
-    const rl = limiter.consume(sha256Hex(bearer));
+    // §14.5.5 scope hierarchy — admin:read always wins when both would
+    // match; neither → 401. The bootstrap bearer carries admin:read by
+    // the same M3 convention as §14.5.3 / §10.5.3.
+    const isAdmin =
+      opts.bootstrapBearer !== undefined && bearer === opts.bootstrapBearer;
+
+    const rl = (isAdmin ? adminLimiter : sessionLimiter).consume(sha256Hex(bearer));
     if (!rl.allowed) {
       reply.header("Retry-After", String(rl.retryAfterSeconds));
       return reply.code(429).send({ error: "rate-limit-exceeded" });
     }
 
     const q = request.query as Record<string, unknown>;
-    const sessionId = typeof q["session_id"] === "string" ? (q["session_id"] as string) : undefined;
-    if (!sessionId || !SESSION_ID_RE.test(sessionId)) {
-      return reply.code(400).send({ error: "malformed-session-id" });
-    }
+    const sessionIdParam =
+      typeof q["session_id"] === "string" ? (q["session_id"] as string) : undefined;
+    const typeFilter = typeof q["type"] === "string" ? (q["type"] as string) : undefined;
     const after = typeof q["after"] === "string" ? (q["after"] as string) : undefined;
     const limitParam =
       typeof q["limit"] === "string" ? Number.parseInt(q["limit"] as string, 10) : undefined;
+
+    if (typeFilter !== undefined && !STREAM_EVENT_TYPE_SET.has(typeFilter)) {
+      return reply.code(400).send({ error: "unknown-stream-event-type" });
+    }
     if (limitParam !== undefined && (!Number.isFinite(limitParam) || limitParam < 1)) {
       return reply.code(400).send({ error: "malformed-limit" });
     }
     const limit = Math.min(Math.max(limitParam ?? defaultLimit, 1), maxLimit);
 
-    // sessions:read:<session_id> scope — default-granted per §12.6.
-    if (!opts.sessionStore.exists(sessionId)) {
-      return reply.code(404).send({ error: "unknown-session" });
-    }
-    if (!opts.sessionStore.validate(sessionId, bearer)) {
-      return reply.code(403).send({ error: "session-bearer-mismatch" });
+    // Build the source event list per the effective scope.
+    let all: EmittedEvent[];
+    if (isAdmin) {
+      // §14.5.5 — session_id is OPTIONAL under admin:read. When given,
+      // restrict to that session (admin bearer still grants access — no
+      // sessionStore bearer match required). When omitted, events span
+      // all sessions in the current boot.
+      if (sessionIdParam !== undefined) {
+        if (!SESSION_ID_RE.test(sessionIdParam)) {
+          return reply.code(400).send({ error: "malformed-session-id" });
+        }
+        all = opts.emitter.snapshot(sessionIdParam) as EmittedEvent[];
+      } else {
+        // Cross-session merge. §14.5.5 "events across ALL sessions in
+        // the current process boot" — chronological by emitted_at then
+        // by sequence within a session for deterministic ordering.
+        all = collectAllSessionEvents(opts.emitter);
+      }
+    } else {
+      // sessions:read:<sid> scope. session_id is REQUIRED here.
+      if (!sessionIdParam || !SESSION_ID_RE.test(sessionIdParam)) {
+        return reply.code(400).send({ error: "malformed-session-id" });
+      }
+      if (!opts.sessionStore.exists(sessionIdParam)) {
+        return reply.code(404).send({ error: "unknown-session" });
+      }
+      if (!opts.sessionStore.validate(sessionIdParam, bearer)) {
+        return reply.code(403).send({ error: "session-bearer-mismatch" });
+      }
+      all = opts.emitter.snapshot(sessionIdParam) as EmittedEvent[];
     }
 
-    const all = opts.emitter.snapshot(sessionId) as EmittedEvent[];
+    // Apply type filter if present (admin surface only for now per spec).
+    const filtered =
+      typeFilter !== undefined ? all.filter((e) => e.type === typeFilter) : all;
+
     let startIdx = 0;
     if (after !== undefined) {
-      const idx = all.findIndex((e) => e.event_id === after);
+      const idx = filtered.findIndex((e) => e.event_id === after);
       if (idx < 0) return reply.code(404).send({ error: "unknown-after-id" });
       startIdx = idx + 1;
     }
-    const page = all.slice(startIdx, startIdx + limit);
-    const hasMore = startIdx + limit < all.length;
+    const page = filtered.slice(startIdx, startIdx + limit);
+    const hasMore = startIdx + limit < filtered.length;
 
     const body: Record<string, unknown> = {
       events: page,
@@ -147,3 +205,22 @@ export const eventsRecentPlugin: FastifyPluginAsync<EventsRecentRouteOptions> = 
     return reply.code(200).send(body);
   });
 };
+
+/**
+ * Merge events across every session the emitter has seen, sorted by
+ * (emitted_at, session_id, sequence) for deterministic ordering that's
+ * stable across repeat calls to a quiescent channel (§14.5 byte-identity
+ * property extended to admin scope per §14.5.5).
+ */
+function collectAllSessionEvents(emitter: StreamEventEmitter): EmittedEvent[] {
+  const all: EmittedEvent[] = [];
+  for (const sid of emitter.sessionIds()) {
+    all.push(...emitter.snapshot(sid));
+  }
+  all.sort((a, b) => {
+    if (a.emitted_at !== b.emitted_at) return a.emitted_at < b.emitted_at ? -1 : 1;
+    if (a.session_id !== b.session_id) return a.session_id < b.session_id ? -1 : 1;
+    return a.sequence - b.sequence;
+  });
+  return all;
+}
