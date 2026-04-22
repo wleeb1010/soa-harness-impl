@@ -26,6 +26,7 @@ import {
 import { sessionStatePlugin, SessionPersister } from "./session/index.js";
 import { budgetProjectionPlugin, toolsRegisteredPlugin } from "./observability/index.js";
 import { eventsRecentPlugin, StreamEventEmitter } from "./stream/index.js";
+import { memoryStatePlugin, InMemoryMemoryStateStore } from "./memory/index.js";
 
 export interface BuildRunnerOptions {
   trust: InitialTrust;
@@ -74,6 +75,8 @@ export interface BuildRunnerOptions {
     /** M3-T2 §14.1 StreamEvent emitter — fires SessionStart post-201. */
     emitter?: StreamEventEmitter;
     agentName?: string;
+    /** M3-T1 Memory state init on bootstrap. */
+    memoryStore?: InMemoryMemoryStateStore;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -182,6 +185,14 @@ export interface BuildRunnerOptions {
     defaultLimit?: number;
     maxLimit?: number;
   };
+  /** M3-T1: GET /memory/state/:session_id (§8.6). */
+  memoryState?: {
+    memoryStore: InMemoryMemoryStateStore;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+  };
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -232,7 +243,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sb.toolPoolHash !== undefined ? { toolPoolHash: sb.toolPoolHash } : {}),
       ...(sb.cardVersion !== undefined ? { cardVersion: sb.cardVersion } : {}),
       ...(sb.emitter !== undefined ? { emitter: sb.emitter } : {}),
-      ...(sb.agentName !== undefined ? { agentName: sb.agentName } : {})
+      ...(sb.agentName !== undefined ? { agentName: sb.agentName } : {}),
+      ...(sb.memoryStore !== undefined ? { memoryStore: sb.memoryStore } : {})
     });
   }
 
@@ -299,6 +311,18 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(tr.runnerVersion !== undefined ? { runnerVersion: tr.runnerVersion } : {}),
       ...(tr.requestsPerMinute !== undefined ? { requestsPerMinute: tr.requestsPerMinute } : {}),
       ...(tr.registeredAt !== undefined ? { registeredAt: tr.registeredAt } : {})
+    });
+  }
+
+  if (opts.memoryState !== undefined) {
+    const ms = opts.memoryState;
+    await app.register(memoryStatePlugin, {
+      memoryStore: ms.memoryStore,
+      sessionStore: ms.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: ms.clock,
+      ...(ms.runnerVersion !== undefined ? { runnerVersion: ms.runnerVersion } : {}),
+      ...(ms.requestsPerMinute !== undefined ? { requestsPerMinute: ms.requestsPerMinute } : {})
     });
   }
 

@@ -5,6 +5,7 @@ import { CAPABILITY_PERMITS, type Capability } from "./types.js";
 import { InMemorySessionStore } from "./session-store.js";
 import type { SessionPersister, PersistedSession } from "../session/index.js";
 import type { StreamEventEmitter } from "../stream/index.js";
+import type { InMemoryMemoryStateStore } from "../memory/index.js";
 
 export interface SessionsRouteOptions {
   sessionStore: InMemorySessionStore;
@@ -53,6 +54,13 @@ export interface SessionsRouteOptions {
   emitter?: StreamEventEmitter;
   /** Agent Card `name` — embedded in SessionStart payload (required field). */
   agentName?: string;
+  /**
+   * M3-T1 Memory state store. When present, each new session gets a
+   * zero-state initialized (empty in_context_notes, consolidation.
+   * last_run_at = now) so GET /memory/state returns a schema-valid
+   * body from the moment the session exists.
+   */
+  memoryStore?: InMemoryMemoryStateStore;
 }
 
 const WINDOW_MS = 60_000;
@@ -216,6 +224,13 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
           detail: err instanceof Error ? err.message : String(err)
         });
       }
+    }
+
+    // M3-T1 init Memory state so /memory/state returns a schema-valid
+    // body for this session immediately. Full §8 client wiring (search /
+    // write / consolidate) lands incrementally alongside SV-MEM-01..08.
+    if (opts.memoryStore) {
+      opts.memoryStore.initFor({ session_id: created.session_id });
     }
 
     // §14.1 SessionStart after persist-before-201 so the event sequence

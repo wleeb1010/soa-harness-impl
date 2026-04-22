@@ -25,6 +25,7 @@ import {
 } from "../session/index.js";
 import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
+import { InMemoryMemoryStateStore } from "../memory/index.js";
 import {
   MarkerEmitter,
   parseCrashTestMarkersEnv,
@@ -296,6 +297,19 @@ async function main() {
   // Budget emission sites.
   const streamEmitter = new StreamEventEmitter({ clock });
 
+  // M3-T1 Memory state store — per-session zero-state initialized at
+  // §12.6 bootstrap. Full §8 client (search / write / consolidate /
+  // aging) fills in incrementally as SV-MEM-01..08 wire up.
+  const memoryStore = new InMemoryMemoryStateStore({
+    clock,
+    defaultSharingPolicy: "session",
+    defaultAging: {
+      temporal_indexing: false,
+      consolidation_threshold: "oldest-first",
+      max_in_context_tokens: 16_000
+    }
+  });
+
   // Build the ResumeContext before startRunner so both the state-route
   // plugin (lazy-hydrate) and the post-boot scan share the same ctx.
   const cardVersionForResume =
@@ -367,7 +381,8 @@ async function main() {
             agentName:
               typeof (card as { name?: unknown }).name === "string"
                 ? ((card as { name: string }).name)
-                : "soa-harness-runner"
+                : "soa-harness-runner",
+            memoryStore
           }
         }
       : {}),
@@ -397,6 +412,12 @@ async function main() {
     },
     eventsRecent: {
       emitter: streamEmitter,
+      sessionStore,
+      clock,
+      runnerVersion: "1.0"
+    },
+    memoryState: {
+      memoryStore,
       sessionStore,
       clock,
       runnerVersion: "1.0"
@@ -468,6 +489,7 @@ async function main() {
   console.log(`  GET http://${HOST}:${PORT}/budget/projection/<session_id>`);
   if (registry) console.log(`  GET http://${HOST}:${PORT}/tools/registered`);
   console.log(`  GET http://${HOST}:${PORT}/events/recent?session_id=<id>&after=<eid>&limit=<n>`);
+  console.log(`  GET http://${HOST}:${PORT}/memory/state/<session_id>`);
   if (registry) {
     console.log(`  GET http://${HOST}:${PORT}/permissions/resolve?tool=<n>&session_id=<id>`);
     console.log(`  POST http://${HOST}:${PORT}/permissions/decisions`);
