@@ -1,6 +1,6 @@
 {
   "name": "@soa-harness/langgraph-adapter",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "SOA-Harness adapter for LangGraph.js — wraps an existing LangGraph StateGraph so the resulting runtime satisfies §18.5 Adapter Conformance (Core profile). Pre-dispatch permission interception per §18.5.2; event mapping per §14.6. Ships a `soa-langgraph-adapter-demo` binary that stands up a self-contained two-Runner composition for validator probing.",
   "license": "Apache-2.0",
   "type": "module",
@@ -34,8 +34,8 @@
     "@langchain/langgraph": "~0.2.74"
   },
   "dependencies": {
-    "@soa-harness/core": "workspace:*",
-    "@soa-harness/runner": "workspace:*"
+    "@soa-harness/core": "workspace:^",
+    "@soa-harness/runner": "workspace:^"
   },
   "devDependencies": {
     "@langchain/core": "^0.3.0",

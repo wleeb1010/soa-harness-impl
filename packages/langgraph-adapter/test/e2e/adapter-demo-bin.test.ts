@@ -67,6 +67,22 @@ describe("Phase 2.7 — adapter demo binary", () => {
     expect(resp.status).toBe(200);
   });
 
+  it("GET /debug/backend-info returns backend_url + admin_read_bearer (demoMode default on)", async () => {
+    running = await startAdapterDemo({ port: 0 });
+    const resp = await fetch(`${running.adapterUrl}/debug/backend-info`);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { backend_url: string; admin_read_bearer: string | null };
+    expect(body.backend_url).toBe(running.backEndUrl);
+    expect(typeof body.admin_read_bearer).toBe("string");
+    expect(body.admin_read_bearer).toBe("adapter-demo-back-end");
+  });
+
+  it("GET /debug/backend-info returns 404 when demoMode=false", async () => {
+    running = await startAdapterDemo({ port: 0, demoMode: false });
+    const resp = await fetch(`${running.adapterUrl}/debug/backend-info`);
+    expect(resp.status).toBe(404);
+  });
+
   it("close() unbinds both adapter + back-end ports", async () => {
     running = await startAdapterDemo({ port: 0 });
     const { adapterUrl, backEndUrl } = running;

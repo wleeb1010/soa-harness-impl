@@ -84,6 +84,14 @@ export interface StartAdapterDemoOptions {
   sessionId?: string;
   sessionBearer?: string;
   activeMode?: Capability;
+  /**
+   * When true (default), the adapter exposes GET /debug/backend-info
+   * for validator discovery. Loopback-only; request-time gate rejects
+   * non-loopback callers with 403. Set to false (via
+   * SOA_ADAPTER_DEMO_MODE=0) to skip route registration for
+   * defense-in-depth in sensitive environments.
+   */
+  demoMode?: boolean;
 }
 
 export interface AdapterDemoRunning {
@@ -91,6 +99,7 @@ export interface AdapterDemoRunning {
   backEndUrl: string;
   publisherKid: string;
   sessionId: string;
+  sessionBearer: string;
   close(): Promise<void>;
 }
 
@@ -102,6 +111,7 @@ export async function startAdapterDemo(
   const sessionId = opts.sessionId ?? "ses_adapterdemo0000001";
   const sessionBearer = opts.sessionBearer ?? "adapter-demo-session-bearer";
   const activeMode = opts.activeMode ?? "ReadOnly";
+  const demoMode = opts.demoMode ?? true;
 
   const adapter = await startLangGraphAdapterRunner({
     baseCard: DEFAULT_CARD,
@@ -114,6 +124,14 @@ export async function startAdapterDemo(
       sessionBearer,
       activeMode,
     },
+    ...(demoMode
+      ? {
+          debug: {
+            backendUrl: backEnd.url,
+            adminReadBearer: backEnd.bearer,
+          },
+        }
+      : {}),
   });
 
   const publisherKid = "soa-langgraph-adapter-demo";
@@ -123,6 +141,7 @@ export async function startAdapterDemo(
     backEndUrl: backEnd.url,
     publisherKid,
     sessionId,
+    sessionBearer,
     async close() {
       await adapter.close();
       await backEnd.close();
@@ -136,6 +155,9 @@ async function main(): Promise<void> {
   const sessionId = process.env["ADAPTER_SESSION_ID"] ?? "ses_adapterdemo0000001";
   const sessionBearer = process.env["ADAPTER_SESSION_BEARER"] ?? "adapter-demo-session-bearer";
   const activeMode = parseActiveMode(process.env["ADAPTER_ACTIVE_MODE"]);
+  // SOA_ADAPTER_DEMO_MODE defaults to on; explicit "0" disables the
+  // /debug/backend-info discovery route.
+  const demoMode = process.env["SOA_ADAPTER_DEMO_MODE"] !== "0";
 
   const running = await startAdapterDemo({
     port,
@@ -143,8 +165,10 @@ async function main(): Promise<void> {
     sessionId,
     sessionBearer,
     activeMode,
+    demoMode,
   });
 
+  // Human-readable startup banner.
   // eslint-disable-next-line no-console -- bin logging
   console.log(`[adapter-demo] adapter listening at ${running.adapterUrl}`);
   // eslint-disable-next-line no-console
@@ -160,6 +184,17 @@ async function main(): Promise<void> {
     "[adapter-demo] validator: soa-validate --adapter=langgraph --impl-url " +
       running.adapterUrl,
   );
+  if (demoMode) {
+    // eslint-disable-next-line no-console
+    console.log(`[adapter-demo] /debug/backend-info enabled (SOA_ADAPTER_DEMO_MODE=1)`);
+  }
+
+  // Phase 2.8 — deterministic machine-parseable line. Distinct prefix
+  // from the human-readable `[adapter-demo]` banner so test harnesses
+  // can regex `^\[soa-adapter-demo\] backend_url=(.*)$` without
+  // false-positives against the prose lines above.
+  // eslint-disable-next-line no-console
+  console.log(`[soa-adapter-demo] backend_url=${running.backEndUrl}`);
 
   async function shutdown(signal: string) {
     // eslint-disable-next-line no-console

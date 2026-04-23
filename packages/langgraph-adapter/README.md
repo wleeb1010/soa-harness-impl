@@ -36,8 +36,43 @@ Environment variables:
 - `ADAPTER_SESSION_BEARER` — bearer for the default session
 - `ADAPTER_ACTIVE_MODE` — `ReadOnly` | `WorkspaceWrite` | `DangerFullAccess`
   (drives retention_class stamping)
+- `SOA_ADAPTER_DEMO_MODE` — defaults to on; set `0` to disable the
+  `GET /debug/backend-info` discovery endpoint
 
 Shutdown: `SIGINT` / `SIGTERM` gracefully closes both servers.
+
+### Back-end discovery (demo-mode only)
+
+When demo mode is on (the default for the bundled binary), the adapter
+exposes `GET /debug/backend-info` so validators + orchestration
+harnesses can discover the internal back-end Runner URL:
+
+```
+$ curl http://127.0.0.1:7701/debug/backend-info
+{"backend_url":"http://127.0.0.1:54321","admin_read_bearer":"adapter-demo-back-end"}
+```
+
+Two gates layered:
+
+- **Construction-time:** the route is only registered when the
+  `debug` option is passed to `startLangGraphAdapterRunner` (the
+  demo binary does this based on `SOA_ADAPTER_DEMO_MODE`).
+- **Request-time:** the handler rejects non-loopback callers with
+  `403 loopback-only` regardless of the adapter's bind address —
+  protects against the case where an operator accidentally binds
+  the adapter to a non-loopback interface in demo mode.
+
+The binary also emits a machine-parseable startup line:
+
+```
+[soa-adapter-demo] backend_url=http://127.0.0.1:54321
+```
+
+Test harnesses can regex `^\[soa-adapter-demo\] backend_url=(.*)$`
+to extract the back-end URL without parsing the full human-readable
+banner above it.
+
+`/debug/backend-info` MUST NOT be wired in production deployments.
 
 See `templates/demo-stategraph.mjs` for a minimal one-tool LangGraph
 StateGraph wired through the adapter's permission-aware ToolNode.

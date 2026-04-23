@@ -102,6 +102,26 @@ export interface StartLangGraphAdapterRunnerOptions {
     /** activeMode for the default session (affects retention_class stamping downstream). Default: "ReadOnly". */
     activeMode?: Capability;
   };
+  /**
+   * When present, the adapter exposes GET /debug/backend-info so
+   * validators + demo-mode orchestrators can discover the back-end
+   * Runner URL (and optional admin:read bearer) the adapter was
+   * composed against.
+   *
+   * Construction-time gate: caller decides whether the route exists
+   * (demo binary passes this only when SOA_ADAPTER_DEMO_MODE!=0).
+   * Request-time gate: the handler rejects non-loopback callers with
+   * 403 regardless of the overall host/port the adapter is bound to
+   * — protecting against the case where an operator accidentally
+   * binds the adapter to a non-loopback address in demo mode.
+   *
+   * MUST NOT be wired in production deployments.
+   */
+  debug?: {
+    backendUrl: string;
+    /** Optional admin-read bearer against the back-end. null when not known. */
+    adminReadBearer?: string | null;
+  };
 }
 
 export interface LangGraphAdapterServer {
@@ -197,6 +217,36 @@ export async function startLangGraphAdapterRunner(
     skipCardSchemaValidation: true,
     ...(eventsConfig ? { eventsRecent: eventsConfig } : {}),
   });
+
+  // Phase 2.8 — /debug/backend-info. Demo-mode-only route registered
+  // AFTER buildRunnerApp so it doesn't collide with any normative route.
+  if (opts.debug) {
+    const debugOpts = opts.debug;
+    type FastifyWithRoutes = {
+      get(
+        path: string,
+        handler: (
+          request: { socket?: { remoteAddress?: string }; ip?: string },
+          reply: { code(n: number): { send(body: unknown): unknown } },
+        ) => Promise<unknown>,
+      ): unknown;
+    };
+    (app as unknown as FastifyWithRoutes).get("/debug/backend-info", async (request, reply) => {
+      const remote = request.socket?.remoteAddress ?? request.ip ?? "";
+      // IPv4 loopback (127.0.0.0/8), IPv6 loopback (::1), + IPv4-mapped IPv6 (::ffff:127.x.x.x).
+      const isLoopback =
+        remote.startsWith("127.") ||
+        remote === "::1" ||
+        remote.startsWith("::ffff:127.");
+      if (!isLoopback) {
+        return reply.code(403).send({ error: "loopback-only", detail: `remote=${remote}` });
+      }
+      return reply.code(200).send({
+        backend_url: debugOpts.backendUrl,
+        admin_read_bearer: debugOpts.adminReadBearer ?? null,
+      });
+    });
+  }
 
   const host = opts.host ?? "127.0.0.1";
   const port = opts.port ?? 7700;
