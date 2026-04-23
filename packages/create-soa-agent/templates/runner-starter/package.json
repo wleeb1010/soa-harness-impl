@@ -9,6 +9,6 @@
     "start": "node ./start.mjs"
   },
   "dependencies": {
-    "@soa-harness/runner": "workspace:*"
+    "@soa-harness/runner": "^1.0.0-rc.0"
   }
 }

@@ -260,11 +260,6 @@ async function main(): Promise<void> {
     );
   } else {
     console.log(`[create-soa-agent] next: (cd ${parsed.name} && npm install && node ./start.mjs)`);
-    console.log(
-      "[create-soa-agent] note: until @soa-harness/* packages are npm-published, the " +
-        "default scaffold's `workspace:*` deps will NOT resolve with bare `npm install`. " +
-        "Re-run with --link if you are inside the monorepo checkout."
-    );
   }
 }
 
