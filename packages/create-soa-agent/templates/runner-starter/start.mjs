@@ -15,6 +15,7 @@ import {
   CrlCache,
   BootOrchestrator,
   InMemorySessionStore,
+  InMemoryMemoryStateStore,
   loadToolRegistry,
   AuditChain
 } from "@soa-harness/runner";
@@ -64,6 +65,15 @@ async function main() {
   const anchors = card.security?.trustAnchors ?? [];
   const boot = new BootOrchestrator({ anchors, crl });
   const sessionStore = new InMemorySessionStore();
+  const memoryStore = new InMemoryMemoryStateStore({
+    clock: () => new Date(),
+    defaultSharingPolicy: "session",
+    defaultAging: {
+      temporal_indexing: false,
+      consolidation_threshold: "oldest-first",
+      max_in_context_tokens: 8000
+    }
+  });
 
   process.env.SOA_RUNNER_MEMORY_MCP_ENDPOINT = MEMORY_ENDPOINT;
   const app = await startRunner({
@@ -98,6 +108,12 @@ async function main() {
       chain,
       clock: () => new Date(),
       activeCapability: card.permissions?.activeMode ?? "ReadOnly",
+      runnerVersion: "1.0"
+    },
+    memoryState: {
+      memoryStore,
+      sessionStore,
+      clock: () => new Date(),
       runnerVersion: "1.0"
     }
   });

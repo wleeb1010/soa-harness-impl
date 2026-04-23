@@ -288,3 +288,62 @@ The first WSL2 attempt (against rc.1) produced exit 0 with no output and no scaf
 - Both platforms at > 75× headroom against budget
 - Three E3 blockers all remediated, one cross-platform bug caught + patched (rc.2)
 - Gate reopens: recruitment can now proceed (Phase 0c)
+
+## Re-run 3 — M5 scaffold pivot verification (2026-04-23)
+
+**Platform:** Windows 11 Pro 26200, Node.js 22.19.0, npm via `npx`.
+**Spec target:** L-58 (spec commit 45bd9df).
+**Published artifact under test:** `create-soa-agent@1.0.0-rc.3` via `@next` dist-tag.
+**Budget:** 20 min Windows / 15 min POSIX (unchanged from Run A/B).
+
+### Steps + timings
+
+| Stage | Elapsed (cumulative, s) |
+|---|---|
+| `npx -y create-soa-agent@next --memory=sqlite test-agent` | 3 |
+| `cd test-agent && npm install` (160 packages, cold store) | 9 |
+| `PORT=7715 SOA_MEMORY_MCP_PORT=8015 node ./start.mjs` + `/health` probe | ~15 |
+| `/memory/state/<session>` probe | ~15 |
+
+**Total: under 30 seconds** — ~40× headroom vs the 20-min Windows
+budget. Well inside the gate.
+
+### Functional findings
+
+- ✅ `/health` on `:7715` returns `{"status":"alive","soaHarnessVersion":"1.0"}`.
+- ✅ `/health` on `:8015` (the scaffolded memory-mcp-sqlite) returns
+  `{"status":"alive"}` — confirms `@soa-harness/memory-mcp-sqlite@1.0.0-rc.0`
+  is installed from npm and boots in-process alongside the Runner.
+- ⚠️ `/memory/state/<session_id>` returned **404 Not Found** against the
+  as-published rc.3. Route was not registered because the scaffold's
+  `start.mjs` didn't pass a `memoryState` config to `startRunner()`, and
+  `InMemoryMemoryStateStore` wasn't re-exported from
+  `@soa-harness/runner`'s top-level index.
+
+### Fix staged, rc.4 queue
+
+Both root causes patched locally:
+
+1. `packages/runner/src/index.ts` — add re-exports for
+   `InMemoryMemoryStateStore`, `memoryStatePlugin`, and the
+   `MemoryState*` types.
+2. `packages/create-soa-agent/templates/runner-starter/start.mjs` —
+   instantiate `InMemoryMemoryStateStore` with card-aligned aging
+   config, and pass `memoryState: { memoryStore, sessionStore, clock,
+   runnerVersion }` into `startRunner()`.
+
+Verified end-to-end with a hot-swap of the built `runner/dist/index.js`
+into the scaffolded `test-agent`'s `node_modules`: `/memory/state/<sid>`
+then responds with `{"error":"missing-or-invalid-bearer"}` (proper auth
+guarding), which is the expected well-formed response. The underlying
+observability wiring is functional; remaining step is republishing
+both packages.
+
+**Publish queue** (holding for explicit go):
+- `@soa-harness/runner@1.0.0-rc.3` — export re-exposure, no API break.
+- `create-soa-agent@1.0.0-rc.4` — scaffold template `memoryState`
+  wiring; depends on runner rc.3.
+
+**Verdict:** ✅ PASS on budget; 🚧 rc.3 functional completeness gap
+(documented above) queued for rc.4 lockstep republish. Timing gate
+remains open — nothing about this gap changes onboarding cost.

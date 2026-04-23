@@ -133,3 +133,13 @@ export {
   auditRecordsPlugin,
   type AuditRecordsRouteOptions
 } from "./audit/index.js";
+export {
+  InMemoryMemoryStateStore,
+  memoryStatePlugin,
+  type MemoryState,
+  type MemoryInContextNote,
+  type MemoryAgingConfig,
+  type MemoryStateStoreOptions,
+  type MemoryStateRouteOptions,
+  type SharingPolicy
+} from "./memory/index.js";
