@@ -1,0 +1,108 @@
+{
+  "$id": "https://soa-harness.org/schemas/v1.0/session.schema.json",
+  "type": "object",
+  "required": [
+    "session_id",
+    "format_version",
+    "activeMode",
+    "messages",
+    "workflow",
+    "counters",
+    "tool_pool_hash",
+    "card_version"
+  ],
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "pattern": "^ses_[A-Za-z0-9]{16,}$"
+    },
+    "format_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "activeMode": {
+      "type": "string",
+      "enum": ["ReadOnly", "WorkspaceWrite", "DangerFullAccess"],
+      "description": "The session's bound capability. Set at §12.6 bootstrap; MUST be ≤ Agent Card's permissions.activeMode; MUST NOT change during a session's lifetime (handoff creates a new session per §17)."
+    },
+    "messages": {
+      "type": "array"
+    },
+    "workflow": {
+      "type": "object",
+      "required": [
+        "task_id",
+        "status",
+        "side_effects",
+        "checkpoint"
+      ],
+      "properties": {
+        "task_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "Planning",
+            "Executing",
+            "Optimizing",
+            "Handoff",
+            "Blocked",
+            "Succeeded",
+            "Failed",
+            "Cancelled"
+          ]
+        },
+        "side_effects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "tool",
+              "idempotency_key",
+              "phase"
+            ],
+            "properties": {
+              "tool": {
+                "type": "string"
+              },
+              "idempotency_key": {
+                "type": "string"
+              },
+              "args_digest": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "inflight",
+                  "committed",
+                  "compensated"
+                ]
+              },
+              "result_digest": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "checkpoint": {
+          "type": "object"
+        }
+      }
+    },
+    "counters": {
+      "type": "object"
+    },
+    "tool_pool_hash": {
+      "type": "string"
+    },
+    "card_version": {
+      "type": "string"
+    }
+  }
+}

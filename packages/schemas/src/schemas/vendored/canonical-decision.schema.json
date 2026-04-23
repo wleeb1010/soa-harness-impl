@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/ui/v1.0/canonical-decision.schema.json",
+  "type": "object",
+  "required": [
+    "prompt_id",
+    "session_id",
+    "tool_name",
+    "args_digest",
+    "decision",
+    "scope",
+    "not_before",
+    "not_after",
+    "nonce",
+    "handler_kid"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "prompt_id": {
+      "type": "string",
+      "pattern": "^prm_[A-Za-z0-9]{8,}$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^ses_[A-Za-z0-9]{16,}$"
+    },
+    "tool_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "args_digest": {
+      "type": "string",
+      "pattern": "^sha256:[A-Fa-f0-9]{64}$"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "deny"
+      ],
+      "description": "Temporal breadth is carried in `scope`; `*_once` variants are retired to prevent contradictory combinations."
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "once",
+        "always-this-tool",
+        "always-this-session"
+      ]
+    },
+    "not_before": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "not_after": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22,}$",
+      "description": "Echo of PermissionPrompt.payload.nonce; ≥22 base64url chars carries ≥128 bits of entropy per Core §14.1.1 and the Gateway-mint rule."
+    },
+    "handler_kid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    }
+  }
+}

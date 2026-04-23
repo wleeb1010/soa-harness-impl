@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/otel-spans-recent-response.schema.json",
+  "type": "object",
+  "required": [
+    "spans",
+    "has_more",
+    "runner_version",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "span_id",
+          "trace_id",
+          "name",
+          "start_time",
+          "end_time",
+          "attributes",
+          "status_code",
+          "resource_attributes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "span_id": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{16}$"
+          },
+          "trace_id": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{32}$"
+          },
+          "parent_span_id": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Fa-f0-9]{16}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_time": {
+            "type": "string"
+          },
+          "end_time": {
+            "type": "string"
+          },
+          "attributes": {
+            "type": "object"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "time"],
+              "properties": {
+                "name": { "type": "string" },
+                "time": { "type": "string" },
+                "attributes": { "type": "object" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "status_code": {
+            "type": "string",
+            "enum": ["OK", "ERROR", "UNSET"]
+          },
+          "resource_attributes": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "next_after": {
+      "type": "string"
+    },
+    "has_more": {
+      "type": "boolean"
+    },
+    "runner_version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    }
+  }
+}

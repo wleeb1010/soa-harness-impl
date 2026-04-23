@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/initial-trust.schema.json",
+  "title": "SOA-Harness v1.0 Operator-Bundled Bootstrap Trust Root",
+  "description": "Normative schema for the operator-bundled bootstrap channel defined in Core §5.3. The file is delivered out-of-band to the Runner via configuration management, signed-container base image, or equivalent trusted channel. The Runner MUST load and validate this file against the schema before loading any Agent Card. File MUST be named initial-trust.json and MUST be UTF-8 without BOM. Validation failure fails Runner startup with HostHardeningInsufficient (reason bootstrap-missing).",
+  "type": "object",
+  "required": [
+    "soaHarnessVersion",
+    "publisher_kid",
+    "spki_sha256",
+    "issuer"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "soaHarnessVersion": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Binds this bootstrap file to a specific Core version. Runners MUST reject a bootstrap whose version is not in their §19.4 two-minor compatibility window."
+    },
+    "publisher_kid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Release-signing key identifier (matches the kid in MANIFEST.json.jws header and the publisher_kid carried on at least one entry of security.trustAnchors in the Agent Card)."
+    },
+    "spki_sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$",
+      "description": "Hex-lowercase SHA-256 of the release-signing key's SubjectPublicKeyInfo (RFC 5280)."
+    },
+    "issuer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "RFC 4514 distinguished name of the certificate issuer, e.g., 'CN=SOA-WG Release CA, O=SOA-WG, C=US'."
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp of bootstrap file issuance. Recommended for rotation auditing per §5.3.1."
+    },
+    "not_after": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional hard expiry. If present, Runners MUST refuse to load an Agent Card after this instant and emit HostHardeningInsufficient (reason bootstrap-expired)."
+    },
+    "successor_publisher_kid": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Optional; set during the §5.3.1 30-day rotation overlap window to announce the incoming publisher_kid. Runners MAY pre-trust the successor once observed but MUST continue accepting the current publisher_kid until not_after."
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "sdk-pinned",
+        "operator-bundled",
+        "dnssec-txt"
+      ],
+      "description": "Records which bootstrap channel of §5.3 produced this file. For operator-bundled files the value is 'operator-bundled'; SDK-pinned and DNSSEC-TXT producers MAY emit a file of this schema for diagnostic purposes but the Runner's authoritative channel is fixed at deployment time per §5.3."
+    },
+    "signature": {
+      "type": "object",
+      "description": "Optional detached signature over the JCS-RFC-8785-canonical bytes of this file (excluding the signature object itself). When present it MUST be produced by a key trusted by the deployment's configuration-management chain, not by publisher_kid — self-signing would be circular.",
+      "required": [
+        "alg",
+        "kid",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "alg": {
+          "type": "string",
+          "enum": [
+            "EdDSA",
+            "ES256",
+            "RS256"
+          ]
+        },
+        "kid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "description": "Base64URL-encoded signature bytes."
+        }
+      }
+    }
+  }
+}

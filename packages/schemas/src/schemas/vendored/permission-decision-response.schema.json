@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/permission-decision-response.schema.json",
+  "title": "SOA-Harness v1.0 Permission Decision Response",
+  "description": "Normative schema for the 201 Created response body of POST /permissions/decisions (Core §10.3.2). The endpoint runs §10.3 steps 1-5, writes an audit record, optionally emits a PermissionDecision StreamEvent, and returns the recorded decision.",
+  "type": "object",
+  "required": [
+    "decision",
+    "resolved_capability",
+    "resolved_control",
+    "reason",
+    "audit_record_id",
+    "audit_this_hash",
+    "handler_accepted",
+    "runner_version",
+    "recorded_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["AutoAllow", "Prompt", "Deny", "CapabilityDenied", "ConfigPrecedenceViolation"],
+      "description": "Terminal decision. MUST match what /permissions/resolve would report for the same (tool, session_id) pair — forgery-resistance (§10.3.2)."
+    },
+    "resolved_capability": {
+      "type": "string",
+      "enum": ["ReadOnly", "WorkspaceWrite", "DangerFullAccess"]
+    },
+    "resolved_control": {
+      "type": "string",
+      "enum": ["AutoAllow", "Prompt", "Deny"]
+    },
+    "reason": {
+      "type": "string",
+      "description": "Closed enum from §10.3.1's reason set, or pda-verify-failed / pda-decision-mismatch for PDA-specific failures."
+    },
+    "audit_record_id": {
+      "type": "string",
+      "pattern": "^aud_[A-Za-z0-9_-]{8,}$",
+      "description": "Identifier of the audit row written for this decision. Callers reconcile via /audit/records."
+    },
+    "audit_this_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "this_hash of the appended audit row. Equals the §10.5 hash-chain value — callers asserting not-a-side-effect on /permissions/resolve compare THIS endpoint's response before/after instead (since this endpoint IS side-effectful by contract)."
+    },
+    "handler_accepted": {
+      "type": "boolean",
+      "description": "True when the PDA (if required) verified against security.trustAnchors, or when the decision was AutoAllow/Deny/CapabilityDenied (handler not required). False ONLY when a required PDA failed verification — in that case decision is coerced to Deny with reason=pda-verify-failed and an audit row is still written (the attempt itself is auditable)."
+    },
+    "runner_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The idempotency key (UUIDv4) associated with this decision's bracket-persist entry per §12.2. Set by the Runner when it mints the side_effect on first call. Callers MAY present this value in an Idempotency-Key request header on subsequent calls to replay the same decision; the Runner MUST return the cached decision + audit_record_id without appending a second audit row. Enables the §12.2 normative idempotency rule for permission decisions."
+    },
+    "replayed": {
+      "type": "boolean",
+      "description": "True when this response was served from the idempotency cache (a prior /permissions/decisions call with the same (session_id, idempotency_key) already ran and its decision is being returned verbatim). False or omitted when this is the first time the (session_id, idempotency_key) pair was processed. Validators asserting idempotency semantics use this flag to distinguish fresh-dispatch responses from cache-hit responses. audit_this_hash is unchanged across replay: the same audit_record_id is returned, no new chain advance."
+    }
+  }
+}

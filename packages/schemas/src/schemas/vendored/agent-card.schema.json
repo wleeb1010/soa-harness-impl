@@ -1,0 +1,486 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/agent-card.schema.json",
+  "type": "object",
+  "required": [
+    "soaHarnessVersion",
+    "name",
+    "version",
+    "url",
+    "protocolVersion",
+    "agentType",
+    "permissions",
+    "security"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "soaHarnessVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[A-Za-z0-9.-]+)?$"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1024
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "protocolVersion": {
+      "type": "string",
+      "const": "a2a-0.3"
+    },
+    "agentType": {
+      "type": "string",
+      "enum": [
+        "general-purpose",
+        "explore",
+        "editor",
+        "reviewer",
+        "coordinator",
+        "specialist"
+      ]
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "supported_core_versions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+$"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": [
+        "1.0"
+      ],
+      "description": "Wire-level version advertisement per §19.4.1. MUST include the value of soaHarnessVersion; MAY include earlier minors within the two-minor compatibility window."
+    },
+    "self_improvement": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "directive_file": {
+          "type": "string",
+          "default": "program.md"
+        },
+        "entrypoint_file": {
+          "type": "string",
+          "default": "agent.py",
+          "description": "Path (relative to project root) to the single-file entrypoint containing EDITABLE SURFACES / IMMUTABLE ADAPTER markers (§9.3)"
+        },
+        "editable_surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "system_prompt",
+              "tool_definitions",
+              "routing_logic",
+              "prompt_templates"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "immutable": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "harbor_adapter",
+              "security_adapter",
+              "mcp_client",
+              "permission_system",
+              "session_persistence",
+              "agents_md",
+              "tasks_directory"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "harbor_adapter",
+            "security_adapter",
+            "mcp_client",
+            "permission_system",
+            "session_persistence",
+            "agents_md",
+            "tasks_directory"
+          ]
+        },
+        "benchmark_mcp_endpoint": {
+          "type": "string",
+          "format": "uri"
+        },
+        "min_score_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "holdout_fraction": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 0.5,
+          "default": 0.2
+        },
+        "safety_gates": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true (default), §9.5 step 7 permission check is blocking for mutating-destructive surfaces."
+        },
+        "docker_isolation": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true (default), §9.7 Docker baseline is enforced. Disabling is NON-CONFORMANT; the flag exists only for test-harness short-circuits."
+        },
+        "stage_activate": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true (default), §9.5 step 12 stage-activate protocol is used. Disabling is NON-CONFORMANT."
+        },
+        "git_commit_policy": {
+          "type": "string",
+          "enum": [
+            "signed-only",
+            "any"
+          ],
+          "default": "signed-only",
+          "description": "'signed-only' requires commit.gpgsign=true (§9.5 step 12d). 'any' is NON-CONFORMANT outside test harnesses."
+        },
+        "budget": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional per-iteration token budget; if absent, self-improvement shares the session budget bounded by §16.2 (≤ 10% of maxTokensPerRun)."
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mcp_endpoint": {
+          "type": "string",
+          "format": "uri"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "evolving-graph",
+            "flat-list",
+            "kv-store"
+          ]
+        },
+        "sharing_policy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "session",
+            "project",
+            "tenant"
+          ]
+        },
+        "aging_rules": {
+          "type": "object",
+          "required": [
+            "consolidation_threshold",
+            "max_in_context_tokens"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "temporal_indexing": {
+              "type": "boolean",
+              "default": true
+            },
+            "consolidation_threshold": {
+              "type": "string",
+              "pattern": "^P(\\d+Y)?(\\d+M)?(\\d+D)?(T(\\d+H)?(\\d+M)?(\\d+S)?)?$",
+              "default": "P30D",
+              "description": "Required by §8.2 recency scoring and §8.4 consolidation trigger."
+            },
+            "max_in_context_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "description": "0 disables memory for the session."
+            }
+          }
+        },
+        "in_context_strategy": {
+          "type": "object",
+          "required": [
+            "weights"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "weights": {
+              "type": "object",
+              "required": [
+                "semantic_relevance",
+                "recency",
+                "graph_strength"
+              ],
+              "properties": {
+                "semantic_relevance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "recency": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "graph_strength": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            },
+            "tie_breaker": {
+              "type": "string",
+              "enum": [
+                "importance",
+                "id-lex",
+                "created-at-asc"
+              ],
+              "default": "importance"
+            }
+          }
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "required": [
+        "activeMode",
+        "handler"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "activeMode": {
+          "type": "string",
+          "enum": [
+            "ReadOnly",
+            "WorkspaceWrite",
+            "DangerFullAccess"
+          ]
+        },
+        "handler": {
+          "type": "string",
+          "enum": [
+            "Interactive",
+            "Coordinator",
+            "Autonomous"
+          ]
+        },
+        "toolRequirements": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "AutoAllow",
+              "Prompt",
+              "Deny"
+            ]
+          }
+        },
+        "policyEndpoint": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        }
+      }
+    },
+    "compaction": {
+      "type": "object",
+      "required": [
+        "preserveRecentTurns",
+        "triggerTokens"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "preserveRecentTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "triggerTokens": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "targetTokens": {
+          "type": "integer",
+          "minimum": 500
+        },
+        "pushToMemory": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "tokenBudget": {
+      "type": "object",
+      "required": [
+        "maxTokensPerRun",
+        "billingTag"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "maxTokensPerRun": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "billingTag": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_:.-]{1,64}$"
+        },
+        "projectionWindow": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 100,
+          "default": 10
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "otelExporter": {
+          "type": "string",
+          "format": "uri"
+        },
+        "requiredResourceAttrs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "service.name",
+            "soa.agent.name",
+            "soa.agent.version",
+            "soa.billing.tag"
+          ]
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "required": [
+        "oauthScopes",
+        "trustAnchors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "oauthScopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "trustAnchors": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Agent Card trust anchors. At least one entry MUST carry publisher_kid: that entry identifies the release-signing anchor used by the §5.3 bootstrap to verify MANIFEST.json.jws. Cards published into a deployment that does not run soa-validate locally MAY omit publisher_kid on all anchors IF and ONLY IF no §9 self-improvement loop is active; §5.3 bootstrap and any core+si deployment requires at least one publisher_kid-carrying anchor.",
+          "contains": {
+            "type": "object",
+            "required": [
+              "publisher_kid"
+            ]
+          },
+          "items": {
+            "type": "object",
+            "required": [
+              "issuer",
+              "spki_sha256",
+              "uri"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "issuer": {
+                "type": "string"
+              },
+              "spki_sha256": {
+                "type": "string",
+                "pattern": "^[A-Fa-f0-9]{64}$"
+              },
+              "uri": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://",
+                "description": "Base URI for trust-anchor artifacts; CRL MUST resolve at <uri>/crl.json"
+              },
+              "publisher_kid": {
+                "type": "string",
+                "description": "Present only on the trust anchor authorized to sign the soa-validate release manifest (§9.7.1); kid matches the JWS header of MANIFEST.json.jws. At least one trustAnchors entry MUST carry this field (enforced by the contains constraint)."
+              }
+            }
+          }
+        },
+        "mtlsRequired": {
+          "type": "boolean",
+          "default": true
+        },
+        "auditSink": {
+          "type": "string",
+          "format": "uri",
+          "description": "WORM audit sink endpoint (§10.5); scheme MAY be https, s3, gs, azblob, or a site-local scheme"
+        },
+        "data_residency": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "ISO 3166-1 alpha-2 country code. Runner MUST enforce residency per §10.7 layered-defence gate. Absence of this field means no residency constraint."
+          },
+          "uniqueItems": true,
+          "description": "OPTIONAL residency pinning per §10.7 step 5 (L-41). Array of ISO 3166-1 alpha-2 country codes. When present, Runner MUST apply the layered-defence gate (tool-declared primary signal + network cross-check) and deny tool invocations that resolve to a region outside this list with StopReason::ResidencyViolation and a ResidencyCheck audit row."
+        },
+        "coordinationEndpoint": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://",
+          "description": "REQUIRED when Runner runs in SOA_COORD_MODE=distributed per §12.4; points at the etcd/ZooKeeper/Redis/MCP coordination service issuing monotonic fencing tokens for clustered self-improvement acceptance."
+        }
+      }
+    }
+  }
+}

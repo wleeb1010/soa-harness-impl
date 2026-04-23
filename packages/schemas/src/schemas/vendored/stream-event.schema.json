@@ -1,0 +1,66 @@
+{
+  "$id": "https://soa-harness.org/schemas/v1.0/stream-event.schema.json",
+  "type": "object",
+  "required": [
+    "event_id",
+    "sequence",
+    "session_id",
+    "type",
+    "payload",
+    "timestamp"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt_[A-Za-z0-9]{16,}$"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "turn_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "SessionStart",
+        "SessionEnd",
+        "MessageStart",
+        "MessageEnd",
+        "ContentBlockStart",
+        "ContentBlockDelta",
+        "ContentBlockEnd",
+        "ToolInputStart",
+        "ToolInputDelta",
+        "ToolInputEnd",
+        "ToolResult",
+        "ToolError",
+        "PermissionPrompt",
+        "PermissionDecision",
+        "CompactionStart",
+        "CompactionEnd",
+        "MemoryLoad",
+        "HandoffStart",
+        "HandoffComplete",
+        "HandoffFailed",
+        "SelfImprovementStart",
+        "SelfImprovementAccepted",
+        "SelfImprovementRejected",
+        "SelfImprovementOrphaned",
+        "CrashEvent",
+        "PreToolUseOutcome",
+        "PostToolUseOutcome"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "timestamp": {
+      "type": "string"
+    }
+  }
+}

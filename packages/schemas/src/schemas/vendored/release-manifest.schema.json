@@ -1,0 +1,554 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/release-manifest.schema.json",
+  "type": "object",
+  "required": [
+    "spec_version",
+    "released_at",
+    "publisher_kid",
+    "artifacts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "released_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "publisher_kid": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "object",
+      "required": [
+        "seccomp",
+        "soa_validate_binary",
+        "ui_validate_binary",
+        "supplementary_artifacts"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "SOA-Harness Core Specification v1.0 (Final).md"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "SOA-Harness UI Integration Profile v1.0 (Final).md"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "soa-validate-must-map.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "ui-validate-must-map.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/agent-card.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/canonical-decision.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/crl.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/gateway-config.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/harbor-task.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/locale-map.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/release-manifest.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/session.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/stream-event.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/stream-event-payloads.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/ui-derived-payloads.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/ui-envelope.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "schemas/wcag-addendum.schema.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "test-vectors/agent-card.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "test-vectors/agent-card.json.jws"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "test-vectors/topology-probe.md"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "test-vectors/tasks-fingerprint/README.md"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "test-vectors/permission-prompt/README.md"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "test-vectors/permission-prompt/permission-prompt.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "supplementary_artifacts": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "const": "test-vectors/permission-prompt/canonical-decision.json"
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "supplementary_artifacts": {
+          "type": "array",
+          "description": "REQUIRED: the non-binary portion of the release bundle (spec MDs, must-maps, JSON Schema files, test vectors). The allOf/contains constraints above enforce the specific paths that MUST appear in every v1.0 release; additional entries are permitted. Runners verifying the manifest MAY fetch these; conformance tooling (soa-validate, ui-validate) MUST consume the ones relevant to its scope.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "path",
+              "sha256",
+              "canonicalization"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[A-Fa-f0-9]{64}$"
+              },
+              "canonicalization": {
+                "type": "string",
+                "enum": [
+                  "JCS-RFC-8785",
+                  "raw-utf8"
+                ]
+              }
+            }
+          }
+        },
+        "seccomp": {
+          "type": "object",
+          "required": [
+            "name",
+            "sha256",
+            "canonicalization"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "const": "soa-harness-profile-v1.json"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[A-Fa-f0-9]{64}$"
+            },
+            "canonicalization": {
+              "type": "string",
+              "const": "JCS-RFC-8785"
+            }
+          }
+        },
+        "soa_validate_binary": {
+          "type": "object",
+          "required": [
+            "sha256",
+            "url"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^[A-Fa-f0-9]{64}$"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "placeholder",
+                "shipped"
+              ],
+              "description": "placeholder = all-zero digest reserved until a signed validator binary ships; conformance tools MUST refuse to verify against a placeholder entry."
+            }
+          }
+        },
+        "ui_validate_binary": {
+          "type": "object",
+          "required": [
+            "sha256",
+            "url"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "sha256": {
+              "type": "string",
+              "pattern": "^[A-Fa-f0-9]{64}$"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "placeholder",
+                "shipped"
+              ],
+              "description": "placeholder = all-zero digest reserved until a signed validator binary ships; conformance tools MUST refuse to verify against a placeholder entry."
+            }
+          }
+        }
+      }
+    }
+  }
+}

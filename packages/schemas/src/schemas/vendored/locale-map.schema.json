@@ -1,0 +1,31 @@
+{
+  "$id": "https://soa-harness.org/schemas/ui/v1.0/locale-map.schema.json",
+  "type": "object",
+  "required": [
+    "locale",
+    "keys"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "ltr",
+        "rtl"
+      ],
+      "default": "ltr"
+    },
+    "keys": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z][a-z0-9._-]*$": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

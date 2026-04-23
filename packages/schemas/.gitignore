@@ -1,3 +1,6 @@
-src/schemas/vendored/
+# Vendored schemas (src/schemas/vendored/*.schema.json) ARE tracked — they are
+# the source-of-truth for fresh clones that have no sibling spec repo. The
+# build script re-vendors from the sibling only on pin-bump or explicit
+# refresh. See scripts/build-validators.mjs for the precedence rule.
 src/validators/generated/
 src/registry.ts

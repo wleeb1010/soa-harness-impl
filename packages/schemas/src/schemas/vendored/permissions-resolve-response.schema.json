@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/permissions-resolve-response.schema.json",
+  "title": "SOA-Harness v1.0 Permission Resolver Observability Response",
+  "description": "Normative schema for the response body of GET /permissions/resolve (Core §10.3.1). The endpoint is a pure query — no audit writes, no StreamEvent emissions, no internal state mutations. Response is a single JSON object; the Runner MUST NOT emit multiple objects, arrays of results, or streaming envelopes at this endpoint.",
+  "type": "object",
+  "required": [
+    "decision",
+    "resolved_control",
+    "resolved_capability",
+    "reason",
+    "trace",
+    "resolved_at",
+    "runner_version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": [
+        "AutoAllow",
+        "Prompt",
+        "Deny",
+        "CapabilityDenied",
+        "ConfigPrecedenceViolation"
+      ],
+      "description": "The terminal decision the §10.3 algorithm reaches for the (tool, session_id) pair. AutoAllow/Prompt/Deny are the three handler-dispatch outcomes from step 5. CapabilityDenied is step 2's rejection when tool.risk_class is not permitted under activeMode. ConfigPrecedenceViolation is step 3's rejection when permissions.toolRequirements[tool] attempts to loosen the default."
+    },
+    "resolved_control": {
+      "type": "string",
+      "enum": ["AutoAllow", "Prompt", "Deny"],
+      "description": "The control level after step 3 (tighten-only composition of tool.default_control and permissions.toolRequirements[tool.name] if present). Reported even when decision is CapabilityDenied — useful for operator debugging."
+    },
+    "resolved_capability": {
+      "type": "string",
+      "enum": ["ReadOnly", "WorkspaceWrite", "DangerFullAccess"],
+      "description": "The capability (activeMode) used for the risk-class check in step 2 at the time of the query."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Machine-readable reason code. When decision=AutoAllow: reason is 'auto-allow-under-capability'. When decision=Prompt: reason is 'prompt-required-by-control'. When decision=Deny: reason is 'deny-by-control'. When decision=CapabilityDenied: reason is 'risk-class-not-permitted-under-capability'. When decision=ConfigPrecedenceViolation: reason is 'toolRequirements-loosens-default'. Verifiers MAY rely on these string values as closed enumerations."
+    },
+    "trace": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "description": "Ordered record of the §10.3 algorithm steps actually visited. Step 5 (dispatch) is NOT observable here — /permissions/resolve stops at the decision, not the dispatch. A trace that reaches step 4 and finds policyEndpoint unconfigured MUST record step 4 as 'skipped', not omit it.",
+      "items": {
+        "type": "object",
+        "required": ["step", "result", "detail"],
+        "additionalProperties": false,
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "result": {
+            "type": "string",
+            "enum": ["passed", "tightened", "rejected", "skipped"]
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Human-readable detail of what the step evaluated. Example at step 2: 'risk_class=Mutating, capability=ReadOnly → rejected'. No sensitive information (args, subject_id, session bearer) MUST appear in this field."
+          }
+        }
+      }
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp of when the Runner resolved this query. If the Runner accepts an injectable test clock (§10.6.1 testability note), resolved_at is that clock value. Otherwise wall-clock."
+    },
+    "runner_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$",
+      "description": "The Runner's SOA-Harness conformance version. MUST match the soaHarnessVersion value in Agent Card. Carried for drift attribution when validator output disagrees with an impl update."
+    },
+    "policy_endpoint_applied": {
+      "type": "boolean",
+      "description": "Optional but RECOMMENDED. True when the Runner invoked policyEndpoint (step 4) and folded its response into the decision. False or absent when policyEndpoint is unconfigured or was skipped (e.g., because an earlier step rejected). Validators use this to attribute decision drift between Runner-internal state and external policy service."
+    }
+  }
+}

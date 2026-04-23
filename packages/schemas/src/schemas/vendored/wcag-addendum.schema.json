@@ -1,0 +1,70 @@
+{
+  "$id": "https://soa-harness.org/schemas/ui/v1.0/wcag-addendum.schema.json",
+  "type": "object",
+  "required": [
+    "profile_version",
+    "reviewed_at",
+    "reviewer",
+    "ui_version",
+    "criteria"
+  ],
+  "properties": {
+    "profile_version": {
+      "const": "1.0"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reviewer": {
+      "type": "object",
+      "required": [
+        "name",
+        "credential"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        }
+      }
+    },
+    "ui_version": {
+      "type": "string"
+    },
+    "criteria": {
+      "type": "object",
+      "patternProperties": {
+        "^[0-9]+\\.[0-9]+\\.[0-9]+$": {
+          "type": "object",
+          "required": [
+            "status",
+            "evidence"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "pass",
+                "partial",
+                "fail",
+                "n/a"
+              ]
+            },
+            "evidence": {
+              "type": "string"
+            },
+            "remediation_plan": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "signature": {
+      "type": "string",
+      "description": "JWS over canonical addendum JSON by reviewer key"
+    }
+  }
+}

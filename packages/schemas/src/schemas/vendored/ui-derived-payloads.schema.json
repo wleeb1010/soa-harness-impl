@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/ui/v1.0/ui-derived-payloads.schema.json",
+  "$defs": {
+    "CostUpdate": {
+      "type": "object",
+      "required": [
+        "source",
+        "session_id",
+        "tokens_used_in_turn",
+        "tokens_used_in_session",
+        "tokens_remaining",
+        "billing_tag"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "turn_id": {
+          "type": "string"
+        },
+        "tokens_used_in_turn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_used_in_session": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_remaining": {
+          "type": "integer"
+        },
+        "billing_tag": {
+          "type": "string"
+        },
+        "cache_input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "projected_next_turn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "currency_estimate": {
+          "type": "object",
+          "required": [
+            "amount",
+            "currency",
+            "source"
+          ],
+          "properties": {
+            "amount": {
+              "type": "string"
+            },
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$"
+            },
+            "source": {
+              "const": "advisory"
+            }
+          }
+        }
+      }
+    },
+    "PromptAssigned": {
+      "type": "object",
+      "required": [
+        "source",
+        "prompt_id",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "prompt_id": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "assigned",
+            "unassigned"
+          ]
+        },
+        "to_ui_id": {
+          "type": "string"
+        }
+      }
+    },
+    "PromptExpired": {
+      "type": "object",
+      "required": [
+        "source",
+        "prompt_id",
+        "expired_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "prompt_id": {
+          "type": "string"
+        },
+        "expired_at": {
+          "type": "string"
+        }
+      }
+    },
+    "PromptDismissed": {
+      "type": "object",
+      "required": [
+        "source",
+        "prompt_id",
+        "dismissed_by"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "prompt_id": {
+          "type": "string"
+        },
+        "dismissed_by": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "DecisionReveal": {
+      "type": "object",
+      "required": [
+        "source",
+        "prompt_id",
+        "revealed_by"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "prompt_id": {
+          "type": "string"
+        },
+        "revealed_by": {
+          "type": "string"
+        },
+        "fields_revealed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ConnectionResumed": {
+      "type": "object",
+      "required": [
+        "source",
+        "last_delivered_sequence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "last_delivered_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "partial": {
+          "type": "boolean",
+          "default": false
+        },
+        "resume_from": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ScopeChanged": {
+      "type": "object",
+      "required": [
+        "source",
+        "scopes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ui.read",
+              "ui.command",
+              "ui.admin"
+            ]
+          }
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "GatewayHeartbeat": {
+      "type": "object",
+      "required": [
+        "source",
+        "server_time"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "server_time": {
+          "type": "string"
+        }
+      }
+    },
+    "CardSignatureFailed": {
+      "type": "object",
+      "required": [
+        "source",
+        "agent_url",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "agent_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "ObservabilityBackpressure": {
+      "type": "object",
+      "required": [
+        "source",
+        "dropped_count_window"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "dropped_count_window": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "window_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "SpanSummary": {
+      "type": "object",
+      "required": [
+        "source",
+        "span_name",
+        "duration_ms",
+        "status",
+        "soa.session.id",
+        "soa.turn.id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "span_name": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "error",
+            "unset"
+          ]
+        },
+        "soa.session.id": {
+          "type": "string"
+        },
+        "soa.turn.id": {
+          "type": "string"
+        }
+      }
+    },
+    "StubPromptPlaceholder": {
+      "type": "object",
+      "required": [
+        "source",
+        "prompt_id",
+        "tool_name",
+        "risk_class",
+        "deadline",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "gateway"
+        },
+        "prompt_id": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "risk_class": {
+          "type": "string",
+          "enum": [
+            "ReadOnly",
+            "Mutating",
+            "Destructive"
+          ]
+        },
+        "deadline": {
+          "type": "string"
+        },
+        "assigned_to_user_sub_hmac": {
+          "type": "string",
+          "pattern": "^hmac-sha256:[A-Fa-f0-9]{64}$",
+          "description": "HMAC-SHA256 keyed with the session's per-session secret (not disclosed to UIs); stable within a session, unlinkable across sessions."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "awaiting",
+            "decided",
+            "expired",
+            "dismissed"
+          ]
+        }
+      }
+    }
+  }
+}

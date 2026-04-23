@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/backpressure-status-response.schema.json",
+  "type": "object",
+  "required": [
+    "buffer_capacity",
+    "buffer_size_current",
+    "dropped_since_boot",
+    "last_backpressure_applied_at",
+    "last_backpressure_dropped_count",
+    "runner_version",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "buffer_capacity": {
+      "type": "integer",
+      "const": 10000
+    },
+    "buffer_size_current": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "dropped_since_boot": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_backpressure_applied_at": {
+      "type": ["string", "null"]
+    },
+    "last_backpressure_dropped_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "runner_version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    }
+  }
+}

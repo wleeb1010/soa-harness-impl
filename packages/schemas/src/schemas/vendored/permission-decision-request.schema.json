@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/permission-decision-request.schema.json",
+  "title": "SOA-Harness v1.0 Permission Decision Request",
+  "description": "Normative schema for the request body of POST /permissions/decisions (Core §10.3.2). Drives the §10.3 decision pipeline (resolver + dispatch) with audit-row side effects.",
+  "type": "object",
+  "required": ["tool", "session_id", "args_digest"],
+  "additionalProperties": false,
+  "properties": {
+    "tool": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Tool name from the Tool Registry (§11). MUST exist in the loaded registry or the Runner returns 404."
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^ses_[A-Za-z0-9]{16,}$",
+      "description": "Session whose activeMode governs the capability check. MUST match the session scope of the presenting bearer."
+    },
+    "args_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 of the invocation arguments as the request context would carry them. For conformance tests lacking real args, the validator MAY pass sha256:0000…0000 (64 zeros)."
+    },
+    "pda": {
+      "type": ["string", "null"],
+      "description": "Compact JWS of the signed canonical-decision.json per §6.1.1 row 4. Required when the §10.3 resolver computes Prompt; omitted (or null) otherwise. Verified against security.trustAnchors before the decision is accepted."
+    }
+  }
+}

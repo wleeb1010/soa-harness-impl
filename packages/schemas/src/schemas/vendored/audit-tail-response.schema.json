@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/audit-tail-response.schema.json",
+  "title": "SOA-Harness v1.0 Audit Tail Observability Response",
+  "description": "Normative schema for the 200 OK response body of GET /audit/tail (Core §10.5.2). Reading is a pure query — no audit record is written for the read, no StreamEvent is emitted, no Runner-internal state is mutated.",
+  "type": "object",
+  "required": [
+    "this_hash",
+    "record_count",
+    "runner_version",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "this_hash": {
+      "oneOf": [
+        { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        { "type": "string", "const": "GENESIS" }
+      ],
+      "description": "The this_hash of the most recent record in /audit/permissions.log, or the literal string \"GENESIS\" when the log is empty. Hex lowercase SHA-256 when not GENESIS."
+    },
+    "record_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of records in the hash chain from GENESIS to the tail inclusive. Zero when the log is empty."
+    },
+    "last_record_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp of the most recent record. OMITTED (not null, not empty string) when the log is empty."
+    },
+    "runner_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$",
+      "description": "Matches the soaHarnessVersion value in Agent Card. Carried for drift attribution."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp when the Runner computed this response. Under an injected test clock (§10.6.1 testability note) this reports the injected clock value."
+    }
+  }
+}

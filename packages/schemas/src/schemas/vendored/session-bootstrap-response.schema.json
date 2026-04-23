@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/session-bootstrap-response.schema.json",
+  "title": "SOA-Harness v1.0 Session Bootstrap Response",
+  "description": "Normative schema for the 201 Created response body of POST /sessions (Core §12.6). The endpoint creates a new session and returns the session bearer that authorizes subsequent calls to /stream, /permissions/resolve, and /audit/tail.",
+  "type": "object",
+  "required": [
+    "session_id",
+    "session_bearer",
+    "granted_activeMode",
+    "expires_at",
+    "runner_version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "pattern": "^ses_[A-Za-z0-9]{16,}$",
+      "description": "Newly minted session identifier matching the §12.1 session-file schema pattern. MUST NOT be re-derivable from the bootstrap bearer."
+    },
+    "session_bearer": {
+      "type": "string",
+      "minLength": 32,
+      "description": "Opaque bearer token authorizing /stream, /permissions/resolve, and /audit/tail for exactly this session_id. Scopes: stream:read:<session_id>, permissions:resolve:<session_id>, audit:read. Does NOT carry sessions:create."
+    },
+    "granted_activeMode": {
+      "type": "string",
+      "enum": ["ReadOnly", "WorkspaceWrite", "DangerFullAccess"],
+      "description": "The session's bound capability. MUST equal requested_activeMode when within bounds; MUST be ≤ the Agent Card's permissions.activeMode."
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp when this session bearer (and the session itself) expires. Equal to created_at + min(requested_ttl, deployment_maximum_ttl)."
+    },
+    "runner_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$",
+      "description": "Matches the soaHarnessVersion value in Agent Card. Carried for drift attribution."
+    }
+  }
+}

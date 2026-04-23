@@ -1,0 +1,80 @@
+{
+  "$id": "https://soa-harness.org/schemas/ui/v1.0/ui-envelope.schema.json",
+  "type": "object",
+  "required": [
+    "ui_envelope_version",
+    "ui_sequence",
+    "session_id",
+    "trust_class",
+    "event"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "ui_envelope_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "ui_sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "turn_id": {
+      "type": "string"
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "ack_required": {
+          "type": "boolean",
+          "default": false
+        },
+        "partial": {
+          "type": "boolean",
+          "default": false
+        },
+        "essential": {
+          "type": "boolean",
+          "default": false,
+          "description": "Never dropped by backpressure; see §17.3"
+        },
+        "retry_hint_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "trust_class": {
+      "type": "string",
+      "enum": [
+        "system",
+        "user",
+        "model",
+        "tool-output",
+        "untrusted",
+        "agent-peer"
+      ]
+    },
+    "locale_hint": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    "redactions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "pii",
+          "secret",
+          "credential",
+          "large-binary"
+        ]
+      }
+    },
+    "event": {
+      "type": "object"
+    }
+  }
+}

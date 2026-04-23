@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/events-recent-response.schema.json",
+  "title": "SOA-Harness v1.0 Minimum StreamEvent Observability Response",
+  "description": "Normative schema for GET /events/recent (Core §14.5). Polling-friendly minimum StreamEvent observability channel covering the full §14.1 25-type closed enum. Coexists with §14.3 SSE transport (M4); subsumes §12.5.4 audit-sink-events for conformance purposes.",
+  "type": "object",
+  "required": ["events", "has_more", "runner_version", "generated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_id", "sequence", "type", "session_id", "emitted_at"],
+        "additionalProperties": true,
+        "properties": {
+          "event_id": { "type": "string", "pattern": "^evt_[A-Za-z0-9_-]{8,}$" },
+          "sequence": { "type": "integer", "minimum": 0 },
+          "type": { "type": "string", "description": "One of the 25 values in the §14.1 closed StreamEvent type enum." },
+          "session_id": { "type": "string", "pattern": "^ses_[A-Za-z0-9]{16,}$" },
+          "emitted_at": { "type": "string", "format": "date-time" },
+          "workflow_state_id": { "type": "string" },
+          "payload": { "type": "object", "description": "Per-type payload validates against the §14.1.1 stream-event-payloads.schema.json oneOf dispatch." }
+        }
+      }
+    },
+    "next_after": { "type": "string", "pattern": "^evt_[A-Za-z0-9_-]{8,}$" },
+    "has_more": { "type": "boolean" },
+    "runner_version": { "type": "string", "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$" },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

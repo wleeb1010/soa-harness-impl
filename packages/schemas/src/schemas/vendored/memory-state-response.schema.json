@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/memory-state-response.schema.json",
+  "title": "SOA-Harness v1.0 Memory State Observability Response",
+  "description": "Normative schema for GET /memory/state (Core §8.6). Byte-identity excludes generated_at. Not-a-side-effect: reads MUST NOT trigger consolidation or advance aging clocks.",
+  "type": "object",
+  "required": ["session_id", "sharing_policy", "in_context_notes", "available_notes_count", "consolidation", "aging", "runner_version", "generated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[A-Za-z0-9]{16,}$" },
+    "sharing_policy": { "type": "string", "enum": ["none", "session", "project", "tenant"] },
+    "in_context_notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["note_id", "summary", "data_class", "composite_score", "loaded_at"],
+        "additionalProperties": false,
+        "properties": {
+          "note_id": { "type": "string", "pattern": "^mem_[A-Za-z0-9_-]{8,}$" },
+          "summary": { "type": "string" },
+          "data_class": { "type": "string", "enum": ["public", "internal", "confidential", "personal"] },
+          "weight_semantic": { "type": "number", "minimum": 0, "maximum": 1 },
+          "weight_recency": { "type": "number", "minimum": 0, "maximum": 1 },
+          "weight_graph_strength": { "type": "number", "minimum": 0, "maximum": 1 },
+          "composite_score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "loaded_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "available_notes_count": { "type": "integer", "minimum": 0 },
+    "consolidation": {
+      "type": "object",
+      "required": ["last_run_at", "pending_notes"],
+      "additionalProperties": false,
+      "properties": {
+        "last_run_at": { "type": "string", "format": "date-time" },
+        "next_due_at": { "type": "string", "format": "date-time" },
+        "pending_notes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "aging": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "temporal_indexing": { "type": "boolean" },
+        "consolidation_threshold": { "type": "string" },
+        "max_in_context_tokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "runner_version": { "type": "string", "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$" },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

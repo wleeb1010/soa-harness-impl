@@ -1,0 +1,1011 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/stream-event-payloads.schema.json",
+  "type": "object",
+  "required": [
+    "type",
+    "payload"
+  ],
+  "oneOf": [
+    {
+      "properties": {
+        "type": {
+          "const": "SessionStart"
+        },
+        "payload": {
+          "$ref": "#/$defs/SessionStart"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "SessionEnd"
+        },
+        "payload": {
+          "$ref": "#/$defs/SessionEnd"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "MessageStart"
+        },
+        "payload": {
+          "$ref": "#/$defs/MessageStart"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "MessageEnd"
+        },
+        "payload": {
+          "$ref": "#/$defs/MessageEnd"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "ContentBlockStart"
+        },
+        "payload": {
+          "$ref": "#/$defs/ContentBlockStart"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "ContentBlockDelta"
+        },
+        "payload": {
+          "$ref": "#/$defs/ContentBlockDelta"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "ContentBlockEnd"
+        },
+        "payload": {
+          "$ref": "#/$defs/ContentBlockEnd"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "ToolInputStart"
+        },
+        "payload": {
+          "$ref": "#/$defs/ToolInputStart"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "ToolInputDelta"
+        },
+        "payload": {
+          "$ref": "#/$defs/ToolInputDelta"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "ToolInputEnd"
+        },
+        "payload": {
+          "$ref": "#/$defs/ToolInputEnd"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "ToolResult"
+        },
+        "payload": {
+          "$ref": "#/$defs/ToolResult"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "ToolError"
+        },
+        "payload": {
+          "$ref": "#/$defs/ToolError"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "PermissionPrompt"
+        },
+        "payload": {
+          "$ref": "#/$defs/PermissionPrompt"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "PermissionDecision"
+        },
+        "payload": {
+          "$ref": "#/$defs/PermissionDecision"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "CompactionStart"
+        },
+        "payload": {
+          "$ref": "#/$defs/CompactionStart"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "CompactionEnd"
+        },
+        "payload": {
+          "$ref": "#/$defs/CompactionEnd"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "MemoryLoad"
+        },
+        "payload": {
+          "$ref": "#/$defs/MemoryLoad"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "HandoffStart"
+        },
+        "payload": {
+          "$ref": "#/$defs/HandoffStart"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "HandoffComplete"
+        },
+        "payload": {
+          "$ref": "#/$defs/HandoffComplete"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "HandoffFailed"
+        },
+        "payload": {
+          "$ref": "#/$defs/HandoffFailed"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "SelfImprovementStart"
+        },
+        "payload": {
+          "$ref": "#/$defs/SelfImprovementStart"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "SelfImprovementAccepted"
+        },
+        "payload": {
+          "$ref": "#/$defs/SelfImprovementAccepted"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "SelfImprovementRejected"
+        },
+        "payload": {
+          "$ref": "#/$defs/SelfImprovementRejected"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "SelfImprovementOrphaned"
+        },
+        "payload": {
+          "$ref": "#/$defs/SelfImprovementOrphaned"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "CrashEvent"
+        },
+        "payload": {
+          "$ref": "#/$defs/CrashEvent"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "PreToolUseOutcome"
+        },
+        "payload": {
+          "$ref": "#/$defs/PreToolUseOutcome"
+        }
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "PostToolUseOutcome"
+        },
+        "payload": {
+          "$ref": "#/$defs/PostToolUseOutcome"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "SessionStart": {
+      "type": "object",
+      "required": [
+        "agent_name",
+        "agent_version",
+        "card_version"
+      ],
+      "properties": {
+        "agent_name": {
+          "type": "string"
+        },
+        "agent_version": {
+          "type": "string"
+        },
+        "card_version": {
+          "type": "string"
+        },
+        "resumed": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "SessionEnd": {
+      "type": "object",
+      "required": [
+        "stop_reason"
+      ],
+      "properties": {
+        "stop_reason": {
+          "type": "string"
+        },
+        "final_event_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MessageStart": {
+      "type": "object",
+      "required": [
+        "message_id",
+        "role"
+      ],
+      "properties": {
+        "message_id": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant",
+            "tool",
+            "system"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MessageEnd": {
+      "type": "object",
+      "required": [
+        "message_id"
+      ],
+      "properties": {
+        "message_id": {
+          "type": "string"
+        },
+        "usage": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContentBlockStart": {
+      "type": "object",
+      "required": [
+        "block_id",
+        "content_type"
+      ],
+      "properties": {
+        "block_id": {
+          "type": "string"
+        },
+        "content_type": {
+          "type": "string",
+          "enum": [
+            "text",
+            "tool_use",
+            "thinking"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContentBlockDelta": {
+      "type": "object",
+      "required": [
+        "block_id",
+        "delta"
+      ],
+      "properties": {
+        "block_id": {
+          "type": "string"
+        },
+        "delta": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ContentBlockEnd": {
+      "type": "object",
+      "required": [
+        "block_id"
+      ],
+      "properties": {
+        "block_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ToolInputStart": {
+      "type": "object",
+      "required": [
+        "tool_call_id",
+        "tool_name"
+      ],
+      "properties": {
+        "tool_call_id": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "risk_class": {
+          "type": "string",
+          "enum": [
+            "ReadOnly",
+            "Mutating",
+            "Destructive"
+          ]
+        },
+        "ui_hint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ToolInputDelta": {
+      "type": "object",
+      "required": [
+        "tool_call_id",
+        "args_delta"
+      ],
+      "properties": {
+        "tool_call_id": {
+          "type": "string"
+        },
+        "args_delta": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ToolInputEnd": {
+      "type": "object",
+      "required": [
+        "tool_call_id",
+        "args_digest"
+      ],
+      "properties": {
+        "tool_call_id": {
+          "type": "string"
+        },
+        "args_digest": {
+          "type": "string",
+          "pattern": "^sha256:[A-Fa-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ToolResult": {
+      "type": "object",
+      "required": [
+        "tool_call_id",
+        "ok",
+        "output_digest"
+      ],
+      "properties": {
+        "tool_call_id": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "output_digest": {
+          "type": "string",
+          "pattern": "^sha256:[A-Fa-f0-9]{64}$"
+        },
+        "output": {
+          "type": "string",
+          "description": "May be omitted or redacted by Gateway per §15 trust rules"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ToolError": {
+      "type": "object",
+      "required": [
+        "tool_call_id",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "tool_call_id": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      },
+      "additionalProperties": false
+    },
+    "PermissionPrompt": {
+      "type": "object",
+      "required": [
+        "prompt_id",
+        "tool",
+        "deadline",
+        "allowed_decisions",
+        "capability",
+        "control",
+        "handler",
+        "nonce"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "prompt_id": {
+          "type": "string",
+          "pattern": "^prm_[A-Za-z0-9]{8,}$"
+        },
+        "tool": {
+          "type": "object",
+          "required": [
+            "name",
+            "risk_class",
+            "args_digest"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "risk_class": {
+              "type": "string",
+              "enum": [
+                "ReadOnly",
+                "Mutating",
+                "Destructive"
+              ]
+            },
+            "description": {
+              "type": "string"
+            },
+            "args_digest": {
+              "type": "string",
+              "pattern": "^sha256:[A-Fa-f0-9]{64}$"
+            },
+            "args_redacted": {
+              "type": "object"
+            }
+          }
+        },
+        "capability": {
+          "type": "string",
+          "enum": [
+            "ReadOnly",
+            "WorkspaceWrite",
+            "DangerFullAccess"
+          ]
+        },
+        "control": {
+          "type": "string",
+          "enum": [
+            "AutoAllow",
+            "Prompt",
+            "Deny"
+          ]
+        },
+        "handler": {
+          "type": "string",
+          "enum": [
+            "Interactive",
+            "Coordinator",
+            "Autonomous"
+          ]
+        },
+        "deadline": {
+          "type": "string"
+        },
+        "allowed_decisions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          }
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{22,}$",
+          "description": "Gateway-minted single-use challenge. Gateway MUST generate a fresh ≥128-bit random value per PermissionPrompt and emit it as base64url without padding. The {22,} lower bound is derived from ceil(128/6)=22: shorter base64url strings cannot carry 128 bits of entropy and are rejected at the schema layer. Clients MUST echo this value in canonical_decision.nonce when producing a PDA; Gateway MUST verify equality and enforce single-use via the replay cache defined in UI §11.4.1."
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reasoning_summary": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "recent_decisions": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "attestation_required": {
+          "type": "boolean",
+          "description": "Gateway-synthesized per UI Profile §11.1; Runner MAY omit"
+        },
+        "accepted_attestation_formats": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "jws",
+              "webauthn"
+            ]
+          }
+        }
+      }
+    },
+    "PermissionDecision": {
+      "type": "object",
+      "required": [
+        "prompt_id",
+        "decision",
+        "scope",
+        "signer_kid"
+      ],
+      "properties": {
+        "prompt_id": {
+          "type": "string",
+          "pattern": "^prm_[A-Za-z0-9]{8,}$"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "deny"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "once",
+            "always-this-tool",
+            "always-this-session"
+          ]
+        },
+        "signer_kid": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "billing_tag": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_:.-]{1,64}$",
+          "description": "OPTIONAL billing_tag propagated from Agent Card tokenBudget.billingTag per §13.3. When present, observable on /events/recent for budget-correlation probes. Does not affect signature or canonical_decision bytes (signed PDA doesn't carry billing_tag; Runner attaches at StreamEvent emit time)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "CompactionStart": {
+      "type": "object",
+      "required": [
+        "trigger_tokens",
+        "turns_before"
+      ],
+      "properties": {
+        "trigger_tokens": {
+          "type": "integer"
+        },
+        "turns_before": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CompactionEnd": {
+      "type": "object",
+      "required": [
+        "tokens_after",
+        "turns_after",
+        "memory_note_id"
+      ],
+      "properties": {
+        "tokens_after": {
+          "type": "integer"
+        },
+        "turns_after": {
+          "type": "integer"
+        },
+        "memory_note_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MemoryLoad": {
+      "type": "object",
+      "required": [
+        "loaded_count",
+        "tokens"
+      ],
+      "properties": {
+        "loaded_count": {
+          "type": "integer"
+        },
+        "tokens": {
+          "type": "integer"
+        },
+        "loaded_notes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "HandoffStart": {
+      "type": "object",
+      "required": [
+        "handoff_id",
+        "source_agent",
+        "destination_agent",
+        "task_id",
+        "direction"
+      ],
+      "properties": {
+        "handoff_id": {
+          "type": "string"
+        },
+        "source_agent": {
+          "type": "object"
+        },
+        "destination_agent": {
+          "type": "object"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "incoming",
+            "outgoing"
+          ]
+        },
+        "transferred_state_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "HandoffComplete": {
+      "type": "object",
+      "required": [
+        "handoff_id",
+        "result_digest"
+      ],
+      "properties": {
+        "handoff_id": {
+          "type": "string"
+        },
+        "result_digest": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HandoffFailed": {
+      "type": "object",
+      "required": [
+        "handoff_id",
+        "error_code",
+        "message"
+      ],
+      "properties": {
+        "handoff_id": {
+          "type": "string"
+        },
+        "error_code": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SelfImprovementStart": {
+      "type": "object",
+      "required": [
+        "iteration_id",
+        "fingerprint"
+      ],
+      "properties": {
+        "iteration_id": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SelfImprovementAccepted": {
+      "type": "object",
+      "required": [
+        "iteration_id",
+        "training_score",
+        "holdout_score",
+        "commit_sha",
+        "memory_note_id"
+      ],
+      "properties": {
+        "iteration_id": {
+          "type": "string"
+        },
+        "training_score": {
+          "type": "number"
+        },
+        "holdout_score": {
+          "type": "number"
+        },
+        "commit_sha": {
+          "type": "string"
+        },
+        "memory_note_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SelfImprovementRejected": {
+      "type": "object",
+      "required": [
+        "iteration_id",
+        "reason"
+      ],
+      "properties": {
+        "iteration_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "training_delta": {
+          "type": "number"
+        },
+        "holdout_delta": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SelfImprovementOrphaned": {
+      "type": "object",
+      "required": [
+        "iteration_id",
+        "staging_sha",
+        "reason"
+      ],
+      "properties": {
+        "iteration_id": {
+          "type": "string"
+        },
+        "staging_sha": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CrashEvent": {
+      "type": "object",
+      "required": [
+        "reason",
+        "workflow_state_id",
+        "last_committed_event_id"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "workflow_state_id": {
+          "type": "string"
+        },
+        "last_committed_event_id": {
+          "type": "string"
+        },
+        "stack_hint": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "additionalProperties": false
+    },
+    "PreToolUseOutcome": {
+      "type": "object",
+      "required": [
+        "tool_call_id",
+        "tool_name",
+        "outcome"
+      ],
+      "properties": {
+        "tool_call_id": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "deny",
+            "replace_args"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "args_digest_before": {
+          "type": "string",
+          "pattern": "^sha256:[A-Fa-f0-9]{64}$"
+        },
+        "args_digest_after": {
+          "type": "string",
+          "pattern": "^sha256:[A-Fa-f0-9]{64}$",
+          "description": "Present when outcome=replace_args; equals fingerprint over hook-substituted args"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PostToolUseOutcome": {
+      "type": "object",
+      "required": [
+        "tool_call_id",
+        "tool_name",
+        "outcome"
+      ],
+      "properties": {
+        "tool_call_id": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "replace_result"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "output_digest_before": {
+          "type": "string",
+          "pattern": "^sha256:[A-Fa-f0-9]{64}$"
+        },
+        "output_digest_after": {
+          "type": "string",
+          "pattern": "^sha256:[A-Fa-f0-9]{64}$",
+          "description": "Present when outcome=replace_result; equals digest of hook-substituted result"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

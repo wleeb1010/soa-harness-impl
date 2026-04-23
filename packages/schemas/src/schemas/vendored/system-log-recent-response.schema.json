@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/system-log-recent-response.schema.json",
+  "type": "object",
+  "required": [
+    "records",
+    "has_more",
+    "runner_version",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "record_id",
+          "ts",
+          "session_id",
+          "category",
+          "level",
+          "code",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "pattern": "^slog_[A-Za-z0-9]{8,}$"
+          },
+          "ts": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "ContextLoad",
+              "MemoryLoad",
+              "MemoryDegraded",
+              "Permission",
+              "Routing",
+              "Config",
+              "Card",
+              "SelfImprovement",
+              "Audit",
+              "Budget",
+              "Handoff",
+              "Error"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "enum": ["info", "warn", "error"]
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "next_after": {
+      "type": "string"
+    },
+    "has_more": {
+      "type": "boolean"
+    },
+    "runner_version": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    }
+  }
+}

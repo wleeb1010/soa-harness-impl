@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/tools-registered-response.schema.json",
+  "title": "SOA-Harness v1.0 Dynamic Tool Registry Observability Response",
+  "description": "Normative schema for GET /tools/registered (Core §11.4). Returns the currently-registered global Tool Registry state. Byte-identity excludes generated_at. Not-a-side-effect on reads.",
+  "type": "object",
+  "required": ["tools", "registry_version", "runner_version", "generated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "risk_class", "default_control", "registered_at", "registration_source"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "risk_class": { "type": "string", "enum": ["ReadOnly", "Mutating", "Destructive"] },
+          "default_control": { "type": "string", "enum": ["AutoAllow", "Prompt", "Deny"] },
+          "idempotency_retention_seconds": { "type": "integer", "minimum": 0 },
+          "registered_at": { "type": "string", "format": "date-time" },
+          "registration_source": { "type": "string", "enum": ["static-fixture", "mcp-dynamic"] }
+        }
+      }
+    },
+    "registry_version": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 of the JCS-canonicalized tools array. Changes whenever a tool is added/removed/modified; stable within a static-fixture-only deployment."
+    },
+    "runner_version": { "type": "string", "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$" },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

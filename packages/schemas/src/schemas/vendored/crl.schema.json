@@ -1,0 +1,58 @@
+{
+  "$id": "https://soa-harness.org/schemas/v1.0/crl.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "issuer",
+    "issued_at",
+    "not_after",
+    "revoked_kids"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "issuer": {
+      "type": "string",
+      "description": "Matches security.trustAnchors[].issuer"
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "not_after": {
+      "type": "string",
+      "format": "date-time",
+      "description": "CRL validity horizon; Runner MUST treat as stale past this moment"
+    },
+    "revoked_kids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": [
+          "kid",
+          "revoked_at",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kid": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "compromise",
+              "rotation",
+              "administrative",
+              "unspecified"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

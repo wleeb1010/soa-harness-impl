@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/audit-sink-events-response.schema.json",
+  "title": "SOA-Harness v1.0 Audit-Sink Event Channel Response",
+  "description": "Normative schema for GET /audit/sink-events (Core §12.5.4). Minimum-viable audit-sink state-transition observability channel for M2 conformance. When §14 StreamEvent transport ships (M3), this endpoint remains as a polling-friendly alternate path.",
+  "type": "object",
+  "required": ["events", "has_more", "runner_version", "generated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_id", "type", "transition_at"],
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "pattern": "^evt_[A-Za-z0-9_-]{8,}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["AuditSinkDegraded", "AuditSinkUnreachable", "AuditSinkRecovered"]
+          },
+          "transition_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "detail": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "State-transition detail. For AuditSinkDegraded: {first_failed_at, buffered_records}. For AuditSinkUnreachable: {unreachable_since, buffered_records}. For AuditSinkRecovered: {recovered_at, flushed_records}."
+          }
+        }
+      }
+    },
+    "next_after": {
+      "type": "string",
+      "pattern": "^evt_[A-Za-z0-9_-]{8,}$"
+    },
+    "has_more": {
+      "type": "boolean"
+    },
+    "runner_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

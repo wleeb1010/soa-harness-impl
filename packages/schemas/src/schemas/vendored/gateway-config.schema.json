@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/ui/v1.0/gateway-config.schema.json",
+  "type": "object",
+  "required": [
+    "soa_ui_profile_version",
+    "issuer",
+    "authorization_endpoint",
+    "token_endpoint",
+    "scopes_supported",
+    "agents_supported",
+    "ws_endpoint",
+    "rest_base",
+    "enroll_endpoint",
+    "attestation_formats_supported",
+    "max_event_bytes",
+    "supported_profiles",
+    "replay",
+    "artifacts_origin",
+    "runner_endpoint",
+    "stream_scope_template"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "WebAuthn RP ID is REQUIRED when any of the WebAuthn-capable profiles (web/ide/mobile) is supported; cli-only deployments MAY omit.",
+      "if": {
+        "properties": {
+          "supported_profiles": {
+            "contains": {
+              "enum": [
+                "web",
+                "ide",
+                "mobile"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "webauthn_rp_id"
+        ]
+      }
+    },
+    {
+      "description": "local_ipc is REQUIRED when cli or ide is supported; it MAY appear otherwise.",
+      "if": {
+        "properties": {
+          "supported_profiles": {
+            "contains": {
+              "enum": [
+                "cli",
+                "ide"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "local_ipc"
+        ]
+      }
+    },
+    {
+      "description": "runner_mtls_ca_digest is REQUIRED when runner_endpoint is an https URL; the `loopback` sentinel (co-hosted deployments per §7.4) MAY omit it because kernel-enforced process identity replaces the CA pin.",
+      "if": {
+        "properties": {
+          "runner_endpoint": {
+            "pattern": "^https://"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "runner_mtls_ca_digest"
+        ]
+      }
+    },
+    {
+      "description": "device_authorization_endpoint is REQUIRED when cli or ide is supported, because §7.2 mandates RFC 8628 device flow for those profiles.",
+      "if": {
+        "properties": {
+          "supported_profiles": {
+            "contains": {
+              "enum": [
+                "cli",
+                "ide"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "device_authorization_endpoint"
+        ]
+      }
+    }
+  ],
+  "properties": {
+    "soa_ui_profile_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "issuer": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "authorization_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "token_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "device_authorization_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "scopes_supported": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "ui.read",
+          "ui.command",
+          "ui.admin"
+        ]
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "agents_supported": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://"
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "ws_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^wss://"
+    },
+    "sse_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "rest_base": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "enroll_endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "attestation_formats_supported": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "jws",
+          "webauthn"
+        ]
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "dpop_required_for_public_clients": {
+      "type": "boolean",
+      "default": true
+    },
+    "max_event_bytes": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 1048576
+    },
+    "supported_profiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "web",
+          "ide",
+          "mobile",
+          "cli"
+        ]
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "webauthn_rp_id": {
+      "type": "string",
+      "description": "Registrable-domain suffix of the UI origin, used as WebAuthn RP ID per §7.3. The Gateway origin does NOT need to share this suffix; Gateway validates clientDataJSON.origin against a configured UI-origin allowlist sharing this rp.id."
+    },
+    "artifacts_origin": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://",
+      "description": "Base URL (scheme + registrable-domain host) from which the Gateway serves tool-output artifacts. MUST differ from the UI origin by eTLD+1 per §5.1 (UV-SESS-06†). The topology probe at test-vectors/topology-probe.md reads this field."
+    },
+    "runner_endpoint": {
+      "type": "string",
+      "oneOf": [
+        {
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        {
+          "const": "loopback"
+        }
+      ],
+      "description": "Base URL of the upstream SOA-Harness Runner the Gateway brokers for (§5, §14.3). Gateway composes `${runner_endpoint}/stream/v1/{session_id}` for SSE subscription. The literal value `loopback` declares co-hosted deployment (Gateway and Runner on the same host, routed over the loopback interface); in that mode outbound mTLS and the CA-digest pin MAY be omitted — see §7.4 for the exact co-host contract. REQUIRED when Gateway is not co-hosted with Runner."
+    },
+    "runner_mtls_ca_digest": {
+      "type": "string",
+      "pattern": "^sha256:[A-Fa-f0-9]{64}$",
+      "description": "SHA-256 of the mTLS CA bundle (DER-encoded root certificate) that the Gateway uses to authenticate the Runner. Gateway MUST verify this digest against its configured CA bundle at every outbound mTLS handshake to the Runner; mismatch fails the handshake with `ui.runner-mtls-failed` and triggers CA-rotation reconciliation before any further stream attempts. REQUIRED when `runner_endpoint` is an https URL."
+    },
+    "stream_scope_template": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9:_-]*(\\{[a-z_][a-z0-9_]*\\}[a-z0-9:_-]*)*$",
+      "description": "RFC 6570 Level 1 URI template the Gateway MUST use to build the `scope` parameter for RFC 8693 token exchange on a per-session basis (§7.4). Default: `stream:read:{session_id}`. Admin consumers MAY use the literal scope `stream:read:all`. The authorization server MUST refuse scopes broader than the template's expansion for a given session."
+    },
+    "supported_core_versions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+$"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": [
+        "1.0"
+      ],
+      "description": "Wire-level version advertisement per Core §19.4.1. MUST include the Core version the Gateway's upstream Runner reports; MAY include earlier minors within the two-minor compatibility window. Callers negotiating via the UI session-attach frame compute the intersection with their own supported set and select the highest common value."
+    },
+    "local_ipc": {
+      "type": "object",
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "unix_socket_path"
+          ]
+        },
+        {
+          "required": [
+            "named_pipe_name"
+          ]
+        }
+      ],
+      "properties": {
+        "unix_socket_path": {
+          "type": "string",
+          "description": "POSIX socket path, e.g., /run/soa/gateway.sock; mode SHOULD be 0660 with group ownership."
+        },
+        "named_pipe_name": {
+          "type": "string",
+          "description": "Windows named pipe, e.g., \\\\.\\pipe\\soa-gateway."
+        }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "required": [
+        "buffer_events",
+        "buffer_seconds",
+        "max_backfill",
+        "grace_seconds"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "buffer_events": {
+          "type": "integer",
+          "minimum": 10000,
+          "description": "Per-UI replay buffer size; MUST be ≥ 10 000 per §17.5."
+        },
+        "buffer_seconds": {
+          "type": "integer",
+          "minimum": 1800,
+          "description": "Per-UI replay buffer age in seconds; MUST be ≥ 1800 (30 min) per §17.5."
+        },
+        "max_backfill": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000,
+          "description": "Upper bound on backfill per subscribe; MUST be ≤ 5000 per §17.5."
+        },
+        "grace_seconds": {
+          "type": "integer",
+          "minimum": 600,
+          "description": "Reconnect grace window in seconds; MUST be ≥ 600 (10 min) per §9.3."
+        }
+      }
+    }
+  }
+}

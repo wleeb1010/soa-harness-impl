@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/session-state-response.schema.json",
+  "title": "SOA-Harness v1.0 Session State Observability Response",
+  "description": "Normative schema for the 200 OK response body of GET /sessions/<session_id>/state (Core §12.5.1). The response MUST reflect the session state that a crash-and-restart would observe — no stale pre-flush in-memory state.",
+  "type": "object",
+  "required": [
+    "session_id",
+    "format_version",
+    "activeMode",
+    "workflow",
+    "counters",
+    "tool_pool_hash",
+    "card_version",
+    "runner_version",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[A-Za-z0-9]{16,}$" },
+    "format_version": { "type": "string", "const": "1.0" },
+    "activeMode": {
+      "type": "string",
+      "enum": ["ReadOnly", "WorkspaceWrite", "DangerFullAccess"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "last_significant_event_at": { "type": "string", "format": "date-time" },
+    "workflow": {
+      "type": "object",
+      "required": ["task_id", "status", "side_effects"],
+      "additionalProperties": false,
+      "properties": {
+        "task_id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["Planning", "Executing", "Optimizing", "Handoff", "Blocked", "Succeeded", "Failed", "Cancelled"]
+        },
+        "side_effects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tool", "idempotency_key", "phase", "args_digest", "first_attempted_at", "last_phase_transition_at"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": { "type": "string" },
+              "idempotency_key": { "type": "string", "minLength": 1 },
+              "phase": {
+                "type": "string",
+                "enum": ["pending", "inflight", "committed", "compensated"]
+              },
+              "args_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "result_digest": {
+                "oneOf": [
+                  { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+                  { "type": "null" }
+                ]
+              },
+              "first_attempted_at": { "type": "string", "format": "date-time" },
+              "last_phase_transition_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
+        "checkpoint": { "type": "object" }
+      }
+    },
+    "counters": { "type": "object" },
+    "tool_pool_hash": { "type": "string" },
+    "card_version": { "type": "string" },
+    "runner_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$"
+    },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

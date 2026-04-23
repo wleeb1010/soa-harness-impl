@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/budget-projection-response.schema.json",
+  "title": "SOA-Harness v1.0 Budget Projection Observability Response",
+  "description": "Normative schema for GET /budget/projection (Core §13.5). Byte-identity excludes generated_at. Not-a-side-effect: reads MUST NOT advance counters or fire cancellations.",
+  "type": "object",
+  "required": ["session_id", "projected_tokens_remaining", "max_tokens_per_run", "cumulative_tokens_consumed", "p95_tokens_per_turn_over_window_w", "safety_factor", "stop_reason_if_exhausted", "cold_start_baseline_active", "runner_version", "generated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[A-Za-z0-9]{16,}$" },
+    "projected_tokens_remaining": { "type": "integer" },
+    "max_tokens_per_run": { "type": "integer", "minimum": 0 },
+    "cumulative_tokens_consumed": { "type": "integer", "minimum": 0 },
+    "p95_tokens_per_turn_over_window_w": { "type": "number", "minimum": 0 },
+    "safety_factor": { "type": "number", "const": 1.15 },
+    "projection_headroom": { "type": "integer", "description": "Turns remaining before projected exhaustion at current p95 rate + safety factor. Negative values indicate already-exceeded budget — expect StopReason::BudgetExhausted on next significant turn." },
+    "stop_reason_if_exhausted": { "type": "string", "const": "BudgetExhausted" },
+    "cold_start_baseline_active": { "type": "boolean", "description": "True when the session has no prior turns and the projection uses the §13.1 cold-start baseline. False once at least one real turn has been observed." },
+    "cache_accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prompt_tokens_cached": { "type": "integer", "minimum": 0 },
+        "completion_tokens_cached": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "runner_version": { "type": "string", "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$" },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "$id": "https://soa-harness.org/schemas/v1.0/harbor-task.schema.json",
+  "type": "object",
+  "required": [
+    "task_id",
+    "version",
+    "scoring",
+    "resources"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "scoring": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "exact-match"
+            },
+            "target": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "regex"
+            },
+            "pattern": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "pattern"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "numeric"
+            },
+            "tolerance": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "tolerance"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "external-scorer"
+            },
+            "image": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "image"
+          ]
+        }
+      ]
+    },
+    "resources": {
+      "type": "object",
+      "required": [
+        "cpus",
+        "memory_mib",
+        "wall_clock_seconds"
+      ],
+      "properties": {
+        "cpus": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 16
+        },
+        "memory_mib": {
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 16384
+        },
+        "wall_clock_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "pids": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 4096,
+          "default": 256
+        }
+      }
+    },
+    "network": {
+      "type": "string",
+      "enum": [
+        "none",
+        "restricted"
+      ],
+      "default": "none"
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

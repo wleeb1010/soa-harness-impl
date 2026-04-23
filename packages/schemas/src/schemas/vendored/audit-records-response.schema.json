@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/audit-records-response.schema.json",
+  "title": "SOA-Harness v1.0 Audit Records Observability Response",
+  "description": "Normative schema for the 200 OK response body of GET /audit/records (Core §10.5.3). Records are returned in chain order (earliest to latest). Consumers paginate via next_after until has_more is false, then verify the hash chain.",
+  "type": "object",
+  "required": [
+    "records",
+    "has_more",
+    "runner_version",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "records": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 1000,
+      "description": "Audit records in chain order (earliest first). Three record shapes, discriminated on `decision`: (1) decision-audit rows (full §10.5 field set) when decision ∈ {AutoAllow, Prompt, Deny, CapabilityDenied, ConfigPrecedenceViolation}; (2) admin-audit rows (SubjectSuppression, SubjectExport, ResidencyCheck per L-41) with reduced required set; (3) SuspectDecision admin-rows per §10.6.5 (L-48) that additionally require referenced_audit_id pointing at the flagged original row. All shapes participate in the same hash-chain (prev_hash/this_hash).",
+      "items": {
+        "type": "object",
+        "oneOf": [
+          {
+            "properties": { "decision": { "enum": ["AutoAllow", "Prompt", "Deny", "CapabilityDenied", "ConfigPrecedenceViolation"] } },
+            "required": ["id", "timestamp", "session_id", "subject_id", "tool", "args_digest", "capability", "control", "handler", "decision", "reason", "signer_key_id", "prev_hash", "this_hash"]
+          },
+          {
+            "properties": { "decision": { "enum": ["SubjectSuppression", "SubjectExport", "ResidencyCheck"] } },
+            "required": ["id", "timestamp", "session_id", "subject_id", "decision", "reason", "prev_hash", "this_hash"]
+          },
+          {
+            "properties": { "decision": { "enum": ["SuspectDecision"] } },
+            "required": ["id", "timestamp", "session_id", "subject_id", "decision", "reason", "prev_hash", "this_hash", "referenced_audit_id"]
+          }
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^aud_[A-Za-z0-9_-]{8,}$"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "session_id": {
+            "type": "string",
+            "pattern": "^ses_[A-Za-z0-9]{16,}$"
+          },
+          "subject_id": {
+            "type": "string",
+            "description": "Stable identifier of the data subject implicated by this decision, or the literal string \"none\" when no personal data is touched. §10.7 authoritative."
+          },
+          "tool": {
+            "type": "string",
+            "description": "Tool name from the Tool Registry."
+          },
+          "args_digest": {
+            "type": "string",
+            "pattern": "^(sha256:[a-f0-9]{64}|SOA-PERM-RESOLVE-QUERY|GENESIS)$",
+            "description": "sha256:<hex> for real invocations; SOA-PERM-RESOLVE-QUERY reserved for §10.3.1 synthetic queries (should NOT appear in real audit records since the endpoint is not-a-side-effect); GENESIS for the initial record marker."
+          },
+          "capability": {
+            "type": "string",
+            "enum": ["ReadOnly", "WorkspaceWrite", "DangerFullAccess"]
+          },
+          "control": {
+            "type": "string",
+            "enum": ["AutoAllow", "Prompt", "Deny"]
+          },
+          "handler": {
+            "type": "string",
+            "enum": ["Interactive", "Autonomous", "Coordinator"]
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["AutoAllow", "Prompt", "Deny", "CapabilityDenied", "ConfigPrecedenceViolation", "SubjectSuppression", "SubjectExport", "ResidencyCheck", "SuspectDecision"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "signer_key_id": {
+            "type": "string",
+            "description": "kid of the handler key that signed the PermissionDecision for Prompt decisions; empty string for decisions that don't require a signature (AutoAllow, Deny, CapabilityDenied)."
+          },
+          "prev_hash": {
+            "oneOf": [
+              { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              { "type": "string", "const": "GENESIS" }
+            ]
+          },
+          "this_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "billing_tag": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_:.-]{1,64}$",
+            "description": "OPTIONAL billing_tag from the Agent Card's tokenBudget.billingTag (§7 line 379) propagated to audit rows per §13.3 + §10.5. When present, MUST be part of the hash-chain content (covered by canonical JCS serialization of the record before computing this_hash). When absent, hash-chain computation excludes the field — impls MUST NOT emit billing_tag=\"\" as a placeholder. Added in §19.4 errata 1.0.5 (L-40)."
+          },
+          "sink_timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "OPTIONAL external timestamp stamped by the WORM sink per §10.5.5 (L-48). Distinct from Runner-internal timestamp. Under normal operation |sink_timestamp − timestamp| ≤ 1s. Hash-chain participation semantics match billing_tag: when present, canonical-JCS-serialized into this_hash; when absent, excluded (not emitted as empty string)."
+          },
+          "retention_class": {
+            "type": "string",
+            "enum": ["dfa-365d", "standard-90d"],
+            "description": "OPTIONAL per-record retention class per §10.5.6 (L-48). Derived from session's granted activeMode at append time: DangerFullAccess → dfa-365d (≥365d retention), others → standard-90d (≥90d). Immutable post-append (WORM)."
+          },
+          "referenced_audit_id": {
+            "type": "string",
+            "pattern": "^aud_[A-Za-z0-9_-]{8,}$",
+            "description": "REQUIRED on admin-row subtype SuspectDecision per §10.6.5 (L-48). Points at the id of the original audit row being retroactively flagged as suspect due to handler-kid revocation within the 24h window."
+          }
+        }
+      }
+    },
+    "next_after": {
+      "type": "string",
+      "pattern": "^aud_[A-Za-z0-9_-]{8,}$",
+      "description": "id of the last record in this page. Omitted when records array is empty."
+    },
+    "has_more": {
+      "type": "boolean",
+      "description": "True when more records exist beyond this page. When false, next_after MAY be the current audit-log tail."
+    },
+    "runner_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp when the Runner computed this response. Under an injected test clock (§10.6.1 testability note) this reports the injected clock value."
+    }
+  }
+}
