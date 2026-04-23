@@ -8,9 +8,12 @@ SOA-Harness defines a production-standard harness for agentic AI runtimes: crypt
 
 ## Quick start (~15 min, fresh laptop)
 
-**Prerequisites:** Node.js 20+ (22 recommended), npm 10+.
+**Prerequisites:**
+- Node.js 20 or newer (22 recommended)
+- npm 10 or newer (older versions have different `npx` behavior and may silently skip scaffold binaries)
+- Supported platforms: Windows 10+, macOS 11+, Linux (including WSL2 Ubuntu 22.04+)
 
-Scaffold a new agent project, install deps, launch the Runner:
+Scaffold a new agent project, install deps, launch the Runner. The `@next` dist-tag below resolves to the current release candidate (`1.0.0-rc.N`); drop `@next` after `v1.0.0` final ships:
 
 ```bash
 npx create-soa-agent@next my-agent
@@ -44,6 +47,12 @@ curl -s -I http://127.0.0.1:7700/.well-known/agent-card.jws | head -1
 - Windows 11 (PowerShell): 7.5s end-to-end
 - WSL2 Ubuntu 24.04: 11.8s end-to-end
 
+**Troubleshooting:**
+- **Port 7700 already in use** — set `PORT=<other>` before `node ./start.mjs` (any free port; the probe URLs above use whatever `PORT` resolves to)
+- **`npm install` errors with `EUNSUPPORTEDPROTOCOL`** — you're on npm < 10 or hit a stale npm cache; upgrade via `npm install -g npm@latest` and retry with a clean `node_modules`
+- **`npx create-soa-agent@next` exits with no output** — the binary uses a symlink-aware main-guard; if you're seeing this on Linux/macOS you're on an older `create-soa-agent` version (< 1.0.0-rc.2). `npm cache clean --force` then retry
+- **Node version mismatch** — Runner refuses to start on Node < 20 with a startup error; upgrade Node
+
 ---
 
 ## Which path? Decision tree
@@ -62,10 +71,18 @@ Ships a minimal ReadOnly agent with a self-signed demo keypair. Replace the Agen
 
 ### (b) Wrap an existing LangGraph agent — `@soa-harness/langgraph-adapter`
 
-Use when: you already have a LangGraph `StateGraph` and want to make it SOA-conformant (signed Agent Card, permission interception, audit chain, StreamEvent emission).
+Use when: you already have a project with `@langchain/langgraph` installed and a compiled `StateGraph`, and you want to make it SOA-conformant (signed Agent Card, permission interception, audit chain, StreamEvent emission).
 
 ```bash
+# Assumes @langchain/langgraph ~0.2.74 and @langchain/core ^0.3.0 already in your project (peer deps)
 npm install @soa-harness/langgraph-adapter@next
+```
+
+To preview the adapter without integrating it first, run the demo binary against a fixture graph:
+
+```bash
+npx -p @soa-harness/langgraph-adapter@next soa-langgraph-adapter-demo
+# Logs adapter URL (default :7701) and back-end Runner URL, then idles until Ctrl-C
 ```
 
 See [`packages/langgraph-adapter/README.md`](packages/langgraph-adapter/README.md) for the wrapping recipe. Conformance to SOA-Harness §18.5 Adapter Conformance requires pre-dispatch permission interception per §18.5.2 — the adapter handles this automatically.
@@ -106,28 +123,33 @@ Published under the [`@soa-harness` npm organization](https://www.npmjs.com/org/
 |---|---|---|
 | `@soa-harness/core` | `1.0.0-rc.0` | JCS canonicalization, SHA-256 digests, tasks fingerprint |
 | `@soa-harness/schemas` | `1.0.0-rc.0` | ajv-compiled validators (vendored from spec-pinned schemas) |
-| `@soa-harness/runner` | `1.0.0-rc.1` | Runner HTTP surface, trust bootstrap, Agent Card, permission, audit, hooks, probes |
+| `@soa-harness/runner` | `1.0.0-rc.2` | Runner HTTP surface, trust bootstrap, Agent Card, permission, audit, hooks, probes |
 | `create-soa-agent` | `1.0.0-rc.2` | `npx` scaffold producing a working SOA agent in seconds |
-| `@soa-harness/langgraph-adapter` | (in-progress) | Adapter for wrapping LangGraph `StateGraph` agents |
+| `@soa-harness/langgraph-adapter` | `1.0.0-rc.2` | Adapter for wrapping LangGraph `StateGraph` agents (+ demo binary) |
 
-All current releases are under the `next` dist-tag (release-candidate). `1.0.0` final ships after conformance audit (see below).
+All current releases are under the `next` dist-tag (release-candidate). `1.0.0` final ships after conformance + greenfield refactor (see below).
 
 ---
 
 ## Conformance status
 
-| Metric | Current |
+| Metric | Current (M4 exit) |
 |---|---|
-| `soa-validate` tests passing | 156/162 expected (152 core + 4 SV-ADAPTER) |
+| `soa-validate` tests passing | **156/162** (152 core + 4 SV-ADAPTER via two-run composition) |
 | Deferred (documented) | 6 |
 | Failing | 0 |
 
-Conformance is validated by **[soa-validate](https://github.com/wleeb1010/soa-validate)**, a separate Go conformance harness. The three-repo split — spec / impl / validate — prevents self-proving conformance.
+Per-run breakdown:
+- **Native run** against Core Runner URL: `152 pass / 0 fail / 10 skip / 0 error` — unchanged from M3 baseline plus 4 SV-ADAPTER probes skipped when `--adapter` flag is absent
+- **Adapter run** (`--adapter=langgraph`) against adapter demo URL: `4 pass / 0 fail / 158 skip / 0 error` — SV-ADAPTER-01..04 pass; non-adapter tests auto-skip with `scope=adapter-only`
+
+Conformance is validated by **[soa-validate](https://github.com/wleeb1010/soa-validate)**, a separate Go conformance harness. The three-repo split — spec / impl / validate — prevents self-proving conformance. The two-run composition is normative per spec L-54 (see `IMPLEMENTATION_LESSONS.md` in the spec repo).
 
 Final `v1.0.0` tag ships after:
-- All three memory-backend reference impls pass (`memory-mcp-sqlite`, `memory-mcp-mem0`, `memory-mcp-zep`)
-- Independent cryptographic review of `packages/core` + `packages/runner/src/audit` + `packages/runner/src/session`
-- External-reviewer onboarding gate (three fresh-laptop reviewers reach `soa-validate` green within platform budget)
+- All three memory-backend reference impls pass (`memory-mcp-sqlite`, `memory-mcp-mem0`, `memory-mcp-zep` — M5 milestone)
+- Independent cryptographic review of `packages/core` + `packages/runner/src/audit` + `packages/runner/src/session` (M5)
+- Greenfield presentation refactor: strip intermediate-milestone markers, uniform prose voice, single cohesive release (M6)
+- Cross-platform install verification holds (already complete: Windows 11 + WSL2 Ubuntu 24.04 with >75× headroom against the 15/20-min budget; see `docs/m4/dry-run-telemetry.md`)
 
 ---
 
@@ -135,15 +157,15 @@ Final `v1.0.0` tag ships after:
 
 Environment variables the Runner reads (non-exhaustive; see `packages/runner/src/config.ts` for the full list):
 
-| Var | Purpose | Scope |
+| Var | Default behavior when unset | Purpose |
 |---|---|---|
-| `PORT` | Runner listen port (default `7700`) | All |
-| `SOA_RUNNER_BOOTSTRAP_BEARER` | Initial admin bearer (demo only — rotate in prod) | All |
-| `RUNNER_SIGNING_KEY` | Agent Card signing key (PKCS#8 PEM, Ed25519) | Production |
-| `RUNNER_X5C` | Agent Card cert chain (PEM) | Production |
-| `SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION` | Path to MCP tool manifest | §11.3.1 |
-| `SOA_MEMORY_MCP_ENDPOINT` | Memory MCP server URL | §8 |
-| `SOA_PRE_TOOL_USE_HOOK`, `SOA_POST_TOOL_USE_HOOK` | §15 hook commands | §15 |
+| `PORT` | `7700` | Runner listen port |
+| `SOA_RUNNER_BOOTSTRAP_BEARER` | Runner synthesizes a random demo bearer and logs a loud warning; production MUST set an operator-issued value | Initial admin bearer |
+| `RUNNER_SIGNING_KEY` | Runner synthesizes an ephemeral Ed25519 keypair + self-signed cert and logs a loud warning; production MUST supply operator-issued key | Agent Card signing key (PKCS#8 PEM, Ed25519) |
+| `RUNNER_X5C` | Derived from synthesized self-signed cert when `RUNNER_SIGNING_KEY` is also unset | Agent Card cert chain (PEM) |
+| `SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION` | Dynamic MCP registration disabled; only static registry entries served | Path to MCP tool manifest (§11.4 watches this path) |
+| `SOA_MEMORY_MCP_ENDPOINT` | Memory MCP disabled; Runner serves `MemoryDegraded` responses on Memory-requiring paths | Memory MCP server URL (§8) |
+| `SOA_PRE_TOOL_USE_HOOK`, `SOA_POST_TOOL_USE_HOOK` | No hook pipeline; tool execution proceeds with permission-only gating | §15 hook commands (local executables) |
 
 Loopback-only test hooks are prefixed `SOA_*_TEST_*` / `RUNNER_TEST_*` and refuse to bind on non-loopback interfaces.
 
@@ -156,12 +178,14 @@ Loopback-only test hooks are prefixed `SOA_*_TEST_*` / `RUNNER_TEST_*` and refus
 
 ## Development
 
+End-users consuming the published packages use `npm` (as shown in Quick start above). Contributors working on the monorepo itself use `pnpm` because the packages are wired as workspaces:
+
 ```bash
 git clone https://github.com/wleeb1010/soa-harness-impl
 cd soa-harness-impl
 pnpm install
 pnpm -r build
-pnpm -r test   # ~785 tests across 5 packages
+pnpm -r test   # 865 tests across 6 workspace packages
 ```
 
 For in-monorepo scaffold iteration (file-linked runner instead of registry):
