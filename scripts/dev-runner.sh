@@ -38,6 +38,12 @@ runner_log="$logs_dir/runner.log"
 mock_log="$logs_dir/memory-mcp-mock.log"
 runner_pidfile="$logs_dir/runner.pid"
 mock_pidfile="$logs_dir/memory-mcp-mock.pid"
+# §11.3.1 dynamic tool-registration trigger file. Validator's SV-REG-03
+# probe writes a tool-entry JSON array here; the Runner's polling
+# watcher (250ms interval) ingests + truncates so subsequent writes
+# trigger re-registration. Well-known path so validator harnesses can
+# target the :7700 runner without extra env coordination.
+dynamic_tool_trigger="$logs_dir/dynamic-tool-trigger.json"
 
 mkdir -p "$logs_dir"
 
@@ -157,6 +163,7 @@ cmd_start_runner() {
   SOA_RUNNER_BOOTSTRAP_BEARER="$BOOTSTRAP_BEARER" \
   RUNNER_DEMO_SESSION="$DEMO_SESSION" \
   SOA_RUNNER_MEMORY_MCP_ENDPOINT="http://${MOCK_HOST}:${MOCK_PORT}" \
+  SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION="$dynamic_tool_trigger" \
   RUNNER_CRASH_TEST_MARKERS="0" \
   RUNNER_DEMO_MODE="1" \
   nohup node "$runner_bin" > "$runner_log" 2>&1 &
