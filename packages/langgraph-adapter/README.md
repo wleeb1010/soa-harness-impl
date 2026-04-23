@@ -7,13 +7,40 @@ against a native SOA Runner.
 
 ## Status
 
-**Phase 1 scaffold — compliance-wrapper only.**
+**Phase 2.7 — demo binary shipped. SV-ADAPTER probes run end-to-end.**
 
 - ✅ Pre-dispatch permission interception (`buildPermissionAwareToolNode`)
-- ⏳ HTTP permission hook (`POST /permissions/decisions`) — Phase 2
-- ⏳ StreamEvent synthesis (§14.6 mapping, 40 LangGraph events → 27 SOA) — Phase 2
-- ⏳ Audit-sink forwarding (§10.5 hash chain + retention_class) — Phase 2
-- ⏳ `SV-ADAPTER-01..04` conformance wired — Phase 2
+- ✅ HTTP permission hook (`RunnerBackedPermissionHook`, `POST /permissions/decisions`)
+- ✅ StreamEvent synthesis (§14.6 direct-mapping, 14 LangGraph → 12 SOA types)
+- ✅ Audit-sink forwarding with retention_class stamping (§10.5.6)
+- ✅ `SV-ADAPTER-01..04` end-to-end over real HTTP
+- ✅ `soa-langgraph-adapter-demo` binary (Phase 2.7)
+
+## Demo binary
+
+The package ships a self-contained `soa-langgraph-adapter-demo` CLI that
+stands up the two-Runner composition (a minimal back-end Runner on an
+internal random port + the adapter server on `PORT`) suitable for
+`soa-validate --adapter=langgraph` probing:
+
+```
+npx -p @soa-harness/langgraph-adapter@next soa-langgraph-adapter-demo
+```
+
+Environment variables:
+
+- `PORT` — adapter listen port (default `7701`)
+- `HOST` — bind host (default `127.0.0.1`)
+- `ADAPTER_SESSION_ID` — session id for the default registered session
+  (must match `/^ses_[A-Za-z0-9]{16,}$/`)
+- `ADAPTER_SESSION_BEARER` — bearer for the default session
+- `ADAPTER_ACTIVE_MODE` — `ReadOnly` | `WorkspaceWrite` | `DangerFullAccess`
+  (drives retention_class stamping)
+
+Shutdown: `SIGINT` / `SIGTERM` gracefully closes both servers.
+
+See `templates/demo-stategraph.mjs` for a minimal one-tool LangGraph
+StateGraph wired through the adapter's permission-aware ToolNode.
 
 ## Pre-dispatch interception (§18.5.2)
 

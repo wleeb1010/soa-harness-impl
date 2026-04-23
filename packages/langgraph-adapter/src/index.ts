@@ -47,6 +47,13 @@ export type {
 } from "./server.js";
 export { EventBridge } from "./event-bridge.js";
 export type { EventBridgeOptions } from "./event-bridge.js";
+export { startDemoBackEnd } from "./demo-back-end.js";
+export type { DemoBackEnd, DemoBackEndOptions } from "./demo-back-end.js";
+export { startAdapterDemo } from "./bin/start-adapter-demo.js";
+export type {
+  StartAdapterDemoOptions,
+  AdapterDemoRunning,
+} from "./bin/start-adapter-demo.js";
 
 /** Adapter version shipped with this module — matches package.json. */
 export const ADAPTER_VERSION = "1.0.0-rc.0";
