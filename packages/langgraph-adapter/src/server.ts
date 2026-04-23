@@ -28,10 +28,14 @@ import {
   buildRunnerApp,
   generateEd25519KeyPair,
   generateSelfSignedEd25519Cert,
+  InMemorySessionStore,
+  StreamEventEmitter,
   type InitialTrust,
+  type Capability,
 } from "@soa-harness/runner";
 import { webcrypto } from "node:crypto";
 import { buildAdapterCard, type BuildAdapterCardOptions } from "./agent-card.js";
+import { EventBridge } from "./event-bridge.js";
 
 /**
  * Structural re-type of the shape returned by `buildRunnerApp` — avoids
@@ -81,6 +85,23 @@ export interface StartLangGraphAdapterRunnerOptions {
   host?: string;
   /** Optional forward-facing adapter_notes overrides (deferrals, deviations). */
   adapterNotesOverrides?: Omit<BuildAdapterCardOptions, "baseCard" | "adapterVersion">;
+  /**
+   * When present, the adapter server additionally serves /events/recent
+   * populated by a `StreamEventEmitter` the test / orchestrator drives.
+   * A default session is auto-registered in an in-memory session store
+   * with the supplied bearer so caller-authenticated GET /events/recent
+   * works out of the box.
+   *
+   * Omit to skip event-surface wiring (Phase 2.5 default — card only).
+   */
+  events?: {
+    /** Session ID the emitter is scoped under. */
+    sessionId: string;
+    /** Bearer token for the default session — used in sessions:read:<sid> or admin:read headers. */
+    sessionBearer: string;
+    /** activeMode for the default session (affects retention_class stamping downstream). Default: "ReadOnly". */
+    activeMode?: Capability;
+  };
 }
 
 export interface LangGraphAdapterServer {
@@ -90,6 +111,18 @@ export interface LangGraphAdapterServer {
   address: { host: string; port: number };
   /** The agent card actually served (already includes adapter_notes). */
   agentCard: Record<string, unknown>;
+  /**
+   * Event-surface handles — present iff `opts.events` was passed. The
+   * bridge gives tests a direct way to push LangGraph events into the
+   * emitter without spinning up a live StateGraph; /events/recent reads
+   * from the same emitter.
+   */
+  events?: {
+    emitter: StreamEventEmitter;
+    bridge: EventBridge;
+    sessionId: string;
+    sessionBearer: string;
+  };
   /** Graceful shutdown — closes the listening socket + Fastify. */
   close(): Promise<void>;
 }
@@ -133,6 +166,24 @@ export async function startLangGraphAdapterRunner(
 
   const signing = opts.signing ?? (await synthesizeSigning());
 
+  // Event surface wiring (optional — Phase 2.6 addition).
+  let emitter: StreamEventEmitter | undefined;
+  let sessionStore: InMemorySessionStore | undefined;
+  let eventsConfig: Parameters<typeof buildRunnerApp>[0]["eventsRecent"] | undefined;
+  if (opts.events) {
+    emitter = new StreamEventEmitter({ clock: () => new Date() });
+    sessionStore = new InMemorySessionStore();
+    sessionStore.register(opts.events.sessionId, opts.events.sessionBearer, {
+      activeMode: opts.events.activeMode ?? "ReadOnly",
+      canDecide: true,
+    });
+    eventsConfig = {
+      emitter,
+      sessionStore,
+      clock: () => new Date(),
+    };
+  }
+
   const app = await buildRunnerApp({
     trust: opts.trust,
     card: agentCard,
@@ -144,6 +195,7 @@ export async function startLangGraphAdapterRunner(
     // and baseCard bodies commonly carry placeholders; production callers
     // pass a validated card and this flag stays false.
     skipCardSchemaValidation: true,
+    ...(eventsConfig ? { eventsRecent: eventsConfig } : {}),
   });
 
   const host = opts.host ?? "127.0.0.1";
@@ -154,10 +206,20 @@ export async function startLangGraphAdapterRunner(
   const resolvedPort =
     resolvedAddress && typeof resolvedAddress === "object" ? resolvedAddress.port : port;
 
+  const events = opts.events && emitter
+    ? {
+        emitter,
+        bridge: new EventBridge({ emitter, sessionId: opts.events.sessionId }),
+        sessionId: opts.events.sessionId,
+        sessionBearer: opts.events.sessionBearer,
+      }
+    : undefined;
+
   return {
     app,
     address: { host, port: resolvedPort },
     agentCard,
+    ...(events ? { events } : {}),
     async close() {
       await app.close();
     },

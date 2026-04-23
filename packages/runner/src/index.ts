@@ -113,3 +113,23 @@ export {
   type HookStdout,
   type RunHookOptions
 } from "./hook/index.js";
+export {
+  StreamEventEmitter,
+  STREAM_EVENT_TYPES,
+  isStreamEventType,
+  StreamEventTypeInvalid,
+  eventsRecentPlugin,
+  type StreamEventType,
+  type EmittedEvent,
+  type EmitParams,
+  type StreamEventEmitterOptions,
+  type EventsRecentRouteOptions
+} from "./stream/index.js";
+export {
+  permissionsDecisionsPlugin,
+  type PermissionsDecisionsRouteOptions
+} from "./permission/index.js";
+export {
+  auditRecordsPlugin,
+  type AuditRecordsRouteOptions
+} from "./audit/index.js";

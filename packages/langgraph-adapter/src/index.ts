@@ -43,7 +43,10 @@ export { startLangGraphAdapterRunner } from "./server.js";
 export type {
   StartLangGraphAdapterRunnerOptions,
   LangGraphAdapterServer,
+  AdapterFastifyApp,
 } from "./server.js";
+export { EventBridge } from "./event-bridge.js";
+export type { EventBridgeOptions } from "./event-bridge.js";
 
 /** Adapter version shipped with this module — matches package.json. */
 export const ADAPTER_VERSION = "1.0.0-rc.0";
