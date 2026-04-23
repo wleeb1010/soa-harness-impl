@@ -1,0 +1,135 @@
+# M5 Phase 0b — backend conformance matrix. Expected to FAIL during Phase 0
+# because no backend implementations exist yet; the scaffolding proves the
+# plumbing before sqlite/mem0/zep packages land. Each matrix cell emits a
+# backend-conformance-report.json per
+# soa-harness-specification/schemas/backend-conformance-report.schema.json
+# (spec commit 28e6460, L-56).
+#
+# Gate semantics (scripts/release-gate.mjs):
+#   summary.all_green === true  OR
+#   every non-pass cell carries a waiver_reference pointing at a committed
+#   waiver record.
+#
+# Run locally:
+#   BACKEND=sqlite pnpm exec node scripts/release-gate.mjs path/to/report.json
+#
+# The v1.0.0-rc.2 release tag MUST consume this gate on all three backends.
+
+name: memory-backends-ci
+
+on:
+  pull_request:
+    paths:
+      - "packages/runner/src/memory/**"
+      - "tools/memory-mcp-mock/**"
+      - "packages/memory-mcp-sqlite/**"
+      - "packages/memory-mcp-mem0/**"
+      - "packages/memory-mcp-zep/**"
+      - "scripts/release-gate.mjs"
+      - ".github/workflows/memory-backends-ci.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  backend-conformance:
+    name: "${{ matrix.backend }} conformance"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [sqlite, mem0, zep]
+    steps:
+      - name: Checkout impl
+        uses: actions/checkout@v4
+        with:
+          path: soa-harness-impl
+
+      - name: Checkout spec (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: wleeb1010/soa-harness-specification
+          path: soa-harness=specification
+          # Pinned via soa-validate.lock.spec_commit_sha in the impl repo.
+          # A separate action reads the lock and writes ref=<sha> — for
+          # Phase 0 scaffolding the checkout defaults to the default
+          # branch; the real release cadence MUST pin explicitly.
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Install deps
+        working-directory: soa-harness-impl
+        run: pnpm install --frozen-lockfile
+
+      - name: Build monorepo
+        working-directory: soa-harness-impl
+        run: pnpm -r --filter='./packages/*' --filter='./tools/*' build
+
+      - name: Start backend — sqlite
+        if: matrix.backend == 'sqlite'
+        working-directory: soa-harness-impl
+        run: |
+          # In-process backend; no docker-compose needed. When
+          # packages/memory-mcp-sqlite lands, this step runs its binary.
+          echo "[ci] sqlite backend: expected to fail during Phase 0"
+          echo "BACKEND_ENDPOINT=http://127.0.0.1:8010" >> "$GITHUB_ENV"
+
+      - name: Start backend — mem0
+        if: matrix.backend == 'mem0'
+        working-directory: soa-harness-impl
+        run: |
+          # docker compose up -d mem0
+          echo "[ci] mem0 backend: expected to fail during Phase 0"
+          echo "BACKEND_ENDPOINT=http://127.0.0.1:8011" >> "$GITHUB_ENV"
+
+      - name: Start backend — zep
+        if: matrix.backend == 'zep'
+        working-directory: soa-harness-impl
+        run: |
+          # docker compose up -d zep
+          echo "[ci] zep backend: expected to fail during Phase 0"
+          echo "BACKEND_ENDPOINT=http://127.0.0.1:8012" >> "$GITHUB_ENV"
+
+      - name: Start Runner
+        working-directory: soa-harness-impl
+        run: |
+          # Placeholder — real pass starts runner with
+          # SOA_RUNNER_MEMORY_MCP_ENDPOINT=$BACKEND_ENDPOINT and a
+          # backend-specific tool registry. Phase 0 exits success so
+          # the release-gate step is reached.
+          echo "[ci] runner: phase-0 placeholder"
+
+      - name: Run soa-validate
+        working-directory: soa-harness-impl
+        run: |
+          # Placeholder until soa-validate --memory-backend=<name>
+          # CLI lands on the validator side.
+          mkdir -p ci-out
+          cat > "ci-out/backend-conformance-report.json" << JSON
+          {
+            "backend": "${{ matrix.backend }}",
+            "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "summary": { "all_green": false, "waived": false },
+            "cells": []
+          }
+          JSON
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report-${{ matrix.backend }}
+          path: soa-harness-impl/ci-out/backend-conformance-report.json
+          if-no-files-found: error
+
+      - name: Release gate (Phase 0 — expected to fail)
+        working-directory: soa-harness-impl
+        continue-on-error: true
+        run: node scripts/release-gate.mjs ci-out/backend-conformance-report.json
