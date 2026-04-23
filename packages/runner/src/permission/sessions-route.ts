@@ -403,7 +403,7 @@ export const sessionsBootstrapPlugin: FastifyPluginAsync<SessionsRouteOptions> =
         // flows into in-context state; the forbidden notes are
         // observable via GET /logs/system/recent but never persisted.
         const partitioned = partitionSensitivePersonal(
-          hits.notes,
+          hits.hits,
           created.session_id,
           opts.systemLog
         );

@@ -48,20 +48,20 @@ describe("MemoryMcpMock — §8.1 three-tool protocol", () => {
       query: "budget projection",
       limit: 3
     })) as SearchMemoriesResponse;
-    expect(res.notes).toHaveLength(3);
+    expect(res.hits).toHaveLength(3);
     // "Token budget projection uses p95-over-W algorithm." should rank top
     // for "budget projection" (both tokens match).
-    const topIds = res.notes.map((n) => n.note_id);
+    const topIds = res.hits.map((n) => n.note_id);
     expect(topIds).toContain("mem_seed_0014");
     // Composite scores are deterministic + normalized.
-    for (const n of res.notes) {
+    for (const n of res.hits) {
       expect(n.composite_score).toBeGreaterThanOrEqual(0);
       expect(n.composite_score).toBeLessThanOrEqual(1);
       expect(n.note_id).toMatch(/^mem_seed_[0-9]{4}$/);
     }
     // Increasing — wait, sorted descending so top first >= last.
-    expect(res.notes[0]!.composite_score).toBeGreaterThanOrEqual(
-      res.notes[res.notes.length - 1]!.composite_score
+    expect(res.hits[0]!.composite_score).toBeGreaterThanOrEqual(
+      res.hits[res.hits.length - 1]!.composite_score
     );
   });
 
@@ -240,7 +240,7 @@ describe("MemoryMcpMock — §8.1 three-tool protocol", () => {
       });
       expect(search.statusCode).toBe(200);
       const body = JSON.parse(search.body) as SearchMemoriesResponse;
-      expect(body.notes).toHaveLength(2);
+      expect(body.hits).toHaveLength(2);
     } finally {
       await app.close();
     }

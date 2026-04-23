@@ -35,7 +35,7 @@ async function buildCapturingMock(): Promise<{
   app.post("/search_memories", async (req, reply) => {
     const body = req.body as { sharing_scope?: SharingPolicy };
     seen.push(body);
-    return reply.send({ notes: [] });
+    return reply.send({ hits: [] });
   });
   await app.listen({ host: "127.0.0.1", port: 0 });
   const addr = app.server.address();

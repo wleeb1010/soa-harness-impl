@@ -4,7 +4,7 @@
  * Spec fixture: `test-vectors/memory-mcp-mock/README.md`
  *
  * Tools implemented (§8.1 — 6 canonical tools):
- *   - search_memories({query, limit, sharing_scope}) → {notes: [...]}
+ *   - search_memories({query, limit, sharing_scope}) → {hits: [...]}
  *   - search_memories_by_time({start, end, limit?}) → {hits: [...], truncated}
  *   - add_memory_note({summary, data_class, session_id, note_id?}) → {note_id}
  *     (idempotent iff note_id is pre-specified per §8.1; otherwise mints a new id)
@@ -49,7 +49,7 @@ export interface NoteHit {
 }
 
 export interface SearchMemoriesResponse {
-  notes: NoteHit[];
+  hits: NoteHit[];
 }
 
 export interface AddMemoryNoteRequest {
@@ -238,7 +238,7 @@ export class MemoryMcpMock {
       };
     });
     scored.sort((a, b) => b.composite_score - a.composite_score);
-    return { notes: scored.slice(0, limit) };
+    return { hits: scored.slice(0, limit) };
   }
 
   async addMemoryNote(req: AddMemoryNoteRequest): Promise<AddMemoryNoteResponse | MockErrorResponse> {

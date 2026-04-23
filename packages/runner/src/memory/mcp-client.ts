@@ -116,17 +116,17 @@ export class MemoryMcpClient {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  async searchMemories(query: SearchMemoriesQuery): Promise<{ notes: SearchedNote[] }> {
+  async searchMemories(query: SearchMemoriesQuery): Promise<{ hits: SearchedNote[] }> {
     const res = await postJson(
       `${this.endpoint}/search_memories`,
       query,
       this.timeoutMs,
       "search_memories"
     );
-    if (!res || typeof res !== "object" || !Array.isArray((res as { notes?: unknown }).notes)) {
-      throw new MemoryToolError("search_memories", { detail: "missing notes array in response" });
+    if (!res || typeof res !== "object" || !Array.isArray((res as { hits?: unknown }).hits)) {
+      throw new MemoryToolError("search_memories", { detail: "missing hits array in response" });
     }
-    return res as { notes: SearchedNote[] };
+    return res as { hits: SearchedNote[] };
   }
 
   async addMemoryNote(params: AddMemoryNoteParams): Promise<{ note_id: string }> {

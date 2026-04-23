@@ -29,7 +29,7 @@ async function buildMock(mode: "ok" | "error"): Promise<{
     if (mode === "error") return reply.send({ error: "mock-error" });
     return reply.send({ consolidated_count: 42, pending_count: 0 });
   });
-  app.post("/search_memories", async (_req, reply) => reply.send({ notes: [] }));
+  app.post("/search_memories", async (_req, reply) => reply.send({ hits: [] }));
   app.post("/add_memory_note", async (_req, reply) => reply.send({ note_id: "mem_x" }));
   await app.listen({ host: "127.0.0.1", port: 0 });
   const addr = app.server.address();

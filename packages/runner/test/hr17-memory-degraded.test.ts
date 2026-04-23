@@ -28,7 +28,7 @@ async function buildMemoryMock(mode: "timeout-always" | "ok"): Promise<{
   app.post("/search_memories", async (_req, reply) => {
     if (mode === "timeout-always") return reply.code(504).send({ error: "mock-timeout" });
     return reply.send({
-      notes: [
+      hits: [
         {
           note_id: "mem_hr17_ok_0001",
           summary: "happy path note",
@@ -188,7 +188,7 @@ describe("HR-17 — Memory MCP timeouts → SessionEnd{stop_reason:MemoryDegrade
       callCount++;
       if (callCount <= 2) return reply.code(504).send({ error: "mock-timeout" });
       return reply.send({
-        notes: [
+        hits: [
           {
             note_id: "mem_mixed_0001",
             summary: "ok",

@@ -78,7 +78,7 @@ describe("Finding AG — bootstrap prefetch filters sensitive-personal + logs", 
   function buildStubClient(notes: readonly SearchedNote[]): MemoryMcpClient {
     return {
       async searchMemories() {
-        return { notes: [...notes] };
+        return { hits: [...notes] };
       },
       async addMemoryNote() {
         throw new Error("unused");

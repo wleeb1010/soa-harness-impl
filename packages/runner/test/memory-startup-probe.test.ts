@@ -34,7 +34,7 @@ async function buildMock(mode: "ok" | "always-fail"): Promise<{
   app.post("/search_memories", async (_req, reply) => {
     calls++;
     if (mode === "always-fail") return reply.code(504).send({ error: "mock-timeout" });
-    return reply.send({ notes: [] });
+    return reply.send({ hits: [] });
   });
   await app.listen({ host: "127.0.0.1", port: 0 });
   const addr = app.server.address();
@@ -151,7 +151,7 @@ describe("runStartupMemoryProbe — §8.3 driver", () => {
     app.post("/search_memories", async (_req, reply) => {
       calls++;
       if (calls === 1) return reply.code(504).send({ error: "mock-timeout" });
-      return reply.send({ notes: [] });
+      return reply.send({ hits: [] });
     });
     await app.listen({ host: "127.0.0.1", port: 0 });
     const addr = app.server.address();

@@ -22,7 +22,7 @@ describe("MemoryMcpClient §8.1/§8.3 HTTP client", () => {
       }
       if (behavior === "error") return reply.send({ error: "mock-error" });
       return reply.send({
-        notes: [
+        hits: [
           {
             note_id: "mem_fixture_0001",
             summary: "fixture",
@@ -48,11 +48,11 @@ describe("MemoryMcpClient §8.1/§8.3 HTTP client", () => {
     await mockApp.close();
   });
 
-  it("searchMemories returns parsed notes when the mock is healthy", async () => {
+  it("searchMemories returns parsed hits when the mock is healthy", async () => {
     const client = new MemoryMcpClient({ endpoint });
     const res = await client.searchMemories({ query: "hello" });
-    expect(res.notes).toHaveLength(1);
-    expect(res.notes[0]?.note_id).toBe("mem_fixture_0001");
+    expect(res.hits).toHaveLength(1);
+    expect(res.hits[0]?.note_id).toBe("mem_fixture_0001");
   });
 
   it("504 response throws MemoryTimeout (mock-timeout contract)", async () => {

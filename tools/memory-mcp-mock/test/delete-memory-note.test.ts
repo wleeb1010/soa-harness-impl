@@ -78,7 +78,7 @@ describe("delete_memory_note — §8.1 idempotent tombstone contract", () => {
       query: "agent card",
       limit: 50
     })) as SearchMemoriesResponse;
-    for (const hit of search.notes) {
+    for (const hit of search.hits) {
       expect(ids.slice(0, 3)).not.toContain(hit.note_id);
     }
   });
