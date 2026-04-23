@@ -1,6 +1,6 @@
 {
   "name": "@soa-harness/core",
-  "version": "1.0.0-rc.0",
+  "version": "1.0.0",
   "description": "SOA-Harness core primitives: JCS canonicalization (wrapper around the canonicalize npm package by Samuel Erdtman), digest helpers, tasks-fingerprint.",
   "license": "Apache-2.0",
   "type": "module",

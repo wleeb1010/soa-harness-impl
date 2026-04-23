@@ -13,10 +13,10 @@ SOA-Harness defines a production-standard harness for agentic AI runtimes: crypt
 - npm 10 or newer (older versions have different `npx` behavior and may silently skip scaffold binaries)
 - Supported platforms: Windows 10+, macOS 11+, Linux (including WSL2 Ubuntu 22.04+)
 
-Scaffold a new agent project, install deps, launch the Runner. The `@next` dist-tag below resolves to the current release candidate (`1.0.0-rc.N`); drop `@next` after `v1.0.0` final ships:
+Scaffold a new agent project, install deps, launch the Runner:
 
 ```bash
-npx create-soa-agent@next my-agent
+npx create-soa-agent my-agent
 cd my-agent
 npm install
 node ./start.mjs
@@ -50,7 +50,7 @@ curl -s -I http://127.0.0.1:7700/.well-known/agent-card.jws | head -1
 **Troubleshooting:**
 - **Port 7700 already in use** — set `PORT=<other>` before `node ./start.mjs` (any free port; the probe URLs above use whatever `PORT` resolves to)
 - **`npm install` errors with `EUNSUPPORTEDPROTOCOL`** — you're on npm < 10 or hit a stale npm cache; upgrade via `npm install -g npm@latest` and retry with a clean `node_modules`
-- **`npx create-soa-agent@next` exits with no output** — the binary uses a symlink-aware main-guard; if you're seeing this on Linux/macOS you're on an older `create-soa-agent` version (< 1.0.0-rc.2). `npm cache clean --force` then retry
+- **`npx create-soa-agent` exits with no output** — the binary uses a symlink-aware main-guard; if you're seeing this on Linux/macOS you're on an older `create-soa-agent` version. `npm cache clean --force` then retry
 - **Node version mismatch** — Runner refuses to start on Node < 20 with a startup error; upgrade Node
 
 ---
@@ -64,7 +64,7 @@ Two consumption modes, mutually exclusive:
 Use when: starting from scratch, want a working SOA-conformant Runner as your base.
 
 ```bash
-npx create-soa-agent@next my-agent
+npx create-soa-agent my-agent
 ```
 
 Ships a minimal ReadOnly agent with a self-signed demo keypair. Replace the Agent Card + keys + tools with your own before deploying anywhere non-local.
@@ -75,13 +75,13 @@ Use when: you already have a project with `@langchain/langgraph` installed and a
 
 ```bash
 # Assumes @langchain/langgraph ~0.2.74 and @langchain/core ^0.3.0 already in your project (peer deps)
-npm install @soa-harness/langgraph-adapter@next
+npm install @soa-harness/langgraph-adapter
 ```
 
 To preview the adapter without integrating it first, run the demo binary against a fixture graph:
 
 ```bash
-npx -p @soa-harness/langgraph-adapter@next soa-langgraph-adapter-demo
+npx -p @soa-harness/langgraph-adapter soa-langgraph-adapter-demo
 # Logs adapter URL (default :7701) and back-end Runner URL, then idles until Ctrl-C
 ```
 
@@ -121,35 +121,38 @@ Published under the [`@soa-harness` npm organization](https://www.npmjs.com/org/
 
 | Package | Version | Purpose |
 |---|---|---|
-| `@soa-harness/core` | `1.0.0-rc.0` | JCS canonicalization, SHA-256 digests, tasks fingerprint |
-| `@soa-harness/schemas` | `1.0.0-rc.0` | ajv-compiled validators (vendored from spec-pinned schemas) |
-| `@soa-harness/runner` | `1.0.0-rc.2` | Runner HTTP surface, trust bootstrap, Agent Card, permission, audit, hooks, probes |
-| `create-soa-agent` | `1.0.0-rc.2` | `npx` scaffold producing a working SOA agent in seconds |
-| `@soa-harness/langgraph-adapter` | `1.0.0-rc.2` | Adapter for wrapping LangGraph `StateGraph` agents (+ demo binary) |
+| `@soa-harness/core` | `1.0.0` | JCS canonicalization, SHA-256 digests, tasks fingerprint |
+| `@soa-harness/schemas` | `1.0.0` | ajv-compiled validators (vendored from spec-pinned schemas) |
+| `@soa-harness/runner` | `1.0.0` | Runner HTTP surface, trust bootstrap, Agent Card, permission, audit, hooks, probes |
+| `@soa-harness/memory-mcp-sqlite` | `1.0.0` | Reference Memory MCP backend (single-node sqlite) |
+| `@soa-harness/memory-mcp-mem0` | `1.0.0` | Reference Memory MCP backend (mem0 hosted) |
+| `@soa-harness/memory-mcp-zep` | `1.0.0` | Reference Memory MCP backend (Zep self-hosted) |
+| `@soa-harness/langgraph-adapter` | `1.0.0` | Adapter for wrapping LangGraph `StateGraph` agents (+ demo binary) |
+| `create-soa-agent` | `1.0.0` | `npx` scaffold producing a working SOA agent in seconds |
 
-All current releases are under the `next` dist-tag (release-candidate). `1.0.0` final ships after conformance + greenfield refactor (see below).
+All packages ship on the `latest` dist-tag at `1.0.0`. The `next` dist-tag retires 14 days after the v1.0.0 release per the spec's dist-tag strategy.
 
 ---
 
 ## Conformance status
 
-| Metric | Current (M4 exit) |
+| Metric | Value |
 |---|---|
 | `soa-validate` tests passing | **156/162** (152 core + 4 SV-ADAPTER via two-run composition) |
 | Deferred (documented) | 6 |
 | Failing | 0 |
 
 Per-run breakdown:
-- **Native run** against Core Runner URL: `152 pass / 0 fail / 10 skip / 0 error` — unchanged from M3 baseline plus 4 SV-ADAPTER probes skipped when `--adapter` flag is absent
+- **Native run** against Core Runner URL: `152 pass / 0 fail / 10 skip / 0 error` — 4 SV-ADAPTER probes skip when `--adapter` flag is absent
 - **Adapter run** (`--adapter=langgraph`) against adapter demo URL: `4 pass / 0 fail / 158 skip / 0 error` — SV-ADAPTER-01..04 pass; non-adapter tests auto-skip with `scope=adapter-only`
 
-Conformance is validated by **[soa-validate](https://github.com/wleeb1010/soa-validate)**, a separate Go conformance harness. The three-repo split — spec / impl / validate — prevents self-proving conformance. The two-run composition is normative per spec L-54 (see `IMPLEMENTATION_LESSONS.md` in the spec repo).
+Conformance is validated by **[soa-validate](https://github.com/wleeb1010/soa-validate)**, a separate Go conformance harness. The three-repo split — spec / impl / validate — prevents self-proving conformance. Two-run composition (native + adapter) is normative per the spec's adapter-conformance rules.
 
-Final `v1.0.0` tag ships after:
-- All three memory-backend reference impls pass (`memory-mcp-sqlite`, `memory-mcp-mem0`, `memory-mcp-zep` — M5 milestone)
-- Independent cryptographic review of `packages/core` + `packages/runner/src/audit` + `packages/runner/src/session` (M5)
-- Greenfield presentation refactor: strip intermediate-milestone markers, uniform prose voice, single cohesive release (M6)
-- Cross-platform install verification holds (already complete: Windows 11 + WSL2 Ubuntu 24.04 with >75× headroom against the 15/20-min budget; see `docs/m4/dry-run-telemetry.md`)
+**Conformance-label stance at v1.0.0:**
+- **"Reference Implementation"** — self-assigned for this TypeScript runtime plus the Go `soa-validate` harness, both shipping under the same v1.0.0 tag.
+- **"Bake-Off Verified"** — requires one independent second-party implementation whose `soa-validate` output converges to zero divergence. Until one exists, downstream adopters claim Reference-level conformance only.
+
+Cross-platform install verification passed on Windows 11 and WSL2 Ubuntu 24.04 with significant headroom against the onboarding-time budget (archived under `docs/archive/m4/dry-run-telemetry.md`).
 
 ---
 

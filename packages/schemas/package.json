@@ -1,6 +1,6 @@
 {
   "name": "@soa-harness/schemas",
-  "version": "1.0.0-rc.0",
+  "version": "1.0.0",
   "description": "Compiled Ajv validators for SOA-Harness schemas, generated from the pinned spec commit.",
   "license": "Apache-2.0",
   "type": "module",
@@ -16,7 +16,9 @@
     "access": "public",
     "tag": "next"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "prebuild": "node scripts/build-validators.mjs",
     "build": "tsc -b",
