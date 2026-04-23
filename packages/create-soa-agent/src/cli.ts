@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import "reflect-metadata";
-import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, cpSync, existsSync, realpathSync } from "node:fs";
 import { createHash, webcrypto } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -264,7 +264,19 @@ async function main(): Promise<void> {
 }
 
 // Only run main() when invoked as a CLI — imports by tests skip it.
-const invokedAsCli = fileURLToPath(import.meta.url) === process.argv[1];
+// Resolve symlinks on both sides so the check works under `npm install -g`
+// on Linux / macOS where /usr/bin/<name> is symlinked to the real dist file.
+// Windows uses .cmd wrappers (no symlink), so realpath is a no-op there.
+const here = fileURLToPath(import.meta.url);
+let invoker = "";
+if (process.argv[1]) {
+  try {
+    invoker = realpathSync(process.argv[1]);
+  } catch {
+    invoker = process.argv[1];
+  }
+}
+const invokedAsCli = here === invoker;
 if (invokedAsCli) {
   main().catch((err) => {
     console.error("[create-soa-agent] FATAL:", err);
