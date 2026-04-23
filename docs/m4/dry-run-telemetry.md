@@ -347,3 +347,28 @@ both packages.
 **Verdict:** ✅ PASS on budget; 🚧 rc.3 functional completeness gap
 (documented above) queued for rc.4 lockstep republish. Timing gate
 remains open — nothing about this gap changes onboarding cost.
+
+### Re-run 3b — Post-rc.3/rc.4 verification (2026-04-23, same day)
+
+After publishing `@soa-harness/runner@1.0.0-rc.3` +
+`create-soa-agent@1.0.0-rc.4`, re-ran the same test against
+registry-only deps (no local hot-swap) from a fresh temp dir.
+
+`npx -y create-soa-agent@next --memory=sqlite test-agent` resolved
+both packages from the registry:
+- `create-soa-agent@1.0.0-rc.4` (via `@next` dist-tag)
+- `@soa-harness/runner@1.0.0-rc.3` (via scaffolded template's
+  `^1.0.0-rc.0` range picking the latest matching)
+
+Timings held: scaffold 3s, `npm install` 8s, boot + probe ~15s total.
+
+Functional: `/health` alive on both Runner and memory-mcp-sqlite;
+`/memory/state/<session_id>` now returns
+`{"error":"missing-or-invalid-bearer"}` from the pure-registry install
+— confirming the scaffold + runner rc.3 export fix lands end-to-end
+through npm. Both gaps from Re-run 3 are closed on the published
+artifacts.
+
+**Verdict:** ✅ PASS (budget + functional). Phase 5 publish loop
+complete; `/memory/state` observability is wired via pure
+`npm install` with zero local patches.
