@@ -13,7 +13,7 @@
  *      when the elapsed clock crosses the 24 h threshold.
  *   2. Note-count trigger: any session's per-session note counter
  *      reaches `noteCountThreshold` (default 100). When the Runner
- *      records a write_memory for session S, the counter advances;
+ *      records an add_memory_note for session S, the counter advances;
  *      crossing the threshold fires consolidation IMMEDIATELY and
  *      resets S's counter to 0.
  *
@@ -125,7 +125,7 @@ export class ConsolidationScheduler {
   }
 
   /**
-   * Called on every successful write_memory dispatch. Advances the
+   * Called on every successful add_memory_note dispatch. Advances the
    * per-session counter; when the threshold is crossed, fires
    * consolidation IMMEDIATELY (not on the next tick) and resets the
    * counter. Safe to call when the scheduler has been stopped — the

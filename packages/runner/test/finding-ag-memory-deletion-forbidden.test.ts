@@ -80,7 +80,7 @@ describe("Finding AG — bootstrap prefetch filters sensitive-personal + logs", 
       async searchMemories() {
         return { notes: [...notes] };
       },
-      async writeMemory() {
+      async addMemoryNote() {
         throw new Error("unused");
       },
       async consolidateMemories() {

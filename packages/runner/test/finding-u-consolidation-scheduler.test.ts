@@ -7,7 +7,7 @@ import { BOOT_SESSION_ID } from "../src/permission/boot-session.js";
 // Finding U / SV-MEM-05 — §8.4 consolidation scheduler.
 //   - 24 h elapsed-time trigger (default)
 //   - ≥100 notes/session trigger (default; fires immediately on the
-//     crossing write_memory)
+//     crossing add_memory_note)
 //   - On success: ContextLoad/consolidation-ran/info System Event Log record
 //   - On failure: Error/consolidation-failed/error record + lastRunAt
 //                 NOT advanced so the next tick retries
@@ -30,7 +30,7 @@ async function buildMock(mode: "ok" | "error"): Promise<{
     return reply.send({ consolidated_count: 42, pending_count: 0 });
   });
   app.post("/search_memories", async (_req, reply) => reply.send({ notes: [] }));
-  app.post("/write_memory", async (_req, reply) => reply.send({ note_id: "mem_x" }));
+  app.post("/add_memory_note", async (_req, reply) => reply.send({ note_id: "mem_x" }));
   await app.listen({ host: "127.0.0.1", port: 0 });
   const addr = app.server.address();
   if (typeof addr === "string" || addr === null) throw new Error("unexpected address");

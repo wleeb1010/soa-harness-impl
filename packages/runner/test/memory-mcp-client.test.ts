@@ -32,7 +32,7 @@ describe("MemoryMcpClient §8.1/§8.3 HTTP client", () => {
         ]
       });
     });
-    mockApp.post("/write_memory", async () => ({ note_id: "mem_abcdef012345" }));
+    mockApp.post("/add_memory_note", async () => ({ note_id: "mem_abcdef012345" }));
     mockApp.post("/consolidate_memories", async () => ({
       consolidated_count: 0,
       pending_count: 0
@@ -93,9 +93,9 @@ describe("MemoryMcpClient §8.1/§8.3 HTTP client", () => {
     expect(caught).toBeInstanceOf(MemoryTimeout);
   });
 
-  it("writeMemory round-trip returns the minted note_id", async () => {
+  it("addMemoryNote round-trip returns the minted note_id", async () => {
     const client = new MemoryMcpClient({ endpoint });
-    const res = await client.writeMemory({
+    const res = await client.addMemoryNote({
       summary: "a",
       data_class: "public",
       session_id: "ses_fixturewrite000001a"

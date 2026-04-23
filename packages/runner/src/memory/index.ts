@@ -21,7 +21,7 @@ export {
   type MemoryMcpClientOptions,
   type SearchMemoriesQuery,
   type SearchedNote,
-  type WriteMemoryParams
+  type AddMemoryNoteParams
 } from "./mcp-client.js";
 export {
   MemoryReadinessProbe,

@@ -60,7 +60,7 @@ export interface SearchedNote {
   weight_graph_strength?: number;
 }
 
-export interface WriteMemoryParams {
+export interface AddMemoryNoteParams {
   summary: string;
   data_class: DataClass;
   session_id: string;
@@ -129,12 +129,12 @@ export class MemoryMcpClient {
     return res as { notes: SearchedNote[] };
   }
 
-  async writeMemory(params: WriteMemoryParams): Promise<{ note_id: string }> {
+  async addMemoryNote(params: AddMemoryNoteParams): Promise<{ note_id: string }> {
     const res = await postJson(
-      `${this.endpoint}/write_memory`,
+      `${this.endpoint}/add_memory_note`,
       params,
       this.timeoutMs,
-      "write_memory"
+      "add_memory_note"
     );
     return res as { note_id: string };
   }

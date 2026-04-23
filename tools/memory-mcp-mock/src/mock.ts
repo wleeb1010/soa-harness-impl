@@ -3,9 +3,13 @@
  *
  * Spec fixture: `test-vectors/memory-mcp-mock/README.md`
  *
- * Tools implemented:
+ * Tools implemented (§8.1 — 6 canonical tools):
  *   - search_memories({query, limit, sharing_scope}) → {notes: [...]}
- *   - write_memory({summary, data_class, session_id}) → {note_id}
+ *   - search_memories_by_time({start, end, limit?}) → {hits: [...], truncated}
+ *   - add_memory_note({summary, data_class, session_id, note_id?}) → {note_id}
+ *     (idempotent iff note_id is pre-specified per §8.1; otherwise mints a new id)
+ *   - read_memory_note({id}) → {id, note, tags, importance, created_at, graph_edges}
+ *     (MemoryNotFound on unknown id)
  *   - consolidate_memories({consolidation_threshold}) → {consolidated_count, pending_count}
  *   - delete_memory_note({id, reason}) → {deleted, tombstone_id, deleted_at}
  *     (idempotent on id per §8.1 line 566; tombstoned ids NEVER reappear
@@ -48,14 +52,51 @@ export interface SearchMemoriesResponse {
   notes: NoteHit[];
 }
 
-export interface WriteMemoryRequest {
+export interface AddMemoryNoteRequest {
   summary: string;
   data_class: "public" | "internal" | "confidential" | "personal";
   session_id: string;
 }
 
-export interface WriteMemoryResponse {
+export interface AddMemoryNoteResponse {
   note_id: string;
+}
+
+/** §8.1 search_memories_by_time — RFC 3339 range query. */
+export interface SearchMemoriesByTimeRequest {
+  start: string;
+  end: string;
+  limit?: number;
+}
+
+export interface TimeRangeHit {
+  id: string;
+  created_at: string;
+  tags: string[];
+}
+
+export interface SearchMemoriesByTimeResponse {
+  hits: TimeRangeHit[];
+  truncated: boolean;
+}
+
+/** §8.1 read_memory_note — fetch full body by id. */
+export interface ReadMemoryNoteRequest {
+  id: string;
+}
+
+export interface ReadMemoryNoteResponse {
+  id: string;
+  note: string;
+  tags: string[];
+  importance: number;
+  created_at: string;
+  graph_edges: string[];
+}
+
+export interface MemoryNotFoundResponse {
+  error: "MemoryNotFound";
+  id: string;
 }
 
 export interface ConsolidateMemoriesRequest {
@@ -112,7 +153,9 @@ export interface MemoryMockOptions {
 
 export type ToolName =
   | "search_memories"
-  | "write_memory"
+  | "search_memories_by_time"
+  | "add_memory_note"
+  | "read_memory_note"
   | "consolidate_memories"
   | "delete_memory_note";
 
@@ -127,7 +170,7 @@ export class MemoryMcpMock {
   private callCount = 0;
   /**
    * Session-written notes — distinct from the seed corpus. search_memories
-   * returns from the seed corpus only (deterministic scoring); write_memory
+   * returns from the seed corpus only (deterministic scoring); add_memory_note
    * accumulates here so subsequent consolidate_memories can act on them.
    */
   private readonly writtenNotes: Array<{
@@ -198,9 +241,24 @@ export class MemoryMcpMock {
     return { notes: scored.slice(0, limit) };
   }
 
-  async writeMemory(req: WriteMemoryRequest): Promise<WriteMemoryResponse | MockErrorResponse> {
+  async addMemoryNote(req: AddMemoryNoteRequest): Promise<AddMemoryNoteResponse | MockErrorResponse> {
     this.callCount++;
-    if (this.errorForTool === "write_memory") return { error: "mock-error" };
+    if (this.errorForTool === "add_memory_note") return { error: "mock-error" };
+    // §8.1: idempotent iff id is pre-specified; otherwise a new id is minted.
+    // Test-surface extension to the original WriteMemoryRequest shape —
+    // callers who omit note_id get the legacy mint-new behavior.
+    const reqWithId = req as AddMemoryNoteRequest & { note_id?: string };
+    if (typeof reqWithId.note_id === "string" && reqWithId.note_id.length > 0) {
+      const existing = this.writtenNotes.find((n) => n.note_id === reqWithId.note_id);
+      if (existing) return { note_id: existing.note_id };
+      this.writtenNotes.push({
+        note_id: reqWithId.note_id,
+        summary: req.summary,
+        data_class: req.data_class,
+        session_id: req.session_id,
+      });
+      return { note_id: reqWithId.note_id };
+    }
     const note_id = `mem_${randomBytes(6).toString("hex")}`;
     this.writtenNotes.push({
       note_id,
@@ -209,6 +267,88 @@ export class MemoryMcpMock {
       session_id: req.session_id
     });
     return { note_id };
+  }
+
+  /**
+   * §8.1 search_memories_by_time — RFC 3339 window query over the seed
+   * corpus + any written notes that carry a time-convertible recency.
+   * Mock semantics: the seed corpus's `recency_days_ago` is converted to
+   * a synthetic `created_at` relative to a fixed epoch so the time-range
+   * filter is deterministic across platforms. Written notes all bear
+   * "now" as their created_at (mock is single-process; time advances
+   * between writes monotonically).
+   */
+  async searchMemoriesByTime(
+    req: SearchMemoriesByTimeRequest,
+  ): Promise<SearchMemoriesByTimeResponse | MockErrorResponse> {
+    this.callCount++;
+    if (this.errorForTool === "search_memories_by_time") return { error: "mock-error" };
+    const startMs = Date.parse(req.start);
+    const endMs = Date.parse(req.end);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return { error: "mock-error" };
+    }
+    const limit = req.limit && req.limit > 0 ? Math.min(req.limit, 100) : 50;
+
+    const EPOCH = new Date("2026-01-01T00:00:00Z").getTime();
+    const hits: TimeRangeHit[] = [];
+    for (const entry of this.corpus) {
+      if (this.tombstones.has(entry.note_id)) continue;
+      const createdMs = EPOCH - entry.recency_days_ago * 86400_000;
+      if (createdMs >= startMs && createdMs <= endMs) {
+        hits.push({
+          id: entry.note_id,
+          created_at: new Date(createdMs).toISOString(),
+          tags: [],
+        });
+      }
+    }
+    hits.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const truncated = hits.length > limit;
+    return { hits: hits.slice(0, limit), truncated };
+  }
+
+  /**
+   * §8.1 read_memory_note — fetch the full note body + metadata by id.
+   * Unknown id → MemoryNotFound per §8.1. Corpus-sourced notes return
+   * synthetic metadata so the response is well-formed.
+   */
+  async readMemoryNote(
+    req: ReadMemoryNoteRequest,
+  ): Promise<ReadMemoryNoteResponse | MemoryNotFoundResponse | MockErrorResponse> {
+    this.callCount++;
+    if (this.errorForTool === "read_memory_note") return { error: "mock-error" };
+    if (typeof req.id !== "string" || req.id.length === 0) {
+      return { error: "MemoryNotFound", id: req.id ?? "" };
+    }
+
+    const corpusHit = this.corpus.find((n) => n.note_id === req.id);
+    if (corpusHit) {
+      const EPOCH = new Date("2026-01-01T00:00:00Z").getTime();
+      const createdMs = EPOCH - corpusHit.recency_days_ago * 86400_000;
+      return {
+        id: corpusHit.note_id,
+        note: corpusHit.summary,
+        tags: [],
+        importance: corpusHit.graph_strength,
+        created_at: new Date(createdMs).toISOString(),
+        graph_edges: [],
+      };
+    }
+
+    const writtenHit = this.writtenNotes.find((n) => n.note_id === req.id);
+    if (writtenHit) {
+      return {
+        id: writtenHit.note_id,
+        note: writtenHit.summary,
+        tags: [],
+        importance: 0,
+        created_at: new Date().toISOString(),
+        graph_edges: [],
+      };
+    }
+
+    return { error: "MemoryNotFound", id: req.id };
   }
 
   async consolidateMemories(
@@ -330,12 +470,17 @@ export function parseMockEnv(env: NodeJS.ProcessEnv): MemoryMockOptions {
   const errRaw = env["SOA_MEMORY_MCP_MOCK_RETURN_ERROR"];
   if (typeof errRaw === "string" && errRaw.length > 0) {
     if (
-      !["search_memories", "write_memory", "consolidate_memories", "delete_memory_note"].includes(
-        errRaw
-      )
+      ![
+        "search_memories",
+        "search_memories_by_time",
+        "add_memory_note",
+        "read_memory_note",
+        "consolidate_memories",
+        "delete_memory_note",
+      ].includes(errRaw)
     ) {
       throw new Error(
-        `SOA_MEMORY_MCP_MOCK_RETURN_ERROR must name a tool (search_memories | write_memory | consolidate_memories | delete_memory_note), got "${errRaw}"`
+        `SOA_MEMORY_MCP_MOCK_RETURN_ERROR must name a tool (search_memories | search_memories_by_time | add_memory_note | read_memory_note | consolidate_memories | delete_memory_note), got "${errRaw}"`
       );
     }
     opts.errorForTool = errRaw;
