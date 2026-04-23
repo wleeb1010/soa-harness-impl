@@ -113,6 +113,22 @@ importers:
         specifier: ^3.0.0
         version: 3.8.1
 
+  packages/memory-mcp-zep:
+    dependencies:
+      '@getzep/zep-js':
+        specifier: ^0.10.0
+        version: 0.10.0
+      fastify:
+        specifier: ^5.0.0
+        version: 5.8.5
+    devDependencies:
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.18.0)
+
   packages/runner:
     dependencies:
       '@peculiar/x509':
@@ -427,6 +443,10 @@ packages:
 
   '@fastify/proxy-addr@5.1.0':
     resolution: {integrity: sha512-INS+6gh91cLUjB+PVHfu1UqcB76Sqtpyp7bnL+FYojhjygvOPA9ctiD/JDKsyD9Xgu4hUhCSJBPig/w7duNajw==}
+
+  '@getzep/zep-js@0.10.0':
+    resolution: {integrity: sha512-NhgmTC22oAMBwXMTMBCc+hPow7lH6LzOHzkkEqw1nVPEj+5ecT2Z1IuS6zxLZPfBhyZD8yvnrN9yMIsQHUZCsA==}
+    engines: {node: '>=18.0.0'}
 
   '@google/genai@1.50.1':
     resolution: {integrity: sha512-YbkX7H9+1Pt8wOt7DDREy8XSoiL6fRDzZQRyaVBarFf8MR3zHGqVdvM4cLbDXqPhxqvegZShgfxb8kw9C7YhAQ==}
@@ -949,6 +969,10 @@ packages:
   '@supabase/supabase-js@2.104.1':
     resolution: {integrity: sha512-E0H/CtVmaGjiAy+ieZ5ZB/1EqxXcGdaFaAc23AE5zaYfz6NtCNDcmaEdoGPYMPFH5pE6drGG6e3ljPmkFoGVxQ==}
     engines: {node: '>=20.0.0'}
+
+  '@supercharge/promise-pool@3.3.0':
+    resolution: {integrity: sha512-qGzCltMN05ohRRQAXB8TPWt+0Coz9Va266gr9nYN1qc/f/EIaup3VRg7b59mtRaeKTRcxreF20l/udCM/gOqNg==}
+    engines: {node: '>=8'}
 
   '@types/better-sqlite3@7.6.13':
     resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
@@ -2926,6 +2950,12 @@ snapshots:
       '@fastify/forwarded': 3.0.1
       ipaddr.js: 2.3.0
 
+  '@getzep/zep-js@0.10.0':
+    dependencies:
+      '@supercharge/promise-pool': 3.3.0
+      semver: 7.7.4
+      typescript: 5.9.3
+
   '@google/genai@1.50.1':
     dependencies:
       google-auth-library: 10.6.2
@@ -3408,6 +3438,8 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  '@supercharge/promise-pool@3.3.0': {}
 
   '@types/better-sqlite3@7.6.13':
     dependencies:

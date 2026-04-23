@@ -17,6 +17,7 @@
 | Phase 1 — sqlite backend | ✅ PASS | `packages/memory-mcp-sqlite@1.0.0-rc.0` — 21/21 package tests, validator live sweep 93/0/0 pre-L-58 (cc5cded) |
 | Phase 0e — L-58 errata + SV-MEM-08 flip | ✅ PASS | spec pin 45bd9df; `add_memory_note` response gains `created_at`; validator live sweep **94/0/69** — SV-MEM-08 flips skip → pass against sqlite |
 | Phase 2 — mem0 backend | ✅ PASS | `packages/memory-mcp-mem0@1.0.0-rc.0` — 18/18 package tests, validator live sweep **94/0/69** against mem0+Qdrant+Ollama; sensitive-personal pre-filter lands per L-58 |
+| Phase 3 — Zep backend | ✅ PASS | `packages/memory-mcp-zep@1.0.0-rc.0` — 18/18 package tests, validator live sweep **94/0/69** against Zep v0.27.2+Postgres+NLP; Gate 4 SDK workarounds preserved; sensitive-personal pre-filter lands |
 
 ## Gate 6 detail
 
@@ -288,6 +289,75 @@ default. `docker-compose.yml` brings up Qdrant + the mem0 shim;
 Ollama is expected on host (or uncomment the optional sidecar).
 
 **Holding for explicit publish go** per session convention.
+
+## Phase 3 detail — Zep backend
+
+Package: `@soa-harness/memory-mcp-zep@1.0.0-rc.0` at
+`packages/memory-mcp-zep/`. Promotes the Gate 4 feasibility shim (281
+logic LOC at `scratch/phase-0c-4-zep/`) into a production-shape package
+mirroring Phase 1+2 byte-for-byte.
+
+**Stack:** `@getzep/zep-js@^0.10.0` + `fastify@^5.0.0`; Zep v0.27.2
+server from `ghcr.io/getzep/zep:latest` (Apache-2.0 image label) +
+pgvector Postgres + Zep NLP server (bundled MiniLM embeddings, 384-dim).
+Summarizer/entity/message-embedding extractors disabled in `config.yaml`
+so the Zep server boots without an OpenAI key.
+
+**Architecture:** `ZepBackend` takes an injected `ZepLikeCollection`.
+Unit tests inject a ~60-LOC in-memory fake; production wiring goes
+through `zep-client-factory.ts`, which also carries the Gate 4 SDK
+workarounds (uses `getDocuments([uuid])` under the hood since
+`getDocument(uuid)` is broken against current server; ensures the
+alphanum-only collection exists).
+
+**L-58 additions over Gate 4 shim:**
+- Sensitive-personal pre-filter on `add_memory_note` — rejected before
+  any bytes reach Zep (§10.7.2 + §8.1 canonical errata). Unit test
+  verifies fake collection stays empty on rejection.
+- `add_memory_note` returns `{note_id, created_at}`; idempotent repeat
+  returns original `created_at`.
+- Optional `tags[]` + `importance` persisted; `read_memory_note`
+  surfaces them.
+- Fault-injection env triad: `SOA_MEMORY_MCP_ZEP_TIMEOUT_AFTER_N_CALLS`,
+  `SOA_MEMORY_MCP_ZEP_RETURN_ERROR`, `SOA_MEMORY_MCP_ZEP_SEED`.
+- `SOA_MEMORY_MCP_ZEP_COLLECTION` env-parser enforces alphanum-only
+  (Zep rejects underscores in collection names).
+
+**Seed-priming fix (surfaced during Phase 3 live sweep):** the Gate 4
+shim primed only an in-process `records` map, which passed ajv but
+left Zep empty for `search_memories`. Runner's session-bootstrap
+expects `/memory/state.in_context_notes` non-empty, so SV-MEM-01/02
+initially failed. Fixed by making `primeSeed()` also `addDocuments()`
+the seed into the Zep collection; the post-fix sweep is green.
+
+**Tests: 18/18 green**
+- `test/zep-backend.test.ts` — 17 tests.
+- `test/conformance.test.ts` — 1 test covering all §8.1 response
+  shapes + MemoryDeletionForbidden branch. 100% ajv pass.
+
+**Validator live sweep** (`--memory-backend=zep` with full Zep stack
+up; Runner pointed at `:8007`):
+
+`total=163 pass=94 fail=0 skip=69 error=0` — **identical to sqlite + mem0**.
+
+All three published backends pass the same six SV-MEM live probes:
+SV-MEM-01, 02, 07, 08, STATE-01, STATE-02.
+
+**Tarball audit (`pnpm pack`):** dist/ + LICENSE + README.md +
+package.json. No test/, node_modules/, scratch/, secrets, or
+`workspace:*` refs.
+
+**Licensing:** 49 production deps across the Zep-js tree — 41 MIT,
+3 BSD-3-Clause, 3 ISC, 2 Apache-2.0. **Zero forbidden licenses**.
+Much leaner than mem0 (313 deps) because `@getzep/zep-js` has few
+transitive deps.
+
+**Docker:** multi-stage `node:20-alpine` image; `docker-compose.yml`
+brings up the full stack (Postgres + NLP + Zep + the MCP shim).
+
+**Holding for explicit publish go.** After this ships, all three
+reference backends (sqlite, mem0, Zep) are live on npm — M5 Phase 4+
+(conformance aggregation + scaffold pivot + rc.2 tags) unblocked.
 
 ## Gate 5 — still deferred to a hands-on environment
 

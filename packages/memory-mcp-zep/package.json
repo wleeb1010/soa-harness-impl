@@ -1,0 +1,49 @@
+{
+  "name": "@soa-harness/memory-mcp-zep",
+  "version": "1.0.0-rc.0",
+  "description": "Zep-backed Memory MCP implementing the SOA-Harness §8.1 6-tool protocol. Maps Zep's Document Collection API to the canonical hit shape; ≤300-LOC shim per Gate 4 constraint.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "soa-memory-mcp-zep": "./dist/bin/start-zep.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "start": "node dist/bin/start-zep.js"
+  },
+  "dependencies": {
+    "@getzep/zep-js": "^0.10.0",
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wleeb1010/soa-harness-impl.git",
+    "directory": "packages/memory-mcp-zep"
+  },
+  "keywords": [
+    "soa-harness",
+    "memory-mcp",
+    "zep"
+  ]
+}
