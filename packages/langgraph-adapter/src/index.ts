@@ -34,6 +34,11 @@ export type {
   AuditAppendResponse,
   RetentionClass,
 } from "./audit-sink.js";
+export { buildAdapterCard } from "./agent-card.js";
+export type { AdapterNotes, BuildAdapterCardOptions } from "./agent-card.js";
+export { createLangGraphAdapter } from "./compose.js";
+export type { LangGraphAdapterOptions, LangGraphAdapter } from "./compose.js";
+export type { ToolNodeTool } from "./compliance-wrapper.js";
 
 /** Adapter version shipped with this module — matches package.json. */
 export const ADAPTER_VERSION = "1.0.0-rc.0";
