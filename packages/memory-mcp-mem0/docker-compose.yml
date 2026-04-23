@@ -1,0 +1,77 @@
+# `@soa-harness/memory-mcp-mem0` local-stack compose.
+# Brings up Qdrant (required) + the mem0-backed MCP on :8006. Ollama is
+# expected on the host at :11434 (reached via host.docker.internal); if
+# you'd rather run Ollama in Docker too, uncomment the `ollama` service.
+# Neo4j is optional — only needed if you enable mem0's graph-store
+# extension.
+#
+# Quick start:
+#   docker compose up -d
+#   ollama pull llama3.1
+#   ollama pull nomic-embed-text
+#   curl http://localhost:8006/health
+#
+# Tear down:
+#   docker compose down -v
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: soa-mem0-qdrant
+    restart: on-failure
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:6333/ | grep -q qdrant"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mem0:
+    build: .
+    image: soa-harness/memory-mcp-mem0:local
+    container_name: soa-mem0
+    restart: on-failure
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "8006:8006"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8006
+      - SOA_MEMORY_MCP_MEM0_PROVIDER=${SOA_MEMORY_MCP_MEM0_PROVIDER:-ollama}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - QDRANT_URL=http://qdrant:6333
+      - SOA_MEMORY_MCP_MEM0_COLLECTION=${SOA_MEMORY_MCP_MEM0_COLLECTION:-soa_mem0_notes}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Optional: uncomment to run Ollama as a sidecar instead of on host.
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: soa-mem0-ollama
+  #   restart: on-failure
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+
+  # Optional: uncomment to enable mem0's Neo4j graph store.
+  # neo4j:
+  #   image: neo4j:5
+  #   container_name: soa-mem0-neo4j
+  #   restart: on-failure
+  #   ports:
+  #     - "7474:7474"
+  #     - "7687:7687"
+  #   environment:
+  #     - NEO4J_AUTH=neo4j/mem0-local-only
+
+volumes:
+  qdrant-data:
+  # ollama-data:

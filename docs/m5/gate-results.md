@@ -16,6 +16,7 @@
 | Gate 6 — license audit baseline | ✅ PASS | `docs/m5/license-audit-current.txt`; zero forbidden licenses across 6 dep trees |
 | Phase 1 — sqlite backend | ✅ PASS | `packages/memory-mcp-sqlite@1.0.0-rc.0` — 21/21 package tests, validator live sweep 93/0/0 pre-L-58 (cc5cded) |
 | Phase 0e — L-58 errata + SV-MEM-08 flip | ✅ PASS | spec pin 45bd9df; `add_memory_note` response gains `created_at`; validator live sweep **94/0/69** — SV-MEM-08 flips skip → pass against sqlite |
+| Phase 2 — mem0 backend | ✅ PASS | `packages/memory-mcp-mem0@1.0.0-rc.0` — 18/18 package tests, validator live sweep **94/0/69** against mem0+Qdrant+Ollama; sensitive-personal pre-filter lands per L-58 |
 
 ## Gate 6 detail
 
@@ -215,6 +216,78 @@ runner tests remain green after the change.
 - `Dockerfile`: multi-stage build, `node:20-alpine`, runs as non-root
   on loopback by default, healthcheck on `/health`, bind-mountable
   `/data` volume for persistent sqlite.
+
+## Phase 2 detail — mem0 backend
+
+Package: `@soa-harness/memory-mcp-mem0@1.0.0-rc.0` at
+`packages/memory-mcp-mem0/`. Promotes the Gate 3 feasibility shim
+(202 LOC at `scratch/phase-0c-3-mem0/`) into a production-shape
+package mirroring Phase 1 sqlite byte-for-byte.
+
+**Stack:** `mem0ai@^2.4.0` + `fastify@^5.0.0`; Qdrant vector store
+(external service, default `:6333`); Ollama or OpenAI for LLM +
+embedder. Zero build-system native-module concerns — `mem0ai` is
+pure JS; `better-sqlite3` doesn't apply here.
+
+**Architecture note:** `Mem0Backend` takes an injected `Mem0LikeClient`
+so unit tests can mock without running Qdrant + Ollama. Production
+wiring goes through `createMem0Client()` which builds a real `Memory`
+instance with the operator-chosen provider. `mem0-client-factory.ts`
+keeps the SDK-specific config surface out of the core class.
+
+**L-58 additions over Gate 3 shim:**
+- **Sensitive-personal pre-filter** (§10.7.2 + §8.1 canonical errata):
+  `data_class="sensitive-personal"` → `{error:"MemoryDeletionForbidden",
+  reason:"sensitive-class-forbidden"}` before any bytes reach the mem0
+  LLM extraction path. Unit test verifies the fake client stays at
+  size=0 after a rejected add.
+- `add_memory_note` returns `{note_id, created_at}` per L-58 flat
+  signature. Idempotent repeat returns the *original* `created_at`.
+- Optional `tags: string[]` + `importance: number` (default 0.5)
+  accepted on request and persisted to the internal note record +
+  mem0 metadata; `read_memory_note` surfaces them.
+- Fault-injection env triad: `SOA_MEMORY_MCP_MEM0_TIMEOUT_AFTER_N_CALLS`,
+  `SOA_MEMORY_MCP_MEM0_RETURN_ERROR`, `SOA_MEMORY_MCP_MEM0_SEED`.
+  Mirrors sqlite + mock precedent.
+
+**Tests: 18/18 green**
+- `test/mem0-backend.test.ts` — 17 tests with a 70-LOC in-memory fake
+  mem0 client. Covers CRUD, tombstone idempotency, created_at
+  stability, sensitive-personal pre-filter, empty-query short-circuit,
+  fault-injection, HTTP transport.
+- `test/conformance.test.ts` — 1 test driving every §8.1 response
+  shape (plus the `MemoryDeletionForbidden` branch) through the HTTP
+  surface with ajv. 100% pass.
+
+**Validator live sweep** (`--memory-backend=mem0` with Qdrant on :6333
++ Ollama local llama3.1/nomic-embed-text on :11434, Runner pointed at
+`:8006`):
+
+`total=163 pass=94 fail=0 skip=69 error=0` — **identical to Phase 0e
+sqlite**. Six SV-MEM probes pass live against the mem0 backend:
+
+| Test | Phase 0e sqlite | **Phase 2 mem0** |
+|---|---|---|
+| SV-MEM-01 | pass (live) | **pass (live)** |
+| SV-MEM-02 | pass (live) | **pass (live)** |
+| SV-MEM-07 | pass (live) | **pass (live)** |
+| SV-MEM-08 | pass (live) | **pass (live)** |
+| SV-MEM-STATE-01 | pass (live) | **pass (live)** |
+| SV-MEM-STATE-02 | pass (live) | **pass (live)** |
+| SV-MEM-03..06 | skip (subprocess-only) | skip (unchanged) |
+| HR-17 | skip (§8.7.7 pending) | skip (unchanged) |
+
+**Tarball audit (`pnpm pack`):** dist/ + LICENSE + README.md +
+package.json. No `test/`, no `node_modules/`, no `scratch/`, no
+secrets, no `workspace:*` refs in the published manifest. Deps are
+`fastify@^5.0.0` + `mem0ai@^2.4.0` (real version ranges, not
+workspace).
+
+**Docker:** multi-stage `node:20-alpine` image, non-root, loopback
+default. `docker-compose.yml` brings up Qdrant + the mem0 shim;
+Ollama is expected on host (or uncomment the optional sidecar).
+
+**Holding for explicit publish go** per session convention.
 
 ## Gate 5 — still deferred to a hands-on environment
 

@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.0/backend-conformance-report.schema.json",
+  "title": "Memory MCP Backend Conformance Report",
+  "description": "Aggregates SV-MEM-01..08 + HR-17 conformance results across multiple Memory MCP backend implementations. Emitted by soa-validate after running --memory-backend=<name> against each backend in turn. Consumed by release-gate scripts per §8.7.5 to determine v1.0.x ship readiness (M5 addition, L-56).",
+  "type": "object",
+  "required": ["report_version", "spec_commit", "generated_at", "backends", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "report_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "Report schema version. Increments on breaking schema changes."
+    },
+    "spec_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "soa-harness-specification git commit SHA against which tests ran. Matches soa-validate.lock MANIFEST pin."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp. Byte-identity across re-runs excludes this field."
+    },
+    "backends": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "version", "host_framework", "cells"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^@soa-harness/memory-mcp-[a-z0-9-]+$",
+            "description": "npm package name. Scoped under @soa-harness."
+          },
+          "version": {
+            "type": "string",
+            "description": "npm version string (e.g., '1.0.0-rc.0')."
+          },
+          "host_framework": {
+            "type": "string",
+            "enum": ["sqlite", "mem0", "zep", "custom"],
+            "description": "Underlying storage layer identifier. 'custom' for adopter-authored backends not in the reference set."
+          },
+          "endpoint_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "OPTIONAL. The URL the validator drove tests against during this report run."
+          },
+          "cells": {
+            "type": "array",
+            "minItems": 9,
+            "description": "One cell per SV-MEM-0N + HR-17 test. Minimum 9 cells (SV-MEM-01..08 + HR-17). Additional cells permitted for future Memory-related test IDs.",
+            "items": {
+              "type": "object",
+              "required": ["test_id", "status"],
+              "additionalProperties": false,
+              "properties": {
+                "test_id": {
+                  "type": "string",
+                  "pattern": "^(SV-MEM-\\d{2}|HR-\\d{2})$",
+                  "description": "Test identifier matching the must-map tests key."
+                },
+                "status": {
+                  "type": "string",
+                  "enum": ["pass", "fail", "skip", "error", "waived"],
+                  "description": "Terminal outcome of the test against this backend. 'waived' requires waiver_reference."
+                },
+                "duration_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Wall-clock test runtime in milliseconds. OPTIONAL but strongly recommended for performance tracking across releases."
+                },
+                "error_message": {
+                  "type": "string",
+                  "maxLength": 4096,
+                  "description": "REQUIRED when status is fail or error. Truncated to 4096 chars. Contains the validator-emitted diagnostic including expected vs observed."
+                },
+                "waiver_reference": {
+                  "type": "string",
+                  "description": "REQUIRED when status is waived. Points to an L-entry (e.g., 'L-57' in IMPLEMENTATION_LESSONS.md) that documents why this backend doesn't pass this test and what the remediation commitment is (typically 'deferred to v1.0.x')."
+                }
+              },
+              "allOf": [
+                {
+                  "if": {"properties": {"status": {"enum": ["fail", "error"]}}},
+                  "then": {"required": ["error_message"]}
+                },
+                {
+                  "if": {"properties": {"status": {"const": "waived"}}},
+                  "then": {"required": ["waiver_reference"]}
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["all_green", "backends_tested", "tests_per_backend", "failing_count", "waiver_count"],
+      "additionalProperties": false,
+      "properties": {
+        "all_green": {
+          "type": "boolean",
+          "description": "True iff every cell across every backend has status in {pass, waived}. Release-gate scripts fail if this is false for a final release."
+        },
+        "backends_tested": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Count of backends represented in the backends[] array."
+        },
+        "tests_per_backend": {
+          "type": "integer",
+          "minimum": 9,
+          "description": "Count of cells per backend. All backends MUST have the same cell count (same test set)."
+        },
+        "failing_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total cells with status in {fail, error}. Waived cells do not count toward this."
+        },
+        "waiver_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total cells with status 'waived'. Each must have a valid waiver_reference."
+        }
+      }
+    }
+  }
+}

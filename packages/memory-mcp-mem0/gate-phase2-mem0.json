@@ -1,0 +1,3222 @@
+{
+  "tool": "soa-validate",
+  "version": "0.1.0-week1",
+  "profile": "core",
+  "impl_url": "http://127.0.0.1:7700",
+  "live_path_enabled": true,
+  "declared_adapter_mode": "",
+  "memory_backend": "mem0",
+  "total": 163,
+  "passed": 94,
+  "failed": 0,
+  "skipped": 69,
+  "errored": 0,
+  "results": [
+    {
+      "id": "SV-ENC-01",
+      "name": "UTF-8 no BOM",
+      "section": "§1",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0.8340865,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§1 UTF-8 no BOM: 135 spec text files scanned, zero BOM"
+        }
+      ]
+    },
+    {
+      "id": "SV-ENC-02",
+      "name": "RFC 3339 timestamps",
+      "section": "§1",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0.0015467,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§1 RFC 3339: /version generated_at=2026-04-23T17:14:57.208Z (explicit TZ, ≥ms precision)"
+        }
+      ]
+    },
+    {
+      "id": "SV-ENC-03",
+      "name": "ISO-8601 durations",
+      "section": "§1",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0.0056697,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§1 ISO-8601 durations: 5 tokens across spec (unique: 2, e.g. [P30D PT5M])"
+        }
+      ]
+    },
+    {
+      "id": "SV-ENC-04",
+      "name": "LF line separators",
+      "section": "§1",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 1.1163541,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§1 LF line separators: 75 git-tracked .json files at HEAD, zero CRLF in canonical bytes"
+        }
+      ]
+    },
+    {
+      "id": "SV-ENC-05",
+      "name": "JCS canonicalization",
+      "section": "§1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005048,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§1 JCS (RFC 8785): 47 cases round-tripped byte-identically across {floats=15, integers=9, nested=11, strings=12}"
+        }
+      ]
+    },
+    {
+      "id": "SV-ENC-06",
+      "name": "Clock-skew JWT",
+      "section": "§1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0199291,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§1 JWT clock-skew ±30s: 4 fixtures verified against handler-keypair + computed verdict matches spec — accept/iat-past-skew/iat-future-skew/exp-expired"
+        }
+      ]
+    },
+    {
+      "id": "SV-ENC-07",
+      "name": "Clock-skew PDA window",
+      "section": "§1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§1 PDA window: not_after - not_before = 4m25s ≤ 15min ceiling"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-07",
+      "name": "Normative references pinned",
+      "section": "§2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§2 normative refs: 11 entries, all pinned (RFC#, version tag, or digest marker present)"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-11",
+      "name": "Release-build verification gate",
+      "section": "§19.1.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0010501,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§19.1.1 release-gate: gate_version=1.0, 5/5 checks passed, signed_manifest_eligible=true"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIN-01",
+      "name": "Lean single-agent baseline",
+      "section": "§4",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§4 single-agent baseline: conformance card advertises single-agent (no multi-agent declarations, no waiver needed)"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIN-02",
+      "name": "Failure paths defined",
+      "section": "§4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.000596,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§16 Cross-Interaction Matrix covers 6 failure-path markers: [A2A handoff during self-improvement BudgetExhausted Compaction during streaming Agent Card changes mid-session OTel exporter failure HandoffBusy]"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIN-03",
+      "name": "Primitives unit-testable",
+      "section": "§4",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0015328,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§4 primitive coverage: all 13 core primitives (P1..P10, P12..P14) have ≥1 SV-* test in the must-map"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIN-04",
+      "name": "File-system grounded",
+      "section": "§4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§4 file-system-grounded: spec declares file-system as authoritative + DB-as-secondary-only rule"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIN-05",
+      "name": "Composition specified",
+      "section": "§4, §16",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0005056,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§4/§16 composition coverage: spec defines 2 key compositions (SI×handoff, compaction×streaming)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STACK-01",
+      "name": "Stack completeness",
+      "section": "§5.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0005907,
+      "message": "passed (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§5.1 stack completeness (vector): card declares all 7 required blocks (self_improvement, memory, permissions, compaction, tokenBudget, observability, security)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§5.1 stack completeness (live): card declares all 7 required blocks (self_improvement, memory, permissions, compaction, tokenBudget, observability, security)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STACK-02",
+      "name": "Primitive endpoints resolve",
+      "section": "§5.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.004558,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§5.2 primitive endpoints: 4/4 advertised + reachable [/.well-known/agent-card.json=200 /events/recent?session_id=ses_runnerBootLifetime\u0026limit=1=200 /budget/projection?session_id=ses_runnerBootLifetime=200 /health=200]"
+        }
+      ]
+    },
+    {
+      "id": "SV-BOOT-01",
+      "name": "SDK-pinned bootstrap",
+      "section": "§5.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0014475,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per plan"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "/health + /ready respond (positive arm). V-12 negative arms (expired / channel-mismatch / mismatched-publisher-kid → HostHardeningInsufficient) skipped: SOA_IMPL_BIN unset. Set SOA_IMPL_BIN='node /abs/path/to/start-runner.js' to fire them."
+        }
+      ]
+    },
+    {
+      "id": "SV-BOOT-02",
+      "name": "Operator-bundled bootstrap",
+      "section": "§5.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-BOOT-02: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-BOOT-03",
+      "name": "DNSSEC TXT bootstrap",
+      "section": "§5.3 + §5.3.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-BOOT-03: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-BOOT-04",
+      "name": "Bootstrap key rotation + compromise",
+      "section": "§5.3.1 + §5.3.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-BOOT-04: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-BOOT-05",
+      "name": "Anchor disagreement / split-brain",
+      "section": "§5.3.2 + §5.3.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-BOOT-05: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-BOOT-06",
+      "name": "initial-trust.json schema conformance",
+      "section": "§5.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0030724,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§5.3 initial-trust schema: valid.json validates (publisher_kid=soa-test-release-v1.0, spki_sha256 matches 64-hex) + channel-mismatch.json rejected + 4 inline schema negatives"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIV-01",
+      "name": "Data inventory present",
+      "section": "§10.7",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0005133,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§10.7 #1 data inventory: 4331-byte body declares §10.7 + data_class tagging + Retention category mapping"
+        }
+      ]
+    },
+    {
+      "id": "SV-OPS-01",
+      "name": "Liveness endpoint",
+      "section": "§5.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005123,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§5.4 /health: 200 {status:alive, soaHarnessVersion:1.0} in 512.3µs"
+        }
+      ]
+    },
+    {
+      "id": "SV-OPS-02",
+      "name": "Readiness endpoint",
+      "section": "§5.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§5.4 /ready: 200 {status:ready} — bootstrap resolved + tool pool consistent + CRL fresh"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-01",
+      "name": "HTTPS required",
+      "section": "§6.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0054187,
+      "message": "passed (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "schema OK + JCS idempotent (1617 canonical bytes)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "live card validates"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-02",
+      "name": "Content-Type enforced",
+      "section": "§6.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0005098,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "SV-CARD-02 is a live-path-only assertion (Content-Type on /.well-known/agent-card.json)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.1 Content-Type=application/json; charset=utf-8"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-03",
+      "name": "JWS signature verify",
+      "section": "§6.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0056064,
+      "message": "passed (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§6.1 vector JWS: alg=EdDSA typ=soa-agent-card+jws kid=soa-test-vector-v1.0 detached"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.1 live JWS verifies structurally: alg=EdDSA kid=soa-test-release-v1.0 sig=64B"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-04",
+      "name": "Trust anchor chain",
+      "section": "§6.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§6.1 chain shape (vector): 1 anchor(s); JWS kid=soa-test-vector-v1.0 (full cert-chain crypto verify is future work)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.1 chain shape (live): 2 anchor(s); JWS kid=soa-test-release-v1.0 + x5c[1] (full cert-chain crypto verify is future work)"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-05",
+      "name": "Schema validate",
+      "section": "§6.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0056431,
+      "message": "passed (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§6.2 vector card validates against agent-card.schema.json"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.2 live card validates against agent-card.schema.json"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-06",
+      "name": "soaHarnessVersion const",
+      "section": "§6.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005094,
+      "message": "passed (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§6.2 (vector) soaHarnessVersion=\"1.0\""
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.2 (live) soaHarnessVersion=\"1.0\""
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-07",
+      "name": "additionalProperties false",
+      "section": "§6.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0026271,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§6.2 additionalProperties:false enforced (mutated card with unknown top-level field rejected by schema)"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-08",
+      "name": "Cache-Control ≤ 300s",
+      "section": "§6.1",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "SV-CARD-08 is a live-path-only assertion (Cache-Control header on /.well-known/agent-card.json)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.1 Cache-Control max-age=300 ≤ 300"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-09",
+      "name": "Validation failure halt",
+      "section": "§6.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-CARD-09: SOA_IMPL_BIN unset; subprocess spawn required (boots impl with deliberately invalid card)"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-10",
+      "name": "Declared precedence",
+      "section": "§6.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-CARD-10: SOA_IMPL_BIN unset; subprocess spawn required (precedence-violation card boot)"
+        }
+      ]
+    },
+    {
+      "id": "SV-CARD-11",
+      "name": "ETag + If-None-Match",
+      "section": "§6.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0010274,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "SV-CARD-11 is a live-path-only assertion (ETag/304 caching)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.1 ETag=\"0043a2b0cd781cc409daafbc1c8b7d3f8bad7034abe06bec6e62e5f7a2fe6a2a\"; If-None-Match replay → 304 Not Modified"
+        }
+      ]
+    },
+    {
+      "id": "SV-SIGN-01",
+      "name": "Agent Card JWS profile",
+      "section": "§6.1.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005128,
+      "message": "passed (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "header OK (alg=EdDSA, kid=soa-test-vector-v1.0), detached, canonical card=1617 bytes; signature is pinned placeholder (crypto verify deferred)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "live jws structural check OK"
+        }
+      ]
+    },
+    {
+      "id": "SV-SIGN-02",
+      "name": "program.md JWS profile",
+      "section": "§6.1.1",
+      "profile": "core+si",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0050946,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§9.2 program.md JWS: alg=EdDSA typ=soa-program+jws kid=soa-conformance-test-handler-v1.0 detached; Ed25519 signature verifies against handler-keypair (794-byte program + 1168-byte signing input)"
+        }
+      ]
+    },
+    {
+      "id": "SV-SIGN-03",
+      "name": "MANIFEST JWS profile",
+      "section": "§6.1.1, §9.7.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0046038,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§6.1.1 + §9.7.1 MANIFEST JWS: alg=EdDSA typ=soa-manifest+jws kid=soa-release-v1.0 detached sig=64B"
+        }
+      ]
+    },
+    {
+      "id": "SV-SIGN-04",
+      "name": "x5c chain depth and ordering",
+      "section": "§6.1.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "vector pinned JWS lacks x5c — pre-1.0 fixture predates §6.1.1 x5c requirement (live path is authoritative)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.1.1 x5c (live): 1 cert(s) leaf-first, all base64-decode to ≥100B blobs"
+        }
+      ]
+    },
+    {
+      "id": "SV-SIGN-05",
+      "name": "program.md two-step signer resolution",
+      "section": "§6.1.1",
+      "profile": "core+si",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0046501,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§6.1.1 two-step signer: x5t#S256=749f3fd468e5a7e7… (32B) → anchor publisher_kid=soa-conformance-test-handler-v1.0 → header.kid match → Ed25519 signature verified over program.md"
+        }
+      ]
+    },
+    {
+      "id": "SV-AGENTS-01",
+      "name": "Required H2 present",
+      "section": "§7.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-AGENTS-01: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-AGENTS-02",
+      "name": "H2 ordering",
+      "section": "§7.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-AGENTS-02: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-AGENTS-03",
+      "name": "Duplicate H2 rejected",
+      "section": "§7.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-AGENTS-03: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-AGENTS-04",
+      "name": "@import depth",
+      "section": "§7.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-AGENTS-04: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-AGENTS-05",
+      "name": "@import cycle",
+      "section": "§7.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-AGENTS-05: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-AGENTS-07",
+      "name": "No mid-turn reload",
+      "section": "§7.4",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-AGENTS-07: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-AGENTS-08",
+      "name": "AGENTS.md entrypoint matches Card",
+      "section": "§7.2, §6.2",
+      "profile": "core+si",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-AGENTS-08: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-REG-01",
+      "name": "list_tools metadata-only",
+      "section": "§11.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 1.434994,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §11 /tools/registered metadata assertion"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-REG-01: §11 /tools/registered metadata-only: every tool entry carries only spec-listed fields (observed 8 tools)"
+        }
+      ]
+    },
+    {
+      "id": "SV-REG-02",
+      "name": "MCP name pattern",
+      "section": "§11.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0012873,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §11 /tools/registered metadata assertion"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-REG-02: §11 MCP name pattern: all registered tools follow category__tool or mcp__category__tool shape (observed 8 tools)"
+        }
+      ]
+    },
+    {
+      "id": "SV-REG-03",
+      "name": "Pool pinned per session",
+      "section": "§11.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §11.3 subprocess with SOA_RUNNER_DYNAMIC_TOOL_REGISTRATION hook"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-REG-03: SOA_IMPL_BIN unset; cannot spawn subprocess with §11.3.1 dynamic-reg hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-REG-04",
+      "name": "Deny list from AGENTS.md",
+      "section": "§11.2 + §11.2.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §11.2 AGENTS.md deny-list via SOA_RUNNER_AGENTS_MD_PATH + pinned fixture"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-REG-04: SOA_IMPL_BIN unset; cannot spawn subprocess with §11.2.1 AGENTS.md hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-REG-05",
+      "name": "list_tools field shape",
+      "section": "§11.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.00113,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §11 /tools/registered metadata assertion"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-REG-05: §11 list_tools field shape: every tool carries {name, risk_class, default_control, registered_at, registration_source} (observed 8 tools)"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-01",
+      "name": "Version advertised",
+      "section": "§6.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§6.2 /version: soaHarnessVersion=\"1.0\" supported=[1.0] runner_version=\"1.0\" generated_at=2026-04-23T17:14:59.838Z"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-02",
+      "name": "Stability tiers",
+      "section": "§19.3",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0.0005126,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§19.3 stability tiers: 5791-byte body declares §19.3 + Stable + soaHarnessVersion field"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-03",
+      "name": "Migration guide on bump",
+      "section": "§19.4",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§19.4 migration guide: 1535-byte body references §19.4 + migration template"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-04",
+      "name": "Deprecation lifetime",
+      "section": "§19.5",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§19.5 deprecation lifetime: 5791-byte stability-tiers body declares deprecation policy ≥2-minor"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-05",
+      "name": "Errata URL reachable",
+      "section": "§19.2",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0.0005197,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§19.2 /errata/v1.0.json: spec_version=1.0, 4 errata entries (each with id+section)"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-06",
+      "name": "soa-validate pinned",
+      "section": "§18.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0077486,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§18.1 lock: spec_repo=https://github.com/wleeb1010/soa-harness-specification spec_commit_sha=45bd9df15227 manifest=d4ac163a857c…"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-08",
+      "name": "Version negotiation: empty intersection",
+      "section": "§19.4.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0008788,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§19.4.1 empty-intersection: 400 VersionNegotiationFailed runner=[1.0] caller=[2.5 3.0]"
+        }
+      ]
+    },
+    {
+      "id": "SV-GOV-09",
+      "name": "Version negotiation: highest-common selection",
+      "section": "§19.4.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 1.7519458,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§19.4.1 highest-common: caller=[0.9,1.0,2.5] runner=[1.0] → 201 session_id=ses_6d7b30794a7433e806622473 (1.0 selected as highest tuple)"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-01",
+      "name": "Tool signatures",
+      "section": "§8.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0015109,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.1 memory tool discoverability via subprocess impl + in-process memmock"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-MEM-01 (live-runner): §8.1 Memory MCP consumed by Runner at SOA_IMPL_URL — /memory/state.in_context_notes=1 after bootstrap (backend opaque; assertion is shape + non-emptiness)"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-02",
+      "name": "Loading algorithm",
+      "section": "§8.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0006582,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.2 deterministic slice across two rapid loads"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-MEM-02 (live-runner): §8.2 deterministic slice — two reads against Runner returned identical note_id ordering (1 notes): [mem_p2smoke0001]"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-03",
+      "name": "Startup fail-closed",
+      "section": "§8.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.3 MemoryUnavailableStartup readiness gate"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-MEM-03: SOA_IMPL_BIN unset; subprocess required to spawn impl with bad mcp_endpoint"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-04",
+      "name": "Mid-loop degrade",
+      "section": "§8.3 + §14.5.4",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.3 non-terminal MemoryDegraded observable via §14.5.4 System Event Log"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-MEM-04: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-05",
+      "name": "Consolidation trigger",
+      "section": "§8.4",
+      "profile": "core",
+      "severity": "minor",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.4.1 consolidation scheduler via RUNNER_CONSOLIDATION_{TICK,ELAPSED}_MS (Finding AC)"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-MEM-05: SOA_IMPL_BIN unset; subprocess required for scheduler env override"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-06",
+      "name": "Sharing policy enforced",
+      "section": "§8.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8 sharing_policy → search_memories sharing_scope propagation (L-39 card fixture)"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-MEM-06: SOA_IMPL_BIN unset; subprocess required to swap RUNNER_CARD_FIXTURE"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-07",
+      "name": "delete_memory_note idempotent",
+      "section": "§8.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0010612,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.1 delete_memory_note idempotency"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-MEM-07: §8.1 delete_memory_note idempotent — repeat call on note_id returned identical tombstone_id=tmb_mock_00000001 + deleted_at=2026-04-23T17:15:01.6037971Z per L-38 mock protocol"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-08",
+      "name": "Tombstone audit",
+      "section": "§8.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 1.8311267,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "pre-budgeted skip per M3 plan: cross-tenant isolation may need real Memory MCP beyond the fixture's scope"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-MEM-08 (live-backend): §8.1 (L-58) add → delete at SOA_MEMORY_MCP_ENDPOINT — tombstone {tombstone_id=tomb_bd26f01db7c8, deleted_at=2026-04-23T17:15:03.434Z} for seeded note_id=mem_6ab21778ce37"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-01",
+      "name": "Capability lattice",
+      "section": "§10.3, §10.3.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 1.6453749,
+      "message": "passed (vector,vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "nonce eq, prompt_id eq, schema OK, JCS=385 bytes, digest matches spec (7bc89069…), PDA typ=soa-pda+jws; PDA sig is placeholder (crypto verify deferred)"
+        },
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "pinned Tool Registry fixture (8 tools) + §10.3 oracle yield 24 enum-valid decision cells; oracle matches spec 24-cell matrix (asserted in permresolve unit tests)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "24 cells swept (all 3 activeModes × 8 tools); every decision matches §10.3 oracle; §10.5.2 not-a-side-effect MUST satisfied — audit this_hash=bac6686a5a776eec968f57b1eebf59222c03b97a156ff9654d046fa9cdfe1c27 unchanged across 24 queries"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-02",
+      "name": "Resolution precedence",
+      "section": "§10.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-02: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-03",
+      "name": "Autonomous escalation",
+      "section": "§10.4 + §10.4.1 + §10.4.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-03: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-04",
+      "name": "HITL == Interactive",
+      "section": "§10.4 + §10.4.1 + §10.4.2 + §19.6",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-04: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-05",
+      "name": "Audit chain prev_hash",
+      "section": "§10.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0978245,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§10.5 audit chain: 100 records verified — prev_hash continuity from GENESIS, no chain breaks"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-06",
+      "name": "WORM sink append-only",
+      "section": "§10.5 + §10.5.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-06: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-07",
+      "name": "WORM external timestamp",
+      "section": "§10.5 + §10.5.5",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-07: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-08",
+      "name": "Handler key rotation 90d",
+      "section": "§10.6 + §10.6.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-08: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-09",
+      "name": "CRL refresh hourly",
+      "section": "§10.6 + §10.6.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-09: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-10",
+      "name": "Rotation overlap ≥ 24h",
+      "section": "§10.6 + §10.6.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-10: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-11",
+      "name": "Key-type enforcement",
+      "section": "§10.6",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0056851,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§10.6 key-type enforcement: pinned PDA uses alg=\"EdDSA\" (allowed); full enrollment-time RS256/RSA\u003c3072 rejection needs a handler-enrollment surface (§10.6.1) not yet shipped — structural JWS-alg check covered by SV-PERM-22 live path"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-12",
+      "name": "kid uniqueness",
+      "section": "§10.6 + §10.6.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.00115,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§10.6.3 POST /handlers/enroll: fresh→201, duplicate→409 HandlerKidConflict, RS256→400 AlgorithmRejected"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-13",
+      "name": "HSM / keystore storage",
+      "section": "§10.6 + §10.6.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.000512,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§10.6.4 /security/key-storage: storage_mode=software-keystore private_keys_on_disk=false provider=\"windows-dpapi\""
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-14",
+      "name": "Runner CRL refresh SLA",
+      "section": "§10.6 + §10.6.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0011678,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§10.6.2 SV-PERM-14 (BE-ext): /logs/system/recent has crl-refresh-complete record — impl ships unconditional CRL poller, boot tick fires synchronously so row is visible at /ready=200"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-15",
+      "name": "SuspectDecision flagging",
+      "section": "§10.6 + §10.6.5",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PERM-15: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-16",
+      "name": "WORM retention tiers",
+      "section": "§10.5 + §10.5.6",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.2490619,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§10.6.6 retention_class: DFA row → dfa-365d, ReadOnly row → standard-90d"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-17",
+      "name": "Audit-reader access",
+      "section": "§10.5 + §10.5.7",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0014358,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§10.5.7 /audit/reader-tokens: operator mints reader bearer (scope=audit:read:*) → read OK → write 403 with scope-lacks marker"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-18",
+      "name": "CRL artifact schema",
+      "section": "§10.6.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005155,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§10.6.1 CRL schema: fresh.json validates against crl.schema.json (runtime stale→HandlerKeyRevoked path composes with SV-PERM-09 + Finding BE once handler-CRL extension ships)"
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-01",
+      "name": "Projection algorithm",
+      "section": "§13.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005145,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §13 /budget/projection invariant"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-BUD-01: §13 projection algorithm: safety_factor=1.15, cold_start_baseline_active=true, cumulative=0 at session-start"
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-02",
+      "name": "Pre-call halt",
+      "section": "§13.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §13.2 pre-call halt via low-budget card fixture (L-39)"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-BUD-02: SOA_IMPL_BIN unset; subprocess required to swap RUNNER_CARD_FIXTURE"
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-03",
+      "name": "Mid-stream cancel",
+      "section": "§13.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "deferred to M4 per must-map: M4 — cancellation on next ContentBlockDelta boundary requires real LLM streaming with delta-boundary arithmetic; beyond M3 impl scope (L-37 retag, same class as SV-STR-11).",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "M4-deferred: M4 — cancellation on next ContentBlockDelta boundary requires real LLM streaming with delta-boundary arithmetic; beyond M3 impl scope (L-37 retag, same class as SV-STR-11)."
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-04",
+      "name": "Cache accounting",
+      "section": "§13.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §13 cache_accounting via RUNNER_SYNTHETIC_CACHE_HIT hook (Finding AD)"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-BUD-04: SOA_IMPL_BIN unset; subprocess required to set RUNNER_SYNTHETIC_CACHE_HIT"
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-05",
+      "name": "Billing tag propagated",
+      "section": "§13.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.2942649,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §13 billing_tag on OTel + audit + events (Findings Q + AB)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-BUD-05: §13 billing_tag=\"conformance-test\" observed on all three §14.4/§10.5/§14.1.1 surfaces — OTel resource_attributes + /audit/records row + PermissionDecision StreamEvent per Findings Q + AB"
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-06",
+      "name": "StopReason closed enum",
+      "section": "§13.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.001238,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §13 /budget/projection invariant"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-BUD-06: §13 StopReason closed enum: /budget/projection.stop_reason_if_exhausted=\"BudgetExhausted\""
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-07",
+      "name": "BillingTagMismatch detected",
+      "section": "§13.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §24 BillingTagMismatch gate at POST /sessions"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-BUD-07: POST /sessions with billing_tag != card.tokenBudget.billingTag refused with 403 error=BillingTagMismatch per §24 + Finding R wiring"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-01",
+      "name": "StreamEvent schema",
+      "section": "§14.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.1552281,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14 §14.1 envelope validates + type ∈ 27-value closed enum (L-35 PreToolUseOutcome/PostToolUseOutcome included) observed via GET /events/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-01: §14.1 envelope validates + type ∈ 27-value closed enum (L-35 PreToolUseOutcome/PostToolUseOutcome included) (observed 3 events: SessionStart×1, PermissionDecision×2)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-02",
+      "name": "Sequence monotonic",
+      "section": "§14.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.1556896,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14 §14.1 sequence strictly-increasing per session_id observed via GET /events/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-02: §14.1 sequence strictly-increasing per session_id (observed 4 events: SessionStart×1, PermissionDecision×3)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-03",
+      "name": "event_id unique",
+      "section": "§14.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.1558349,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14 §14.1 event_id unique per session observed via GET /events/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-03: §14.1 event_id unique per session (observed 5 events: SessionStart×1, PermissionDecision×4)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-04",
+      "name": "CrashEvent final position",
+      "section": "§14.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "pre-budgeted skip per M3 plan: §14.3 SSE terminal-event semantics — /events/recent polling may not exercise terminal-event ordering"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-STR-04 pre-budgeted against M3 19-skip budget; /events/recent is polling-based, terminal-event ordering needs SSE (M4)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-05",
+      "name": "System Event Log categories",
+      "section": "§14.2",
+      "profile": "core",
+      "severity": "minor",
+      "status": "pass",
+      "seconds": 0.1558779,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14 §14.2 every record has category from closed list (unified with §14.1 27-value enum) observed via GET /events/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-05: §14.2 every record has category from closed list (unified with §14.1 27-value enum) (observed 6 events: PermissionDecision×5, SessionStart×1)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-06",
+      "name": "OTel span names",
+      "section": "§14.4 + §14.5.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.2566851,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14.5.2 /observability/otel-spans/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-06: §14.4 span names (soa.turn, soa.tool.\u003cname\u003e) + required attrs (observed 12 spans)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-07",
+      "name": "OTel required resource",
+      "section": "§14.4 + §14.5.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.2568959,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14.5.2 /observability/otel-spans/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-07: §14.4 observability.requiredResourceAttrs default set {service.name, soa.agent.name, soa.agent.version, soa.billing.tag} present on every span (observed 14 spans)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-08",
+      "name": "Exporter backpressure",
+      "section": "§14.4 + §14.5.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "pass",
+      "seconds": 0.0011647,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14.5.3 /observability/backpressure"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-08: §14.5.3 /observability/backpressure schema-valid; buffer_capacity=10000 (§14.4 const), buffer_size_current=0, dropped_since_boot=0"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-09",
+      "name": "Per-type payload schema",
+      "section": "§14.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.2106016,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14 §14.1.1 per-type payload validates against stream-event-payloads.schema.json oneOf dispatch observed via GET /events/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-09: §14.1.1 per-type payload validates against stream-event-payloads.schema.json oneOf dispatch (observed 9 events: SessionStart×1, PermissionDecision×8)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-10",
+      "name": "CrashEvent payload shape",
+      "section": "§14.1 + §14.5.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-STR-10: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-11",
+      "name": "CompactionDeferred",
+      "section": "§16.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "deferred to M4 per must-map: M4 — mid-ContentBlockDelta compaction trigger requires real LLM dispatcher streaming, beyond M3 impl scope (L-36 retag).",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "M4-deferred: M4 — mid-ContentBlockDelta compaction trigger requires real LLM dispatcher streaming, beyond M3 impl scope (L-36 retag)."
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-15",
+      "name": "Stream event mapping",
+      "section": "§14.1.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.2100361,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14 §14.1.1 stream-event-payloads.schema.json top-level oneOf dispatch + every emitted event validates observed via GET /events/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-STR-15: §14.1.1 stream-event-payloads.schema.json top-level oneOf dispatch + every emitted event validates (observed 10 events: SessionStart×1, PermissionDecision×9)"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-16",
+      "name": "Trust-class determinism",
+      "section": "§14.1.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "deferred to M4 per must-map: M4 — trust_class enforcement observation requires Gateway surface (§14.1.2 is a Runner-side static mapping; decision-and-render happens at Gateway, not Runner). L-36 retag.",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "M4-deferred: M4 — trust_class enforcement observation requires Gateway surface (§14.1.2 is a Runner-side static mapping; decision-and-render happens at Gateway, not Runner). L-36 retag."
+        }
+      ]
+    },
+    {
+      "id": "SV-HOOK-01",
+      "name": "stdin schema",
+      "section": "§15.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §15 hook lifecycle PreToolUse stdin schema conformance"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-HOOK-01: SOA_IMPL_BIN unset; cannot spawn subprocess with hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-HOOK-02",
+      "name": "Timeout PreToolUse",
+      "section": "§15.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §15 hook lifecycle PreToolUse 5s timeout → SIGKILL + Deny"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-HOOK-02: SOA_IMPL_BIN unset; cannot spawn subprocess with hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-HOOK-03",
+      "name": "Timeout PostToolUse",
+      "section": "§15.1",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §15 hook lifecycle PostToolUse 10s timeout → SIGKILL + log"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-HOOK-03: SOA_IMPL_BIN unset; cannot spawn subprocess with hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-HOOK-04",
+      "name": "Exit-code table",
+      "section": "§15.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §15 hook lifecycle exit-code table: 3 → Prompt (one arm)"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-HOOK-04: SOA_IMPL_BIN unset; cannot spawn subprocess with hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-HOOK-05",
+      "name": "replace_args honored",
+      "section": "§15.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §15 hook lifecycle PreToolUse replace_args observable via PreToolUseOutcome StreamEvent (§14.1 + §19.4)"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-HOOK-05: SOA_IMPL_BIN unset; cannot spawn subprocess with hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-HOOK-06",
+      "name": "replace_result honored",
+      "section": "§15.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §15 hook lifecycle PostToolUse replace_result observable via PostToolUseOutcome StreamEvent (§14.1 + §19.4)"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-HOOK-06: SOA_IMPL_BIN unset; cannot spawn subprocess with hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-HOOK-07",
+      "name": "Step-5 ordering",
+      "section": "§15.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §15 hook lifecycle §15 step-5 ordering: sequence monotonicity of PermissionDecision → PreToolUseOutcome → PostToolUseOutcome on 27-value §14.1 enum"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-HOOK-07: SOA_IMPL_BIN unset; cannot spawn subprocess with hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-HOOK-08",
+      "name": "No hook reentrancy",
+      "section": "§16.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §15 hook lifecycle §15 hook-reentrancy guard — Pre hook callbacks into /permissions/decisions MUST 403 hook-reentrancy + terminate session (SessionEnd.stop_reason=HookReentrancy) per Finding N"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-HOOK-08: SOA_IMPL_BIN unset; cannot spawn subprocess with hook"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-01",
+      "name": "Session schema",
+      "section": "§12.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.1048024,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5.1 response-shape assertion"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "GET /sessions/\u003cid\u003e/state: 200 + schema-valid per §12.5.1"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-02",
+      "name": "status enum closed",
+      "section": "§12.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5 session-format refusal is a boot-time assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-SESS-02: SOA_IMPL_BIN not set"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-03",
+      "name": "Event bracketing",
+      "section": "§12.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.1464184,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.2 bracket-persist is a runtime state-machine assertion"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-SESS-03: 10 decisions driven; /state tracked 10 unique side_effect(s) across 55 observation(s); phases always pending → {committed,compensated}; last_phase_transition_at monotonically non-decreasing per §12.2"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-04",
+      "name": "Idempotency key",
+      "section": "§12.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5 resume algorithm is a crash-path assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-SESS-04: SOA_IMPL_BIN not set"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-05",
+      "name": "Non-idempotent = Destructive",
+      "section": "§12.2",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.2 rule is a boot-time Tool Registry enforcement"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SOA_IMPL_BIN not set. Set SOA_IMPL_BIN='node /abs/path/to/start-runner.js' to exercise §12.2 tool-pool classification."
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-06",
+      "name": "POSIX atomic write",
+      "section": "§12.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.3 POSIX atomic-write is a crash-path assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-SESS-06 requires POSIX runtime; current=windows"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-07",
+      "name": "Windows atomic write",
+      "section": "§12.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.3 Windows atomic-write is a crash-path assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-SESS-07: SOA_IMPL_BIN not set; cannot spawn impl for kill-at-marker exercise"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-08",
+      "name": "Resume replays pending",
+      "section": "§12.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5 resume algorithm is a crash-path assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-SESS-08: SOA_IMPL_BIN not set"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-09",
+      "name": "Card-drift terminates",
+      "section": "§12.5",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5 card-drift terminates resume"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-SESS-09: SOA_IMPL_BIN not set"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-10",
+      "name": "Inflight compensation",
+      "section": "§12.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5 resume algorithm is a crash-path assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-SESS-10: SOA_IMPL_BIN not set"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIV-02",
+      "name": "data_class tagging + sensitive-class block",
+      "section": "§10.7",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0.0006558,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PRIV-02: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIV-03",
+      "name": "Subject delete + export tools",
+      "section": "§10.7.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PRIV-03: SOA_IMPL_BIN unset; subprocess spawn required (avoid polluting live :7700 audit chain with SubjectSuppression rows pending Finding AJ)"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIV-04",
+      "name": "Retention sweep",
+      "section": "§10.7.3",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PRIV-04: SOA_IMPL_BIN unset; subprocess spawn required"
+        }
+      ]
+    },
+    {
+      "id": "SV-PRIV-05",
+      "name": "Residency layered defence",
+      "section": "§10.7.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SV-PRIV-05: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-19",
+      "name": "Audit-sink three-state degradation",
+      "section": "§10.5.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §10.5.1 is a runtime state-machine assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SOA_IMPL_BIN not set. Set SOA_IMPL_BIN='node /abs/path/to/start-runner.js' to exercise §10.5.1 audit-sink state machine."
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-11",
+      "name": "Tool idempotency retention floor",
+      "section": "§12.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.2 rule is a boot-time Tool Registry enforcement"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SOA_IMPL_BIN not set. Set SOA_IMPL_BIN='node /abs/path/to/start-runner.js' to exercise §12.2 tool-pool classification."
+        }
+      ]
+    },
+    {
+      "id": "HR-01",
+      "name": "Destructive approval",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0035851,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "positive (valid.json accepted), semantic-reject (expired.json → bootstrap-expired), schema-reject (channel-mismatch.json rejected), plus 4 inline schema negatives"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "HR-01 live path needs impl cold-start restart hook"
+        }
+      ]
+    },
+    {
+      "id": "HR-02",
+      "name": "Budget exhaustion pre-call",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.002037,
+      "message": "passed (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "3 state-machine cases @ T_ref=2026-04-20T12:00:00Z (fresh=accept+no-refresh, stale=accept+refresh-queued, expired=fail-closed/crl-expired) + 4 inline schema negatives"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "/ready=200 — CRL cache in accept state (fresh or stale-but-valid); stale/expired transitions require orchestrated Runner restart with RUNNER_TEST_CLOCK"
+        }
+      ]
+    },
+    {
+      "id": "HR-04",
+      "name": "Crash recovery (pending tool)",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5 resume algorithm is a crash-path assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "HR-04: SOA_IMPL_BIN not set"
+        }
+      ]
+    },
+    {
+      "id": "HR-05",
+      "name": "Crash recovery (committed)",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5 resume algorithm is a crash-path assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "HR-05: SOA_IMPL_BIN not set"
+        }
+      ]
+    },
+    {
+      "id": "HR-07",
+      "name": "Agent-type enforcement",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "HR-07: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "HR-11",
+      "name": "Permission override tighten-only",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (live)",
+      "evidence": [
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "HR-11: SOA_IMPL_BIN unset"
+        }
+      ]
+    },
+    {
+      "id": "HR-12",
+      "name": "Card signature failure",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per spec §15.5 (subprocess-driven boot-time tamper detection)"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SOA_IMPL_BIN not set. To exercise HR-12 set SOA_IMPL_BIN='node /abs/path/to/start-runner.js' (and optionally SOA_IMPL_TEST_PORT to override default 7701)."
+        }
+      ]
+    },
+    {
+      "id": "HR-14",
+      "name": "Audit hash chain",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.2708736,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per spec §15.5"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "live chain of 2904 records verifies; tampered records[1452].prev_hash → VerifyChain flags break at exactly index 1452 per §15.5"
+        }
+      ]
+    },
+    {
+      "id": "HR-17",
+      "name": "Memory degradation",
+      "section": "§15.5",
+      "profile": "core",
+      "severity": "moderate",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.3.1 SessionEnd{stop_reason:MemoryDegraded} after 3 consecutive memory failures"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "HR-17: requires subprocess spawn (SOA_IMPL_BIN + memmock SOA_MEMORY_MCP_MOCK_TIMEOUT_AFTER_N_CALLS=0) OR §8.7.7 backend fault-injection surface; §8.7.7 deferred per 2026-04-23 impl-session Plan until Phase 2/3 reveals env-hook shape. Registered handler so JUnit output names HR-17 explicitly; flips when either driver lands."
+        }
+      ]
+    },
+    {
+      "id": "SV-AUDIT-TAIL-01",
+      "name": "Audit tail observability response",
+      "section": "§10.5.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0953345,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per spec §10.5.2 (endpoint-behavior assertion)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "state-adaptive: this_hash=e4ac13d7…, record_count=2904, last_record_timestamp present; two-read idempotence holds"
+        }
+      ]
+    },
+    {
+      "id": "SV-AUDIT-RECORDS-01",
+      "name": "Audit records observability response + pagination",
+      "section": "§10.5.3",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.2484995,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per spec §10.5.3"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "walked 30 pages (sizes=[100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100 4]); 2904 records total; schema-valid on every page; chain order (earliest→latest) holds"
+        }
+      ]
+    },
+    {
+      "id": "SV-AUDIT-RECORDS-02",
+      "name": "Audit chain integrity",
+      "section": "§10.5.3, §10.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.2599707,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per spec §10.5.3+§10.5"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§10.5 chain integrity holds across 2904 records: records[0].prev_hash=GENESIS; for all i\u003e0 records[i].prev_hash==records[i-1].this_hash"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-BOOT-01",
+      "name": "Session bootstrap response + tighten-only",
+      "section": "§12.6",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.6030319,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "no pinned vector for this test — POST /sessions is an endpoint-behavior assertion"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "6 sessions minted (3 caps × 2 decide-scope variants); all 201 bodies schema-valid; granted == requested; ids+bearers shape OK; round-trip: decide=true bearers authorize /permissions/decisions (201), decide=false bearers refused (403 insufficient-scope) — scope grant independent of capability"
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-BOOT-02",
+      "name": "Session bootstrap rejects looser-than-card request",
+      "section": "§12.6",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "pure impl-behavior assertion; no vector evidence"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "running Runner serves card with activeMode=DangerFullAccess (not ReadOnly). Path (a) needs SOA_IMPL_BIN set to spawn a second impl on a test port with RUNNER_CARD_PATH=\u003cspec\u003e/test-vectors/agent-card.json. Path (b) waits for Week 5b create-soa-agent ReadOnly deployment."
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-20",
+      "name": "Permission decision recording",
+      "section": "§10.3.2",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.2991393,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per spec §10.3.2"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "positive (T-03 minted bearer): decision=AutoAllow matches §10.3 oracle, schema-valid, +1 audit (2907→2908), audit_this_hash=ee2439a2… matches tail; negatives: insufficient-scope (no decide on bearer) → 403 + audit unchanged; session-bearer-mismatch (bearer-A, body-session-B) → 403 + audit unchanged. RUNNER_DEMO_SESSION dependency retired. pda-decision-mismatch variant still skipped (deployment lacks PDA verify wiring; see SV-PERM-22)."
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-21",
+      "name": "PDA verification happy path",
+      "section": "§10.3.2, §6.1.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.2563467,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per spec §10.3.2+§6.1.1"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "PDA happy-path: 201, decision=Prompt, handler_accepted=true, audit_record_id=aud_02e94d25ff44, audit_this_hash=b5d74956…, newest /audit/records signer_key_id=soa-conformance-test-handler-v1.0 (L-24 fixture)"
+        }
+      ]
+    },
+    {
+      "id": "SV-PERM-22",
+      "name": "PDA verification negative paths",
+      "section": "§10.3.2, §6.1.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.1055215,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only test per spec §10.3.2+§6.1.1"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "malformed-wire PDA → 400 reason=pda-malformed (L-26 enum); no audit record written. crypto-invalid-but-well-formed and decision-mismatch branches require constructing a well-formed-but-wrong-signed PDA — deferred (fixture/design TBD)."
+        }
+      ]
+    },
+    {
+      "id": "SV-SESS-STATE-01",
+      "name": "Session state observability response",
+      "section": "§12.5.1",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0997447,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §12.5.1 endpoint behavior"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "GET /sessions/\u003cid\u003e/state: 200 + schema OK + strip(generated_at) byte-identical across two reads per §12.5.1 + L-28 F-01"
+        }
+      ]
+    },
+    {
+      "id": "SV-AUDIT-SINK-EVENTS-01",
+      "name": "Audit-sink event channel (M2 minimum observability)",
+      "section": "§12.5.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "skipped (vector,live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §10.5.1 is a runtime state-machine assertion"
+        },
+        {
+          "path": "live",
+          "status": "skip",
+          "message": "SOA_IMPL_BIN not set. Set SOA_IMPL_BIN='node /abs/path/to/start-runner.js' to exercise §10.5.1 audit-sink state machine."
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-STATE-01",
+      "name": "Memory state observability",
+      "section": "§8.6",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0006997,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.3.2 /memory/state response shape"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "GET /memory/state: 200 + schema-valid per §8.3.2"
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-PROJ-01",
+      "name": "Budget projection observability",
+      "section": "§13.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005136,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §13.5 /budget/projection observability"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-BUD-PROJ-01: GET /budget/projection/\u003csid\u003e 200 + schema-valid per §13.5"
+        }
+      ]
+    },
+    {
+      "id": "SV-REG-OBS-01",
+      "name": "Tool Registry observability (dynamic registration)",
+      "section": "§11.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0006089,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §11.4 /tools/registered observability"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-REG-OBS-01: GET /tools/registered 200 + schema-valid per §11.4"
+        }
+      ]
+    },
+    {
+      "id": "SV-MEM-STATE-02",
+      "name": "Memory state not-a-side-effect invariant",
+      "section": "§8.6",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0009797,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §8.3.2 not-a-side-effect invariant (byte-identity excl generated_at)"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "§8.3.2 not-a-side-effect: strip(generated_at) byte-identical across two reads"
+        }
+      ]
+    },
+    {
+      "id": "SV-BUD-PROJ-02",
+      "name": "Budget projection not-a-side-effect invariant",
+      "section": "§13.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0010176,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §13.5 /budget/projection observability"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-BUD-PROJ-02: §13.5 not-a-side-effect — strip(generated_at) byte-identical across two reads"
+        }
+      ]
+    },
+    {
+      "id": "SV-REG-OBS-02",
+      "name": "Tool Registry not-a-side-effect invariant",
+      "section": "§11.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0012485,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §11.4 /tools/registered observability"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "SV-REG-OBS-02: §11.4 not-a-side-effect — strip(generated_at) byte-identical across two reads"
+        }
+      ]
+    },
+    {
+      "id": "SV-STR-OBS-01",
+      "name": "Minimum StreamEvent observability channel",
+      "section": "§14.5",
+      "profile": "core",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005127,
+      "message": "passed (live)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "live-only — §14 minimum observability via GET /events/recent"
+        },
+        {
+          "path": "live",
+          "status": "pass",
+          "message": "GET /events/recent: 200 + schema-valid per §14 minimum observability"
+        }
+      ]
+    },
+    {
+      "id": "HR-09",
+      "name": "SI marker escape",
+      "section": "§15.5",
+      "profile": "core+si",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0.0005093,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§9.3 SI marker escape: validator-local diff-validator accepts in-span edit + rejects out-of-span edit with SelfImprovementRejected"
+        }
+      ]
+    },
+    {
+      "id": "HR-10",
+      "name": "SI immutable task",
+      "section": "§15.5",
+      "profile": "core+si",
+      "severity": "critical",
+      "status": "pass",
+      "seconds": 0,
+      "message": "passed (vector)",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "pass",
+          "message": "§9.1 SI immutable task: validator-local diff-validator rejects tasks/* edits with ImmutableTargetEdit + accepts non-tasks in-span edits"
+        }
+      ]
+    },
+    {
+      "id": "SV-ADAPTER-01",
+      "name": "Adapter Card injection",
+      "section": "§18.5 + §18.5.1 + §18.5.4 + §18.5.5 + §6",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "deferred to M4 per must-map: M4 — LangGraph adapter package introduction (L-52). §18.5 and §14.6 added as v1.0.16 editorial addenda; validator gains --adapter flag per §18.5.5; impl ships packages/langgraph-adapter emitting the declared Agent Card.",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "M4-deferred: M4 — LangGraph adapter package introduction (L-52). §18.5 and §14.6 added as v1.0.16 editorial addenda; validator gains --adapter flag per §18.5.5; impl ships packages/langgraph-adapter emitting the declared Agent Card."
+        }
+      ]
+    },
+    {
+      "id": "SV-ADAPTER-02",
+      "name": "Pre-dispatch permission interception",
+      "section": "§18.5.2 + §10.3 + §14.1 + §14.1.1 + §15.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "deferred to M4 per must-map: M4 — LangGraph adapter package introduction (L-52). Exercises the hardest adapter correctness invariant; proves host-framework tool dispatch is wrapped pre-execution, not post-hoc.",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "M4-deferred: M4 — LangGraph adapter package introduction (L-52). Exercises the hardest adapter correctness invariant; proves host-framework tool dispatch is wrapped pre-execution, not post-hoc."
+        }
+      ]
+    },
+    {
+      "id": "SV-ADAPTER-03",
+      "name": "LangGraph event mapping",
+      "section": "§18.5.3 + §14.6 + §14.6.1 + §14.6.2 + §14.6.4",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "deferred to M4 per must-map: M4 — LangGraph adapter package introduction (L-52). Tests the 40→27 event-translation correctness that motivates §14.6; evaluator finding #2 (pre-drafted inventory) lands here.",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "M4-deferred: M4 — LangGraph adapter package introduction (L-52). Tests the 40→27 event-translation correctness that motivates §14.6; evaluator finding #2 (pre-drafted inventory) lands here."
+        }
+      ]
+    },
+    {
+      "id": "SV-ADAPTER-04",
+      "name": "Adapter audit forwarding",
+      "section": "§18.5.3 + §10.5 + §10.5.2 + §10.5.3 + §10.5.6",
+      "profile": "core",
+      "severity": "critical",
+      "status": "skip",
+      "seconds": 0,
+      "message": "deferred to M4 per must-map: M4 — LangGraph adapter package introduction (L-52). Ensures adapter's tool invocations flow through the Runner audit chain rather than a host-framework side-channel.",
+      "evidence": [
+        {
+          "path": "vector",
+          "status": "skip",
+          "message": "M4-deferred: M4 — LangGraph adapter package introduction (L-52). Ensures adapter's tool invocations flow through the Runner audit chain rather than a host-framework side-channel."
+        }
+      ]
+    }
+  ]
+}

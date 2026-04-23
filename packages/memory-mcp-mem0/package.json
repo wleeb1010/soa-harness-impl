@@ -1,0 +1,51 @@
+{
+  "name": "@soa-harness/memory-mcp-mem0",
+  "version": "1.0.0-rc.0",
+  "description": "mem0-backed Memory MCP implementing the SOA-Harness §8.1 6-tool protocol. Qdrant vector store + OpenAI or local Ollama LLM/embedder.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "soa-memory-mcp-mem0": "./dist/bin/start-mem0.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "start": "node dist/bin/start-mem0.js"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "mem0ai": "^2.4.0"
+  },
+  "devDependencies": {
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wleeb1010/soa-harness-impl.git",
+    "directory": "packages/memory-mcp-mem0"
+  },
+  "keywords": [
+    "soa-harness",
+    "memory-mcp",
+    "mem0",
+    "qdrant",
+    "ollama"
+  ]
+}
