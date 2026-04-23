@@ -20,21 +20,5 @@
         "publisher_kid": "soa-demo-publisher-v1.0"
       }
     ]
-  },
-  "memory": {
-    "enabled": true,
-    "mcp_endpoint": "http://127.0.0.1:8001",
-    "sharing_policy": "none",
-    "aging_rules": {
-      "consolidation_threshold": "P30D",
-      "max_in_context_tokens": 8000
-    },
-    "in_context_strategy": {
-      "weights": {
-        "semantic_relevance": 0.5,
-        "recency": 0.3,
-        "graph_strength": 0.2
-      }
-    }
   }
 }

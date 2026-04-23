@@ -1,0 +1,9 @@
+{
+  "soaHarnessVersion": "1.0",
+  "publisher_kid": "soa-demo-publisher-v1.0",
+  "spki_sha256": "__CLI_REPLACES_AT_INSTALL_________________________________________",
+  "issuer": "CN=SOA-Harness Demo Self-Signed, O=create-soa-agent, C=US",
+  "issued_at": "__CLI_REPLACES_AT_INSTALL__",
+  "not_after": "2099-12-31T23:59:59Z",
+  "channel": "sdk-pinned"
+}

@@ -1,0 +1,94 @@
+# `@soa-harness/memory-mcp-zep` local-stack compose.
+#
+# Brings up:
+#   - Zep Postgres (pgvector) on :5433
+#   - Zep NLP server (local MiniLM embeddings)
+#   - Zep v0.27.2 server (ghcr.io/getzep/zep:latest, Apache-2.0) on :8003
+#   - This package's shim on :8007
+#
+# Zep is not on Docker Hub — the container image comes from GitHub
+# Container Registry (ghcr.io/getzep/zep:latest). The summarizer +
+# entity + message-embedding extractors are disabled in config.yaml so
+# the stack boots without an OpenAI key; Document Collection embeddings
+# go through the bundled NLP server (MiniLM-class, 384-dim).
+#
+# Quick start:
+#   docker compose up -d
+#   curl http://localhost:8007/health
+#
+# Tear down:
+#   docker compose down -v
+
+services:
+  db:
+    image: ghcr.io/getzep/postgres:latest
+    container_name: soa-zep-postgres
+    restart: on-failure
+    shm_size: "128mb"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - zep-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "postgres", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nlp:
+    image: ghcr.io/getzep/zep-nlp-server:latest
+    container_name: soa-zep-nlp
+    restart: on-failure
+    healthcheck:
+      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/5557' || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  zep:
+    image: ghcr.io/getzep/zep:latest
+    container_name: soa-zep
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      nlp:
+        condition: service_healthy
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - ZEP_STORE_POSTGRES_DSN=postgres://postgres:postgres@db:5432/postgres?sslmode=disable
+      - ZEP_NLP_SERVER_URL=http://nlp:5557
+      - ZEP_LLM_SERVICE=openai
+      - ZEP_OPENAI_API_KEY=sk-not-used-summarizer-is-disabled
+    healthcheck:
+      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/8000' || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  mcp:
+    build: .
+    image: soa-harness/memory-mcp-zep:local
+    container_name: soa-zep-mcp
+    restart: on-failure
+    depends_on:
+      zep:
+        condition: service_healthy
+    ports:
+      - "8007:8007"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8007
+      - ZEP_URL=http://zep:8000
+      - SOA_MEMORY_MCP_ZEP_COLLECTION=${SOA_MEMORY_MCP_ZEP_COLLECTION:-soamemmcpzep}
+
+volumes:
+  zep-db:

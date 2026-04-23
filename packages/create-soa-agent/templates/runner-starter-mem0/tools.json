@@ -1,0 +1,25 @@
+{
+  "$schema": "https://soa-harness.org/schemas/v1.0/tool-registry.schema.json",
+  "description": "Minimal demo Tool Registry produced by create-soa-agent. Three tools spanning the ReadOnly auto-allow and Mutating-prompt lattice corners so validators and operators can exercise §10.3 against a non-trivial but small surface.",
+  "version": "1.0",
+  "tools": [
+    {
+      "name": "fs__read_file",
+      "risk_class": "ReadOnly",
+      "default_control": "AutoAllow",
+      "description": "Read a file from the project workspace."
+    },
+    {
+      "name": "fs__list_directory",
+      "risk_class": "ReadOnly",
+      "default_control": "AutoAllow",
+      "description": "List directory contents."
+    },
+    {
+      "name": "fs__write_file",
+      "risk_class": "Mutating",
+      "default_control": "Prompt",
+      "description": "Write a file — gated by Prompt under WorkspaceWrite+; denied under ReadOnly."
+    }
+  ]
+}

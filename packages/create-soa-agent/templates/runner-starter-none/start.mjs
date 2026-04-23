@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// Demo entrypoint produced by create-soa-agent. Boots an in-process
-// @soa-harness/memory-mcp-sqlite backend on :8001, then the Runner on
-// :7700 configured against that backend, bootstraps a session, POSTs
-// one permission decision to produce the first audit row, and stays up
-// until Ctrl-C.
+// Demo entrypoint produced by create-soa-agent. Imports the Runner from
+// @soa-harness/runner, starts it on :7700, bootstraps a session, POSTs one
+// permission decision to produce the first audit row, then keeps the server
+// running until Ctrl-C.
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,31 +17,13 @@ import {
   loadToolRegistry,
   AuditChain
 } from "@soa-harness/runner";
-import {
-  SqliteMemoryBackend,
-  buildSqliteServer
-} from "@soa-harness/memory-mcp-sqlite";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BOOTSTRAP_BEARER =
   process.env.SOA_RUNNER_BOOTSTRAP_BEARER ?? "demo-bootstrap-bearer-replace-me";
 const PORT = Number.parseInt(process.env.PORT ?? "7700", 10);
-const MEMORY_PORT = Number.parseInt(process.env.SOA_MEMORY_MCP_PORT ?? "8001", 10);
-const MEMORY_ENDPOINT =
-  process.env.SOA_MEMORY_MCP_ENDPOINT ?? `http://127.0.0.1:${MEMORY_PORT}`;
-
-async function startMemoryMcp() {
-  const backend = new SqliteMemoryBackend({
-    dbPath: process.env.SOA_MEMORY_MCP_SQLITE_DB ?? ":memory:"
-  });
-  const app = await buildSqliteServer({ backend });
-  await app.listen({ host: "127.0.0.1", port: MEMORY_PORT });
-  console.log(`[demo] memory-mcp-sqlite up at http://127.0.0.1:${MEMORY_PORT}`);
-  return { app, backend };
-}
 
 async function main() {
-  const memory = await startMemoryMcp();
   const trust = loadInitialTrust({ path: join(HERE, "initial-trust.json") });
   const card = JSON.parse(readFileSync(join(HERE, "agent-card.json"), "utf8"));
   const keys = await generateEd25519KeyPair();
@@ -65,7 +46,6 @@ async function main() {
   const boot = new BootOrchestrator({ anchors, crl });
   const sessionStore = new InMemorySessionStore();
 
-  process.env.SOA_RUNNER_MEMORY_MCP_ENDPOINT = MEMORY_ENDPOINT;
   const app = await startRunner({
     trust,
     card,
@@ -138,8 +118,6 @@ async function main() {
   const shutdown = async (sig) => {
     console.log(`[demo] received ${sig}; closing`);
     await app.close();
-    await memory.app.close();
-    memory.backend.close();
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));

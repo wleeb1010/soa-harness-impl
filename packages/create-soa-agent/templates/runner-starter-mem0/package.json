@@ -9,7 +9,6 @@
     "start": "node ./start.mjs"
   },
   "dependencies": {
-    "@soa-harness/runner": "^1.0.0-rc.0",
-    "@soa-harness/memory-mcp-sqlite": "^1.0.0-rc.0"
+    "@soa-harness/runner": "^1.0.0-rc.0"
   }
 }

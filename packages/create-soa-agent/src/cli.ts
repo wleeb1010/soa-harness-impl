@@ -11,7 +11,26 @@ cryptoProvider.set(webcrypto as unknown as Parameters<typeof cryptoProvider.set>
 type CryptoKeyPair = webcrypto.CryptoKeyPair;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const TEMPLATE_ROOT = join(HERE, "..", "templates", "runner-starter");
+const TEMPLATES_DIR = join(HERE, "..", "templates");
+
+export type MemoryBackendChoice = "sqlite" | "mem0" | "zep" | "none";
+const TEMPLATE_DIR_BY_MEMORY: Record<MemoryBackendChoice, string> = {
+  sqlite: "runner-starter",
+  mem0: "runner-starter-mem0",
+  zep: "runner-starter-zep",
+  none: "runner-starter-none"
+};
+const DEFAULT_MEMORY_BACKEND: MemoryBackendChoice = "sqlite";
+
+/** Legacy single-template export retained for tests; always resolves to
+ *  the sqlite-default `runner-starter/` directory. */
+const TEMPLATE_ROOT = join(TEMPLATES_DIR, TEMPLATE_DIR_BY_MEMORY[DEFAULT_MEMORY_BACKEND]);
+
+function resolveTemplateRoot(memory: MemoryBackendChoice): string {
+  const dir = TEMPLATE_DIR_BY_MEMORY[memory];
+  if (!dir) throw new Error(`create-soa-agent: unknown --memory=${memory}`);
+  return join(TEMPLATES_DIR, dir);
+}
 
 const PLACEHOLDER_SPKI = "__CLI_REPLACES_AT_INSTALL_________________________________________";
 const PLACEHOLDER_ISSUED = "__CLI_REPLACES_AT_INSTALL__";
@@ -32,6 +51,14 @@ interface ScaffoldOptions {
    * versioned-default path (E2(b)) ships after E3 npm publish.
    */
   link?: boolean;
+  /**
+   * Which Memory MCP backend the scaffolded demo should use. Default
+   * `sqlite` (Phase 5, L-58): the scaffold ships @soa-harness/memory-mcp-sqlite
+   * as a dependency and boots it in-process on :8001 at demo startup.
+   * Other values select template variants (mem0 + zep bring their own
+   * docker-compose; `none` preserves the M4 no-memory baseline).
+   */
+  memory?: MemoryBackendChoice;
   now?: Date;
 }
 
@@ -42,6 +69,8 @@ export interface ScaffoldResult {
   spkiSha256: string;
   /** True iff scaffold was placed under the monorepo's examples/ glob. */
   linked: boolean;
+  /** Which Memory MCP backend template was materialized. */
+  memory: MemoryBackendChoice;
 }
 
 /**
@@ -91,16 +120,18 @@ async function generateDemoCert(publisherKid: string): Promise<string> {
 
 export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
   const now = opts.now ?? new Date();
-  if (!existsSync(TEMPLATE_ROOT)) {
-    throw new Error(`create-soa-agent: templates directory not found at ${TEMPLATE_ROOT}`);
+  const memory = opts.memory ?? DEFAULT_MEMORY_BACKEND;
+  const templateRoot = resolveTemplateRoot(memory);
+  if (!existsSync(templateRoot)) {
+    throw new Error(`create-soa-agent: templates directory not found at ${templateRoot}`);
   }
   if (existsSync(opts.targetDir)) {
     throw new Error(`create-soa-agent: target ${opts.targetDir} already exists — refusing to overwrite`);
   }
   mkdirSync(opts.targetDir, { recursive: true });
 
-  // Copy the full template tree.
-  cpSync(TEMPLATE_ROOT, opts.targetDir, { recursive: true });
+  // Copy the selected template tree.
+  cpSync(templateRoot, opts.targetDir, { recursive: true });
 
   // Generate a self-signed Ed25519 cert for the demo SPKI.
   const publisherKid = "soa-demo-publisher-v1.0";
@@ -146,6 +177,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
     publisherKid,
     spkiSha256: spki,
     linked: opts.link ?? false,
+    memory
   };
 }
 
@@ -176,12 +208,16 @@ export function resolveTargetDir(args: {
   return join(monorepo, "examples", args.projectName);
 }
 
+const MEMORY_CHOICES: readonly MemoryBackendChoice[] = ["sqlite", "mem0", "zep", "none"] as const;
+
 function parseArgs(argv: readonly string[]):
-  | { name: string; demo: boolean; link: boolean }
-  | { help: true } {
+  | { name: string; demo: boolean; link: boolean; memory: MemoryBackendChoice }
+  | { help: true }
+  | { error: string } {
   let name: string | undefined;
   let demo = false;
   let link = false;
+  let memory: MemoryBackendChoice = DEFAULT_MEMORY_BACKEND;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--name") {
@@ -190,6 +226,18 @@ function parseArgs(argv: readonly string[]):
       demo = true;
     } else if (arg === "--link") {
       link = true;
+    } else if (arg === "--memory") {
+      const choice = argv[++i];
+      if (!choice || !MEMORY_CHOICES.includes(choice as MemoryBackendChoice)) {
+        return { error: `--memory must be one of ${MEMORY_CHOICES.join("|")}; got "${choice ?? "<missing>"}"` };
+      }
+      memory = choice as MemoryBackendChoice;
+    } else if (arg && arg.startsWith("--memory=")) {
+      const choice = arg.slice("--memory=".length);
+      if (!MEMORY_CHOICES.includes(choice as MemoryBackendChoice)) {
+        return { error: `--memory must be one of ${MEMORY_CHOICES.join("|")}; got "${choice}"` };
+      }
+      memory = choice as MemoryBackendChoice;
     } else if (arg === "--help" || arg === "-h") {
       return { help: true };
     } else if (arg === "demo" && !name) {
@@ -201,28 +249,34 @@ function parseArgs(argv: readonly string[]):
     }
   }
   if (!name) return { help: true };
-  return { name, demo, link };
+  return { name, demo, link, memory };
 }
 
 function printHelp(): void {
   console.log(
     [
-      "Usage: create-soa-agent <project-name> [--demo] [--link]",
+      "Usage: create-soa-agent <project-name> [--demo] [--link] [--memory=<sqlite|mem0|zep|none>]",
       "",
-      "  --name <name>    Project directory + package name (required).",
-      "  --demo           Shorthand for the demo scaffold (same default template in M1).",
-      "  --link           In-monorepo dev mode: scaffold under <repo>/examples/<name>/",
-      "                   so the workspace:* deps resolve via pnpm workspace linkage.",
-      "                   Requires invocation from inside the SOA-Harness monorepo.",
-      "  --help, -h       Show this message.",
+      "  --name <name>          Project directory + package name (required).",
+      "  --demo                 Shorthand for the demo scaffold.",
+      "  --link                 In-monorepo dev mode: scaffold under <repo>/examples/<name>/",
+      "                         so the workspace:* deps resolve via pnpm workspace linkage.",
+      "                         Requires invocation from inside the SOA-Harness monorepo.",
+      "  --memory <backend>     Memory MCP backend the demo boots against. Default: sqlite.",
+      "                         sqlite — in-process @soa-harness/memory-mcp-sqlite on :8001",
+      "                         mem0   — docker-compose Qdrant + mem0 shim (run memory:up first)",
+      "                         zep    — docker-compose Zep server (run memory:up first)",
+      "                         none   — M4 baseline, no memory wiring",
+      "  --help, -h             Show this message.",
       "",
       "Writes a new directory matching <project-name> with:",
-      "  agent-card.json          — ReadOnly demo Card",
+      "  agent-card.json          — ReadOnly demo Card (+ memory block for non-`none` variants)",
       "  initial-trust.json       — synthetic SDK-pinned trust root",
       "  tools.json               — 3-tool demo registry",
       "  hooks/pre-tool-use.mjs   — illustrative §15 hook",
       "  permission-decisions/auto-allow.json — first-boot decision body",
-      "  start.mjs                — demo entrypoint driving the first audit row"
+      "  start.mjs                — demo entrypoint driving the first audit row",
+      "  docker-compose.yml       — present for mem0/zep variants"
     ].join("\n")
   );
 }
@@ -232,6 +286,10 @@ async function main(): Promise<void> {
   if ("help" in parsed) {
     printHelp();
     return;
+  }
+  if ("error" in parsed) {
+    console.error(`[create-soa-agent] ${parsed.error}`);
+    process.exit(2);
   }
   const targetDir = resolveTargetDir({
     projectName: parsed.name,
@@ -243,6 +301,7 @@ async function main(): Promise<void> {
     targetDir,
     demo: parsed.demo,
     link: parsed.link,
+    memory: parsed.memory
   });
   console.log(`[create-soa-agent] scaffolded ${result.filesWritten.length} files into ${result.targetDir}`);
   console.log(`[create-soa-agent]   publisher_kid: ${result.publisherKid}`);

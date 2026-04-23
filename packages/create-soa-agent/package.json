@@ -1,6 +1,6 @@
 {
   "name": "create-soa-agent",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Bootstrap a new SOA-Harness agent repo with a working Runner, Agent Card, and example hook.",
   "license": "Apache-2.0",
   "type": "module",

@@ -1,0 +1,5 @@
+{
+  "tool": "fs__read_file",
+  "session_id": "__CLI_REPLACES_AT_FIRST_BOOT__",
+  "args_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}
