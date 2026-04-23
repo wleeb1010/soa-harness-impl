@@ -1,0 +1,63 @@
+# M5 Phase 0c Gate 4 — Zep backend feasibility spike.
+# Derived from getzep/zep v0.27.2 docker-compose.yaml with summarizer+LLM
+# dependencies stripped so the stack can boot without an OpenAI key.
+# Local embeddings via the bundled NLP server (MiniLM-class) are enough
+# for §8.1 Document Collection mapping.
+
+services:
+  db:
+    image: ghcr.io/getzep/postgres:latest
+    container_name: zep-gate4-postgres
+    restart: on-failure
+    shm_size: "128mb"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - zep-gate4-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "postgres", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nlp:
+    image: ghcr.io/getzep/zep-nlp-server:latest
+    container_name: zep-gate4-nlp
+    restart: on-failure
+    healthcheck:
+      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/5557' || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  zep:
+    image: ghcr.io/getzep/zep:latest
+    container_name: zep-gate4
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      nlp:
+        condition: service_healthy
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - ZEP_STORE_POSTGRES_DSN=postgres://postgres:postgres@db:5432/postgres?sslmode=disable
+      - ZEP_NLP_SERVER_URL=http://nlp:5557
+      - ZEP_LLM_SERVICE=openai
+      - ZEP_OPENAI_API_KEY=sk-not-used-summarizer-is-disabled
+    healthcheck:
+      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/8000' || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+volumes:
+  zep-gate4-db:

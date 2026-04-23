@@ -1,0 +1,17 @@
+{
+  "name": "phase-0c-4-zep",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "M5 Phase 0c Gate 4 — Zep backend feasibility spike",
+  "scripts": {
+    "shim": "node shim.mjs",
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "@getzep/zep-js": "^0.10.0",
+    "fastify": "^5.0.0",
+    "ajv": "^8.17.0",
+    "ajv-formats": "^3.0.0"
+  }
+}

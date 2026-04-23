@@ -1,0 +1,55 @@
+# Zep v0.27.2 config with LLM-dependent extractors disabled.
+# Gate 4 only needs the Document Collection API (embeddings-only) to
+# validate §8.1 shim mapping; summarization/entity extraction are
+# out of scope.
+
+llm:
+  service: "openai"
+  model: "gpt-4o-mini"
+
+nlp:
+  server_url: "http://nlp:5557"
+
+memory:
+  message_window: 12
+
+extractors:
+  documents:
+    embeddings:
+      enabled: true
+      chunk_size: 1000
+      dimensions: 384
+      service: "local"
+  messages:
+    summarizer:
+      enabled: false
+    entities:
+      enabled: false
+    intent:
+      enabled: false
+    embeddings:
+      enabled: false
+
+store:
+  type: "postgres"
+  postgres:
+    dsn: "postgres://postgres:postgres@db:5432/postgres?sslmode=disable"
+
+server:
+  host: 0.0.0.0
+  port: 8000
+  web_enabled: false
+  max_request_size: 5242880
+
+auth:
+  required: false
+  secret: "gate4-spike-secret-not-for-production"
+
+data:
+  purge_every: 0
+
+log:
+  level: "info"
+
+opentelemetry:
+  enabled: false
