@@ -18,6 +18,7 @@
 | Phase 0e — L-58 errata + SV-MEM-08 flip | ✅ PASS | spec pin 45bd9df; `add_memory_note` response gains `created_at`; validator live sweep **94/0/69** — SV-MEM-08 flips skip → pass against sqlite |
 | Phase 2 — mem0 backend | ✅ PASS | `packages/memory-mcp-mem0@1.0.0-rc.0` — 18/18 package tests, validator live sweep **94/0/69** against mem0+Qdrant+Ollama; sensitive-personal pre-filter lands per L-58 |
 | Phase 3 — Zep backend | ✅ PASS | `packages/memory-mcp-zep@1.0.0-rc.0` — 18/18 package tests, validator live sweep **94/0/69** against Zep v0.27.2+Postgres+NLP; Gate 4 SDK workarounds preserved; sensitive-personal pre-filter lands |
+| Phase 4 — unified conformance-report | ✅ PASS | `scripts/m5-conformance-run.mjs` + `backend-conformance-report.json` — 3 backends × 9 cells, **all_green=true** (12 pass / 15 waived / 0 fail) |
 
 ## Gate 6 detail
 

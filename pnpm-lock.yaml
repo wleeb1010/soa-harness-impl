@@ -17,6 +17,12 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^8.15.0
         version: 8.59.0(eslint@9.39.4)(typescript@5.9.3)
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.18.0)
       eslint:
         specifier: ^9.15.0
         version: 9.39.4

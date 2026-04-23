@@ -1,0 +1,161 @@
+{
+  "report_version": "1.0",
+  "spec_commit": "45bd9df1522723219624f53cef8fcec95dcc92c1",
+  "generated_at": "2026-04-23T18:59:56.135Z",
+  "backends": [
+    {
+      "name": "@soa-harness/memory-mcp-sqlite",
+      "version": "1.0.0-rc.0",
+      "host_framework": "sqlite",
+      "endpoint_url": "http://127.0.0.1:8005",
+      "cells": [
+        {
+          "test_id": "SV-MEM-01",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-02",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-03",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-04",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-05",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-06",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-07",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-08",
+          "status": "pass"
+        },
+        {
+          "test_id": "HR-17",
+          "status": "waived",
+          "waiver_reference": "L-58 — live-mode HR-17 requires §8.7.7 fault-injection env surface"
+        }
+      ]
+    },
+    {
+      "name": "@soa-harness/memory-mcp-mem0",
+      "version": "1.0.0-rc.0",
+      "host_framework": "mem0",
+      "endpoint_url": "http://127.0.0.1:8006",
+      "cells": [
+        {
+          "test_id": "SV-MEM-01",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-02",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-03",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-04",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-05",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-06",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-07",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-08",
+          "status": "pass"
+        },
+        {
+          "test_id": "HR-17",
+          "status": "waived",
+          "waiver_reference": "L-58 — live-mode HR-17 requires §8.7.7 fault-injection env surface"
+        }
+      ]
+    },
+    {
+      "name": "@soa-harness/memory-mcp-zep",
+      "version": "1.0.0-rc.0",
+      "host_framework": "zep",
+      "endpoint_url": "http://127.0.0.1:8007",
+      "cells": [
+        {
+          "test_id": "SV-MEM-01",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-02",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-03",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-04",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-05",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-06",
+          "status": "waived",
+          "waiver_reference": "L-58 — subprocess-only probe; live-mode variant pending §8.7.7"
+        },
+        {
+          "test_id": "SV-MEM-07",
+          "status": "pass"
+        },
+        {
+          "test_id": "SV-MEM-08",
+          "status": "pass"
+        },
+        {
+          "test_id": "HR-17",
+          "status": "waived",
+          "waiver_reference": "L-58 — live-mode HR-17 requires §8.7.7 fault-injection env surface"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "all_green": true,
+    "backends_tested": 3,
+    "tests_per_backend": 9,
+    "failing_count": 0,
+    "waiver_count": 15
+  }
+}
