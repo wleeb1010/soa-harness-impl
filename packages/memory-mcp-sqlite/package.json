@@ -1,0 +1,53 @@
+{
+  "name": "@soa-harness/memory-mcp-sqlite",
+  "version": "1.0.0-rc.0",
+  "description": "SQLite-backed Memory MCP implementing the SOA-Harness §8.1 6-tool protocol. Zero external services; ships the spec-canonical 'hits' wire shape.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "soa-memory-mcp-sqlite": "./dist/bin/start-sqlite.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "start": "node dist/bin/start-sqlite.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "fastify": "^5.0.0"
+  },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wleeb1010/soa-harness-impl.git",
+    "directory": "packages/memory-mcp-sqlite"
+  },
+  "keywords": [
+    "soa-harness",
+    "memory-mcp",
+    "sqlite"
+  ]
+}

@@ -14,6 +14,7 @@
 | Gate 4 — Zep schema mapping | ✅ PASS | `scratch/phase-0c-4-zep/` — 281-logic-LOC shim (raw 308), 100% ajv (7/7), validator 49/0/0; SV-MEM-07 live-passes via Zep |
 | Gate 5 — transformers.js cold-start | 🔜 DEFERRED | requires MiniLM model download + cold-cache timing on Windows + WSL2; out-of-env for impl session |
 | Gate 6 — license audit baseline | ✅ PASS | `docs/m5/license-audit-current.txt`; zero forbidden licenses across 6 dep trees |
+| Phase 1 — sqlite backend | ✅ PASS | `packages/memory-mcp-sqlite@1.0.0-rc.0` — 20/20 package tests, validator live sweep 93/0/0 (5 SV-MEM live passes, SV-MEM-08 validator-side probe-shape bug; see Phase 1 detail) |
 
 ## Gate 6 detail
 
@@ -136,6 +137,79 @@ ISC (3), Apache-2.0 (2), UNLICENSED (1 — the spike package itself).
 **Zero forbidden licenses** (no GPL, AGPL, BSL, SSPL, BUSL). Note this
 is the NPM tree; the docker images (zep, zep-nlp, zep-postgres) are
 tagged Apache-2.0 per image label.
+
+## Phase 1 detail — sqlite backend
+
+Package: `@soa-harness/memory-mcp-sqlite@1.0.0-rc.0` at
+`packages/memory-mcp-sqlite/`.
+
+**Stack:** `better-sqlite3@^11.3.0` in-process, `fastify@^5.0.0` HTTP
+surface, optional `@huggingface/transformers@^3.0.0` for semantic
+search (listed as `optionalDependencies` so the default install stays
+lean). Zero external services.
+
+**Scorer providers** (`SOA_MEMORY_MCP_SQLITE_SCORER`):
+- `naive` (default) — substring + recency + graph_strength composite.
+  Matches `memory-mcp-mock`'s scoring formula so SV-MEM-01/02/07/08 + the
+  in-context notes invariants all pass without a model file.
+- `transformers` (opt-in) — MiniLM-L6-v2 cosine similarity. Operators
+  opt in via `npm install @huggingface/transformers` + the env flag.
+  Model (~22 MB) downloads on first use; cold-start timing deferred
+  to Gate 5.
+
+**Tests (20/20 green):**
+- `test/sqlite-backend.test.ts` — 18 tests covering CRUD + tombstone
+  idempotency + fault-injection env + HTTP transport.
+- `test/conformance.test.ts` — 2 tests driving all 6 tools through
+  the HTTP surface + ajv-validating every response (100% pass).
+
+**Validator live sweep** (`--memory-backend=sqlite`, env:
+`SOA_IMPL_URL`, `SOA_MEMORY_MCP_ENDPOINT`, `SOA_RUNNER_BOOTSTRAP_BEARER`
+all set; Runner pointed at the sqlite shim on :8005):
+
+| Before Phase 1 (mem0/Zep) | After Phase 1 (sqlite) |
+|---|---|
+| `total=162 pass=49 fail=0 skip=113 error=0` | `total=163 pass=93 fail=0 skip=70 error=0` |
+
+SV-MEM breakdown against sqlite backend:
+
+| Test | Before | After |
+|---|---|---|
+| SV-MEM-01 | skip | **pass (live)** |
+| SV-MEM-02 | skip | **pass (live)** |
+| SV-MEM-07 | pass (live) | pass (live) |
+| SV-MEM-STATE-01 | skip | **pass (live)** |
+| SV-MEM-STATE-02 | skip | **pass (live)** |
+| SV-MEM-03..06 | skip | skip (subprocess-only by design) |
+| SV-MEM-08 | skip | skip (validator probe shape mismatch — see below) |
+| HR-17 | — | skip (§8.7.7 fault-injection still pending) |
+
+**Validator-side finding (SV-MEM-08):** the live probe sends
+`{"note":{"content","tags","importance"}}` to `add_memory_note`. That
+shape is closer to `read_memory_note`'s *response*; §8.1's
+`add_memory_note` *request* takes `{summary, data_class, session_id}`.
+The sqlite shim correctly returns 500 (NOT NULL constraint on
+`summary`) and the probe skips. Route to validator session for a fix
+so SV-MEM-08 can actually engage the backend.
+
+**Runner empty-string startup-probe fix (shipped alongside):**
+`packages/runner/src/memory/startup-probe.ts` — swap empty `query: ""`
+for canary `"_runner_startup_probe_"` so embedder-backed stores
+(Ollama, transformers.js) don't reject the readiness probe with
+"cannot embed empty input". Surfaced by Gate 3 mem0 spike; 712/712
+runner tests remain green after the change.
+
+**License audit:** naive-default tarball tree stays 100% permissive
+(MIT / Apache-2.0 / BSD-\* / ISC). Zero forbidden licenses.
+
+**Publish-ready artifacts:**
+- Tarball: `pnpm pack` produces a clean bundle — only
+  `dist/ + LICENSE + README.md + package.json`. No `node_modules`, no
+  `test/`, no secrets, no `workspace:*` protocol refs in the published
+  manifest.
+- `Dockerfile`: multi-stage build, `node:20-alpine`, runs as non-root
+  on loopback by default, healthcheck on `/health`, bind-mountable
+  `/data` volume for persistent sqlite.
 
 ## Gate 5 — still deferred to a hands-on environment
 

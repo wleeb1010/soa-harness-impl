@@ -63,7 +63,13 @@ export async function runStartupMemoryProbe(
   let lastError: string = "";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      await opts.client.searchMemories({ query: "", limit: 1, sharing_scope: "session" });
+      // Canary query — non-empty so embedder-backed stores (Ollama,
+      // transformers.js) don't reject the startup probe with "cannot
+      // embed empty input". The mock ignores the string; real backends
+      // embed it and return zero or a few hits, both acceptable for a
+      // "can we reach the memory MCP?" readiness check. Surfaced by
+      // Gate 3 / mem0 spike against Ollama's nomic-embed-text (2026-04-23).
+      await opts.client.searchMemories({ query: "_runner_startup_probe_", limit: 1, sharing_scope: "session" });
       opts.probe.markReady();
       log(
         `[start-runner] Memory MCP startup probe succeeded on attempt ${attempt}/${maxAttempts}`
