@@ -143,3 +143,5 @@ vite.config.ts.timestamp-*
 
 # Graphify generated graph artifacts (rebuilt on every commit via post-commit hook)
 graphify-out/
+
+.claude/
