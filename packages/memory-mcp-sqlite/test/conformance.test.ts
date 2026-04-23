@@ -82,9 +82,10 @@ const SCHEMAS = {
   },
   addMemoryNote: {
     type: "object",
-    required: ["note_id"],
+    required: ["note_id", "created_at"],
     properties: {
-      note_id: { type: "string", pattern: "^mem_" }
+      note_id: { type: "string", pattern: "^mem_" },
+      created_at: { type: "string", format: "date-time" }
     }
   },
   readMemoryNote: {

@@ -79,6 +79,9 @@ describe("SqliteMemoryBackend — §8.1 six-tool protocol", () => {
     })) as AddMemoryNoteResponse;
     expect(first.note_id).toBe("mem_fixed_pin_01");
     expect(second.note_id).toBe("mem_fixed_pin_01");
+    // L-58 §8.1 errata — idempotent repeat returns the *original* created_at.
+    expect(second.created_at).toBe(first.created_at);
+    expect(first.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
     const a = (await backend.addMemoryNote({
       summary: "mint a",
@@ -93,6 +96,24 @@ describe("SqliteMemoryBackend — §8.1 six-tool protocol", () => {
     expect(a.note_id).toMatch(/^mem_[0-9a-f]{12}$/);
     expect(b.note_id).toMatch(/^mem_[0-9a-f]{12}$/);
     expect(a.note_id).not.toBe(b.note_id);
+    expect(a.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(b.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("add_memory_note persists tags + importance when provided (L-58 §8.1 errata)", async () => {
+    const b = freshBackend();
+    const res = (await b.addMemoryNote({
+      summary: "tagged note",
+      data_class: "internal",
+      session_id: "ses_sqlite_tags000001",
+      note_id: "mem_tagged00001",
+      tags: ["alpha", "beta"],
+      importance: 0.8
+    })) as AddMemoryNoteResponse;
+    expect(res.note_id).toBe("mem_tagged00001");
+    const read = (await b.readMemoryNote({ id: "mem_tagged00001" })) as ReadMemoryNoteResponse;
+    expect(read.tags.sort()).toEqual(["alpha", "beta"]);
+    expect(read.importance).toBe(0.8);
   });
 
   it("search_memories_by_time returns hits inside the RFC 3339 window", async () => {

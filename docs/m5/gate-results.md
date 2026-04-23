@@ -14,7 +14,8 @@
 | Gate 4 — Zep schema mapping | ✅ PASS | `scratch/phase-0c-4-zep/` — 281-logic-LOC shim (raw 308), 100% ajv (7/7), validator 49/0/0; SV-MEM-07 live-passes via Zep |
 | Gate 5 — transformers.js cold-start | 🔜 DEFERRED | requires MiniLM model download + cold-cache timing on Windows + WSL2; out-of-env for impl session |
 | Gate 6 — license audit baseline | ✅ PASS | `docs/m5/license-audit-current.txt`; zero forbidden licenses across 6 dep trees |
-| Phase 1 — sqlite backend | ✅ PASS | `packages/memory-mcp-sqlite@1.0.0-rc.0` — 20/20 package tests, validator live sweep 93/0/0 (5 SV-MEM live passes, SV-MEM-08 validator-side probe-shape bug; see Phase 1 detail) |
+| Phase 1 — sqlite backend | ✅ PASS | `packages/memory-mcp-sqlite@1.0.0-rc.0` — 21/21 package tests, validator live sweep 93/0/0 pre-L-58 (cc5cded) |
+| Phase 0e — L-58 errata + SV-MEM-08 flip | ✅ PASS | spec pin 45bd9df; `add_memory_note` response gains `created_at`; validator live sweep **94/0/69** — SV-MEM-08 flips skip → pass against sqlite |
 
 ## Gate 6 detail
 
@@ -173,24 +174,28 @@ all set; Runner pointed at the sqlite shim on :8005):
 
 SV-MEM breakdown against sqlite backend:
 
-| Test | Before | After |
-|---|---|---|
-| SV-MEM-01 | skip | **pass (live)** |
-| SV-MEM-02 | skip | **pass (live)** |
-| SV-MEM-07 | pass (live) | pass (live) |
-| SV-MEM-STATE-01 | skip | **pass (live)** |
-| SV-MEM-STATE-02 | skip | **pass (live)** |
-| SV-MEM-03..06 | skip | skip (subprocess-only by design) |
-| SV-MEM-08 | skip | skip (validator probe shape mismatch — see below) |
-| HR-17 | — | skip (§8.7.7 fault-injection still pending) |
+| Test | Pre-Phase 1 | Post-Phase 1 | Post-Phase 0e (L-58) |
+|---|---|---|---|
+| SV-MEM-01 | skip | **pass (live)** | pass (live) |
+| SV-MEM-02 | skip | **pass (live)** | pass (live) |
+| SV-MEM-07 | pass (live) | pass (live) | pass (live) |
+| SV-MEM-08 | skip | skip (probe drift) | **pass (live)** |
+| SV-MEM-STATE-01 | skip | **pass (live)** | pass (live) |
+| SV-MEM-STATE-02 | skip | **pass (live)** | pass (live) |
+| SV-MEM-03..06 | skip | skip | skip (subprocess-only by design) |
+| HR-17 | — | skip | skip (§8.7.7 fault-injection pending) |
 
-**Validator-side finding (SV-MEM-08):** the live probe sends
-`{"note":{"content","tags","importance"}}` to `add_memory_note`. That
-shape is closer to `read_memory_note`'s *response*; §8.1's
-`add_memory_note` *request* takes `{summary, data_class, session_id}`.
-The sqlite shim correctly returns 500 (NOT NULL constraint on
-`summary`) and the probe skips. Route to validator session for a fix
-so SV-MEM-08 can actually engage the backend.
+**Validator-side finding → resolved in Phase 0e (L-58):** the initial
+live probe sent `{"note":{"content","tags","importance"}}` to
+`add_memory_note`, which neither matched §8.1's documented shape nor
+the impl's accepted shape. Root cause was three-way drift between the
+spec prose, the validator probe, and the impl. L-58 spec errata lands
+the canonical signature (`{summary, data_class, session_id, note_id?,
+tags?, importance?}` → `{note_id, created_at}`); validator session
+updated the probe body (soa-validate commit a6c333c) + pin
+(e0b08c5); impl side added `created_at` to the response and persists
+optional `tags`/`importance` metadata. Post-L-58 sweep passes
+SV-MEM-08 live.
 
 **Runner empty-string startup-probe fix (shipped alongside):**
 `packages/runner/src/memory/startup-probe.ts` — swap empty `query: ""`

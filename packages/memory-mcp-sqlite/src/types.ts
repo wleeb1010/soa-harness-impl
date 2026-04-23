@@ -49,10 +49,16 @@ export interface AddMemoryNoteRequest {
   data_class: DataClass;
   session_id: string;
   note_id?: string;
+  /** §8.1 L-58 errata — optional caller-supplied tags. */
+  tags?: string[];
+  /** §8.1 L-58 errata — optional caller-supplied importance; default 0.5. */
+  importance?: number;
 }
 
 export interface AddMemoryNoteResponse {
   note_id: string;
+  /** §8.1 L-58 errata — RFC 3339 timestamp minted at persistence. */
+  created_at: string;
 }
 
 export interface ReadMemoryNoteRequest {

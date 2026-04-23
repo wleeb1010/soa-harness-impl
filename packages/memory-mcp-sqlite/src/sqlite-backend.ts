@@ -246,30 +246,38 @@ export class SqliteMemoryBackend {
 
     if (typeof req.note_id === "string" && req.note_id.length > 0) {
       const existing = this.db
-        .prepare("SELECT note_id FROM notes WHERE note_id = ?")
-        .get(req.note_id) as { note_id: string } | undefined;
-      if (existing) return { note_id: existing.note_id };
-      this.insertWritten(req.note_id, req);
-      return { note_id: req.note_id };
+        .prepare("SELECT note_id, created_at FROM notes WHERE note_id = ?")
+        .get(req.note_id) as { note_id: string; created_at: string } | undefined;
+      if (existing) return { note_id: existing.note_id, created_at: existing.created_at };
+      const createdAt = this.insertWritten(req.note_id, req);
+      return { note_id: req.note_id, created_at: createdAt };
     }
     const noteId = `mem_${randomBytes(6).toString("hex")}`;
-    this.insertWritten(noteId, req);
-    return { note_id: noteId };
+    const createdAt = this.insertWritten(noteId, req);
+    return { note_id: noteId, created_at: createdAt };
   }
 
-  private insertWritten(noteId: string, req: AddMemoryNoteRequest): void {
+  private insertWritten(noteId: string, req: AddMemoryNoteRequest): string {
+    const createdAt = this.now().toISOString();
+    const importance = typeof req.importance === "number" ? req.importance : 0.5;
     this.db
       .prepare(
         `INSERT INTO notes (note_id, summary, data_class, session_id, created_at, recency_days_ago, graph_strength, consolidated, source)
-         VALUES (@note_id, @summary, @data_class, @session_id, @created_at, 0, 0, 0, 'written')`
+         VALUES (@note_id, @summary, @data_class, @session_id, @created_at, 0, @importance, 0, 'written')`
       )
       .run({
         note_id: noteId,
         summary: req.summary,
         data_class: req.data_class,
         session_id: req.session_id,
-        created_at: this.now().toISOString()
+        created_at: createdAt,
+        importance
       });
+    if (Array.isArray(req.tags) && req.tags.length > 0) {
+      const insertTag = this.db.prepare("INSERT OR IGNORE INTO tags (note_id, tag) VALUES (?, ?)");
+      for (const tag of req.tags) insertTag.run(noteId, tag);
+    }
+    return createdAt;
   }
 
   async readMemoryNote(
