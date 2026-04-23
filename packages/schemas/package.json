@@ -1,7 +1,6 @@
 {
   "name": "@soa-harness/schemas",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0-rc.0",
   "description": "Compiled Ajv validators for SOA-Harness schemas, generated from the pinned spec commit.",
   "license": "Apache-2.0",
   "type": "module",
@@ -12,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
   },
   "files": ["dist"],
   "scripts": {
