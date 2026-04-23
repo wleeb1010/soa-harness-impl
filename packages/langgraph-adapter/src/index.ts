@@ -14,6 +14,14 @@ export type {
   LangGraphEvent,
   SoaStreamEventDraft,
 } from "./stream-event-synth.js";
+export {
+  RunnerBackedPermissionHook,
+  createRunnerBackedPermissionHook,
+} from "./permission-hook.js";
+export type {
+  Observation,
+  RunnerBackedPermissionHookOptions,
+} from "./permission-hook.js";
 
 /** Adapter version shipped with this module — matches package.json. */
 export const ADAPTER_VERSION = "1.0.0-rc.0";
