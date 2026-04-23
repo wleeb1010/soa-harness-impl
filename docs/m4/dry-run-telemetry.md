@@ -233,3 +233,27 @@ within budget.
 
 Temp artifacts are not preserved beyond this session; reproduce via the
 script.
+
+---
+
+## Re-run 1 — 2026-04-23T02:50:00Z (Windows 11 Pro, PowerShell, cold npx)
+
+**Trigger:** Post-E3 publish sweep (spec 654dc7b; impl 7c1daca runner rc.1 + 6b2387d scaffold rc.1 + 8b152f4 publish runbook).
+**Fixed vs initial run:** E1 schemas vendored · E2(b) scaffold template flipped to `^1.0.0-rc.0` registry deps · Runner public barrel includes `InMemorySessionStore` + `SessionStore` (runner rc.1 republish).
+
+| Stage | Wall-clock |
+|---|---|
+| scaffold (`npx create-soa-agent@next dryrun-agent`) | 1.2s |
+| install (`npm install`) | 3.2s |
+| boot (`node ./start.mjs`) + `/health` probe | 3.1s |
+| **Total** | **7.5s (0.12m)** |
+
+**Health probe:** `{"status":"alive","soaHarnessVersion":"1.0"}` HTTP 200
+**Budget:** 20m (Windows)
+**Verdict:** ✅ PASS (0.12m < 20m, 160× headroom)
+
+**Observations:**
+- Warm npm cache (`npx` pulled rc.1 from prior resolution); true cold-cache on a fresh laptop will be slower but the floor is orders-of-magnitude under budget
+- Three blockers that closed the gate on the initial run are all resolved and the pipeline is unbroken
+- Runner bootstrapped a session (`ses_*`) + audit genesis row (`aud_*`) + signed Agent Card (Ed25519 per §6.1.1) with zero manual config beyond the synthetic-key demo path
+- POSIX (WSL2 Ubuntu) re-run pending
