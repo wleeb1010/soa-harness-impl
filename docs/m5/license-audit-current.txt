@@ -1,0 +1,49 @@
+# M5 Phase 0c Gate 6 — license audit baseline
+# Generated 2026-04-23 before M5 backend packages land.
+#
+# Per-package (@soa-harness/*) production-dep summaries. Backends
+# (sqlite/mem0/zep) will add their own audits alongside this file.
+#
+# Rule per L-56 Gate 6: zero GPL/AGPL/BSL/SSPL entries. Only
+# Apache-2.0 / MIT / BSD-* / ISC permitted.
+
+
+## @soa-harness/core (production deps)
+└─ Apache-2.0: 2
+
+
+## @soa-harness/schemas (production deps)
+├─ MIT: 2
+└─ Apache-2.0: 1
+
+
+## @soa-harness/runner (production deps)
+├─ MIT: 5
+└─ Apache-2.0: 5
+
+
+## @soa-harness/create-soa-agent (production deps)
+├─ Apache-2.0: 6
+└─ MIT: 5
+
+
+## @soa-harness/langgraph-adapter (production deps)
+├─ MIT: 7
+└─ Apache-2.0: 6
+
+
+## tools/memory-mcp-mock (production deps)
+├─ UNLICENSED: 1
+└─ MIT: 1
+
+
+## Notes
+
+The UNLICENSED entry in memory-mcp-mock is the package itself: its
+package.json carries "license": "Apache-2.0" but "private": true
+suppresses license-checker from trusting the field. Verified manually
+— mock IS Apache-2.0.
+
+## Forbidden-license scan across full install (GPL/AGPL/BSL/SSPL)
+
+Clean. Zero GPL/AGPL/BSL/SSPL/BUSL entries across all six package dep trees.
