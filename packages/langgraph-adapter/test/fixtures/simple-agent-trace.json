@@ -1,0 +1,65 @@
+{
+  "$id": "https://soa-harness.org/test-vectors/v1.0/langgraph-adapter/simple-agent-trace.json",
+  "description": "Reference LangGraph astream_events v2 trace + expected SOA StreamEvent emission. Consumed by SV-ADAPTER-03 per §18.5.3 + §14.6.",
+  "fixture_version": "1.0.0",
+  "fixture_scope": "Single-turn agent with one tool invocation; LLM streaming + permission-gated tool + synthetic memory-load at session start.",
+  "langgraph_events": [
+    {"event": "on_thread_start", "run_id": "run_000_thread", "name": "thread", "metadata": {"thread_id": "thr_fixture_001"}},
+    {"event": "on_chain_start", "run_id": "run_001_root", "name": "StateGraph", "metadata": {"graph_name": "simple_agent", "is_root": true}},
+    {"event": "on_chat_model_start", "run_id": "run_002_llm", "name": "ChatAnthropic", "data": {"input": {"messages": [{"role": "user", "content": "What is the weather in Tokyo?"}]}}},
+    {"event": "on_chat_model_stream", "run_id": "run_002_llm", "name": "ChatAnthropic", "data": {"chunk": "I'll check"}},
+    {"event": "on_chat_model_stream", "run_id": "run_002_llm", "name": "ChatAnthropic", "data": {"chunk": " the weather."}},
+    {"event": "on_chat_model_end", "run_id": "run_002_llm", "name": "ChatAnthropic", "data": {"output": {"role": "assistant", "content": "I'll check the weather.", "tool_calls": [{"id": "tcl_001", "name": "get_weather", "args": {"city": "Tokyo"}}]}}},
+    {"event": "on_tool_start", "run_id": "run_003_tool", "name": "get_weather", "data": {"input": {"city": "Tokyo"}}},
+    {"event": "on_tool_end", "run_id": "run_003_tool", "name": "get_weather", "data": {"output": "18°C, clear"}},
+    {"event": "on_chat_model_start", "run_id": "run_004_llm", "name": "ChatAnthropic", "data": {"input": {"messages": [{"role": "tool", "content": "18°C, clear"}]}}},
+    {"event": "on_chat_model_stream", "run_id": "run_004_llm", "name": "ChatAnthropic", "data": {"chunk": "It's 18°C"}},
+    {"event": "on_chat_model_stream", "run_id": "run_004_llm", "name": "ChatAnthropic", "data": {"chunk": " and clear in Tokyo."}},
+    {"event": "on_chat_model_end", "run_id": "run_004_llm", "name": "ChatAnthropic", "data": {"output": {"role": "assistant", "content": "It's 18°C and clear in Tokyo."}}},
+    {"event": "on_chain_end", "run_id": "run_001_root", "name": "StateGraph", "metadata": {"is_root": true}},
+    {"event": "on_thread_end", "run_id": "run_000_thread", "name": "thread"}
+  ],
+  "expected_soa_emission": [
+    {"type": "SessionStart", "payload_shape": {"agent_name": "<adapter-declared>", "agent_version": "<adapter-declared>", "card_version": "<from-card>"}, "rationale": "on_thread_start (or root on_chain_start) → SessionStart per §14.6.1"},
+    {"type": "MemoryLoad", "payload_shape": {"loaded_count": ">=0", "tokens": ">=0"}, "rationale": "Synthetic per §14.6.2; adapter emits at session-start context-assembly. OMITTED if adapter declares adapter_notes.deferred_test_families contains SV-MEM per §18.5.4."},
+    {"type": "MessageStart", "payload_shape": {"message_id": "<derived-from-run_002_llm>", "role": "assistant"}, "rationale": "on_chat_model_start → MessageStart"},
+    {"type": "ContentBlockStart", "payload_shape": {"block_id": "<per-run>", "content_type": "text"}, "rationale": "First on_chat_model_stream opens a ContentBlockStart"},
+    {"type": "ContentBlockDelta", "payload_shape": {"block_id": "<same-as-start>", "delta": "I'll check"}, "rationale": "on_chat_model_stream chunk 1"},
+    {"type": "ContentBlockDelta", "payload_shape": {"block_id": "<same-as-start>", "delta": " the weather."}, "rationale": "on_chat_model_stream chunk 2"},
+    {"type": "ContentBlockEnd", "payload_shape": {"block_id": "<same-as-start>"}, "rationale": "End of streaming text block"},
+    {"type": "MessageEnd", "payload_shape": {"message_id": "<same-as-MessageStart>"}, "rationale": "on_chat_model_end → MessageEnd"},
+    {"type": "ToolInputStart", "payload_shape": {"tool_call_id": "tcl_001", "tool_name": "get_weather", "risk_class": "<from-§11-registry>"}, "rationale": "on_tool_start → ToolInputStart; risk_class resolved from Tool Registry lookup"},
+    {"type": "PermissionPrompt", "payload_shape": {"prompt_id": "<prm_-prefix>", "tool.name": "get_weather", "tool.args_digest": "<sha256-over-JCS({city:Tokyo})>", "nonce": "<base64url-≥128bit>", "capability": "<derived>", "control": "<derived>", "handler": "<declared>"}, "rationale": "Synthetic per §14.6.2; adapter §18.5.2 pre-dispatch interception fires. OMITTED if tool's PermissionControl is AutoAllow AND risk_class is ReadOnly."},
+    {"type": "PermissionDecision", "payload_shape": {"prompt_id": "<same-as-PermissionPrompt>", "decision": "allow", "scope": "once", "signer_kid": "<adapter-handler-kid>"}, "rationale": "Synthetic per §14.6.2; adapter emits after receiving signed PDA"},
+    {"type": "PreToolUseOutcome", "payload_shape": {"tool_call_id": "tcl_001", "tool_name": "get_weather", "outcome": "allow"}, "rationale": "Synthetic per §14.6.2; §15 hook pipeline result. OMITTED if adapter declares no hooks in Card."},
+    {"type": "ToolInputEnd", "payload_shape": {"tool_call_id": "tcl_001", "args_digest": "<same-as-PermissionPrompt.tool.args_digest>"}, "rationale": "Closes tool-input before execution"},
+    {"type": "ToolResult", "payload_shape": {"tool_call_id": "tcl_001", "ok": true, "output_digest": "<sha256-over-JCS('18°C, clear')>"}, "rationale": "on_tool_end → ToolResult"},
+    {"type": "PostToolUseOutcome", "payload_shape": {"tool_call_id": "tcl_001", "tool_name": "get_weather", "outcome": "pass"}, "rationale": "Synthetic per §14.6.2; §15 post-hook result. OMITTED if adapter declares no hooks."},
+    {"type": "MessageStart", "payload_shape": {"message_id": "<derived-from-run_004_llm>", "role": "assistant"}, "rationale": "Second on_chat_model_start → MessageStart (new turn)"},
+    {"type": "ContentBlockStart", "payload_shape": {"block_id": "<per-run>", "content_type": "text"}},
+    {"type": "ContentBlockDelta", "payload_shape": {"delta": "It's 18°C"}},
+    {"type": "ContentBlockDelta", "payload_shape": {"delta": " and clear in Tokyo."}},
+    {"type": "ContentBlockEnd", "payload_shape": {"block_id": "<same-as-start>"}},
+    {"type": "MessageEnd", "payload_shape": {"message_id": "<same-as-MessageStart>"}},
+    {"type": "SessionEnd", "payload_shape": {"stop_reason": "Completed", "final_event_id": "<last-event-id>"}, "rationale": "on_chain_end (root) + on_thread_end → SessionEnd"}
+  ],
+  "optional_omissions": [
+    {"event": "MemoryLoad", "when": "Agent Card declares adapter_notes.deferred_test_families contains SV-MEM (§18.5.4 pass-through exception)"},
+    {"event": "PermissionPrompt + PermissionDecision", "when": "tool's PermissionControl=AutoAllow AND risk_class=ReadOnly (§10.3)"},
+    {"event": "PreToolUseOutcome + PostToolUseOutcome", "when": "adapter declares no hooks in its Agent Card (§15)"}
+  ],
+  "dropped_langgraph_events_in_this_trace": [
+    "on_chain_start (is_root=true) — not independently mapped; its Session-open role is taken by on_thread_start",
+    "on_chain_end (is_root=true) — co-terminus with on_thread_end; drop-to-SessionEnd handled at thread boundary"
+  ],
+  "referenced_sections": [
+    "§14.1 — StreamEvent closed enum",
+    "§14.1.1 — Per-Type Payload Schemas (payload shape source-of-truth)",
+    "§14.6.1 — LangGraph Event Inventory",
+    "§14.6.2 — Synthetic Events",
+    "§14.6.3 — Example Trace",
+    "§14.6.4 — Deviation Protocol",
+    "§18.5.2 — Permission Interception Points",
+    "§18.5.3 — Required Conformance Tests"
+  ]
+}

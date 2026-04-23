@@ -7,6 +7,13 @@
 export { buildPermissionAwareToolNode } from "./compliance-wrapper.js";
 export type { MessagesState } from "./compliance-wrapper.js";
 export type { PermissionDecision, PermissionHook } from "./types.js";
+export { EventMapper } from "./stream-event-synth.js";
+export type {
+  SoaStreamEventType,
+  DirectMappedType,
+  LangGraphEvent,
+  SoaStreamEventDraft,
+} from "./stream-event-synth.js";
 
 /** Adapter version shipped with this module — matches package.json. */
 export const ADAPTER_VERSION = "1.0.0-rc.0";
