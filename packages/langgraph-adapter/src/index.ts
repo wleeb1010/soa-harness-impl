@@ -39,6 +39,11 @@ export type { AdapterNotes, BuildAdapterCardOptions } from "./agent-card.js";
 export { createLangGraphAdapter } from "./compose.js";
 export type { LangGraphAdapterOptions, LangGraphAdapter } from "./compose.js";
 export type { ToolNodeTool } from "./compliance-wrapper.js";
+export { startLangGraphAdapterRunner } from "./server.js";
+export type {
+  StartLangGraphAdapterRunnerOptions,
+  LangGraphAdapterServer,
+} from "./server.js";
 
 /** Adapter version shipped with this module — matches package.json. */
 export const ADAPTER_VERSION = "1.0.0-rc.0";
