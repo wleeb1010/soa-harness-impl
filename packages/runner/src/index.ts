@@ -90,10 +90,12 @@ export {
 } from "./audit/index.js";
 export {
   sessionsBootstrapPlugin,
+  InMemorySessionStore,
   type SessionsRouteOptions,
   type CreateSessionInput,
   type CreatedSession,
-  type SessionRecord
+  type SessionRecord,
+  type SessionStore
 } from "./permission/index.js";
 export {
   assertBootstrapBearerListenerSafe,
