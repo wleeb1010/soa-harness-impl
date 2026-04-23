@@ -21,6 +21,17 @@ interface ScaffoldOptions {
   projectName: string;
   targetDir: string;
   demo: boolean;
+  /**
+   * When true, the scaffolded demo is placed under the monorepo's
+   * `examples/` workspace glob so the existing `workspace:*` deps
+   * resolve via pnpm workspace linkage. Intended for in-monorepo dev
+   * use only; outside a monorepo the scaffold call MUST throw.
+   *
+   * Added by Phase 0e E2(a) to clear Blocker #2 of the onboarding
+   * dry-run (npm install fails on `workspace:*` outside pnpm). The
+   * versioned-default path (E2(b)) ships after E3 npm publish.
+   */
+  link?: boolean;
   now?: Date;
 }
 
@@ -29,6 +40,31 @@ export interface ScaffoldResult {
   filesWritten: string[];
   publisherKid: string;
   spkiSha256: string;
+  /** True iff scaffold was placed under the monorepo's examples/ glob. */
+  linked: boolean;
+}
+
+/**
+ * Probe upward from HERE looking for the monorepo's pnpm-workspace.yaml
+ * + soa-validate.lock pair — the two-file signature that uniquely
+ * identifies the SOA-Harness impl monorepo. Returns the repo root if
+ * found, null otherwise. Used by --link to decide whether the scaffold
+ * call is inside the monorepo (and can register itself as a workspace
+ * member) or outside (where --link is meaningless and MUST error).
+ */
+export function findMonorepoRoot(fromDir: string = HERE): string | null {
+  let current = resolve(fromDir);
+  for (let i = 0; i < 8; i++) {
+    const workspaceYaml = join(current, "pnpm-workspace.yaml");
+    const lockFile = join(current, "soa-validate.lock");
+    if (existsSync(workspaceYaml) && existsSync(lockFile)) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+  return null;
 }
 
 async function spkiSha256Hex(certDerBase64: string): Promise<string> {
@@ -104,18 +140,56 @@ export async function scaffold(opts: ScaffoldOptions): Promise<ScaffoldResult> {
       `(RUNNER_SIGNING_KEY + RUNNER_X5C).`
   );
 
-  return { targetDir: opts.targetDir, filesWritten, publisherKid, spkiSha256: spki };
+  return {
+    targetDir: opts.targetDir,
+    filesWritten,
+    publisherKid,
+    spkiSha256: spki,
+    linked: opts.link ?? false,
+  };
 }
 
-function parseArgs(argv: readonly string[]): { name: string; demo: boolean } | { help: true } {
+/**
+ * Resolve the effective target directory for a scaffold invocation.
+ * With `link: true`, forces the scaffold under `<monorepo>/examples/<name>/`
+ * so the resulting package joins the pnpm workspace via the `examples/*`
+ * glob (added in Phase 0e E2(a)). Errors cleanly when --link is passed
+ * from outside the monorepo.
+ */
+export function resolveTargetDir(args: {
+  projectName: string;
+  link: boolean;
+  cwd: string;
+  /** Override for tests; real CLI uses the module's HERE. */
+  monorepoFromDir?: string;
+}): string {
+  if (!args.link) {
+    return resolve(args.cwd, args.projectName);
+  }
+  const monorepo = findMonorepoRoot(args.monorepoFromDir);
+  if (!monorepo) {
+    throw new Error(
+      "create-soa-agent: --link was passed but this CLI is not running from inside the SOA-Harness monorepo. " +
+        "Re-run without --link to scaffold a standalone project, or invoke from a local monorepo checkout."
+    );
+  }
+  return join(monorepo, "examples", args.projectName);
+}
+
+function parseArgs(argv: readonly string[]):
+  | { name: string; demo: boolean; link: boolean }
+  | { help: true } {
   let name: string | undefined;
   let demo = false;
+  let link = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--name") {
       name = argv[++i];
     } else if (arg === "--demo") {
       demo = true;
+    } else if (arg === "--link") {
+      link = true;
     } else if (arg === "--help" || arg === "-h") {
       return { help: true };
     } else if (arg === "demo" && !name) {
@@ -127,16 +201,19 @@ function parseArgs(argv: readonly string[]): { name: string; demo: boolean } | {
     }
   }
   if (!name) return { help: true };
-  return { name, demo };
+  return { name, demo, link };
 }
 
 function printHelp(): void {
   console.log(
     [
-      "Usage: create-soa-agent <project-name> [--demo]",
+      "Usage: create-soa-agent <project-name> [--demo] [--link]",
       "",
       "  --name <name>    Project directory + package name (required).",
       "  --demo           Shorthand for the demo scaffold (same default template in M1).",
+      "  --link           In-monorepo dev mode: scaffold under <repo>/examples/<name>/",
+      "                   so the workspace:* deps resolve via pnpm workspace linkage.",
+      "                   Requires invocation from inside the SOA-Harness monorepo.",
       "  --help, -h       Show this message.",
       "",
       "Writes a new directory matching <project-name> with:",
@@ -156,12 +233,39 @@ async function main(): Promise<void> {
     printHelp();
     return;
   }
-  const targetDir = resolve(process.cwd(), parsed.name);
-  const result = await scaffold({ projectName: parsed.name, targetDir, demo: parsed.demo });
+  const targetDir = resolveTargetDir({
+    projectName: parsed.name,
+    link: parsed.link,
+    cwd: process.cwd(),
+  });
+  const result = await scaffold({
+    projectName: parsed.name,
+    targetDir,
+    demo: parsed.demo,
+    link: parsed.link,
+  });
   console.log(`[create-soa-agent] scaffolded ${result.filesWritten.length} files into ${result.targetDir}`);
   console.log(`[create-soa-agent]   publisher_kid: ${result.publisherKid}`);
   console.log(`[create-soa-agent]   spki_sha256:   ${result.spkiSha256}`);
-  console.log(`[create-soa-agent] next: (cd ${parsed.name} && npm install && node ./start.mjs)`);
+  if (result.linked) {
+    const monorepo = findMonorepoRoot();
+    const relativeTarget = monorepo
+      ? `examples/${parsed.name}`
+      : result.targetDir;
+    console.log(
+      `[create-soa-agent] next: (cd ${monorepo ?? "<repo>"} && pnpm install && cd ${relativeTarget} && pnpm start)`
+    );
+    console.log(
+      "[create-soa-agent] note: --link joined the pnpm workspace via examples/* glob; use pnpm not npm."
+    );
+  } else {
+    console.log(`[create-soa-agent] next: (cd ${parsed.name} && npm install && node ./start.mjs)`);
+    console.log(
+      "[create-soa-agent] note: until @soa-harness/* packages are npm-published, the " +
+        "default scaffold's `workspace:*` deps will NOT resolve with bare `npm install`. " +
+        "Re-run with --link if you are inside the monorepo checkout."
+    );
+  }
 }
 
 // Only run main() when invoked as a CLI — imports by tests skip it.

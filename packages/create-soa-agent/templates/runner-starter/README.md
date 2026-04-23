@@ -5,10 +5,32 @@ minimal Tool Registry + illustrative PreToolUse hook.
 
 ## Running
 
+Two modes depending on how this demo was scaffolded:
+
+### In-monorepo (`create-soa-agent ... --link`)
+
+The demo lives under `<monorepo>/examples/<name>/` and joins the pnpm
+workspace. Dependencies resolve via `workspace:*` linkage — you MUST
+use pnpm, not npm.
+
 ```
-npm install
-node ./start.mjs
+cd <monorepo>        # root containing pnpm-workspace.yaml
+pnpm install         # picks up the new examples/* member
+cd examples/<name>
+pnpm start           # runs node ./start.mjs
 ```
+
+### Standalone (default — available after @soa-harness/* packages are npm-published)
+
+```
+cd <scaffolded-dir>
+npm install          # resolves @soa-harness/runner from npm
+npm start
+```
+
+Until the packages are npm-published (tracked as Phase 0e E3), the
+standalone mode will fail with `EUNSUPPORTEDPROTOCOL workspace:*`.
+Use `--link` for now.
 
 The Runner serves:
 
