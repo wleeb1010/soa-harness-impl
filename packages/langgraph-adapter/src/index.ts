@@ -22,6 +22,18 @@ export type {
   Observation,
   RunnerBackedPermissionHookOptions,
 } from "./permission-hook.js";
+export {
+  RunnerAuditSinkForwarder,
+  createRunnerAuditSinkForwarder,
+  AuditSinkForwardError,
+  deriveRetentionClass,
+} from "./audit-sink.js";
+export type {
+  AuditSinkForwarderOptions,
+  ToolInvocationAuditInput,
+  AuditAppendResponse,
+  RetentionClass,
+} from "./audit-sink.js";
 
 /** Adapter version shipped with this module — matches package.json. */
 export const ADAPTER_VERSION = "1.0.0-rc.0";
