@@ -257,3 +257,34 @@ script.
 - Three blockers that closed the gate on the initial run are all resolved and the pipeline is unbroken
 - Runner bootstrapped a session (`ses_*`) + audit genesis row (`aud_*`) + signed Agent Card (Ed25519 per §6.1.1) with zero manual config beyond the synthetic-key demo path
 - POSIX (WSL2 Ubuntu) re-run pending
+
+## Re-run 2 — 2026-04-23T03:15:00Z (WSL2 Ubuntu 24.04 on Windows 11, Node 22.22, npm 10.9.4)
+
+**Trigger:** Post-E3 Windows re-run PASS + Linux-symlink bug fix (`a404c7c` create-soa-agent rc.2).
+**Fix in this iteration:** `invokedAsCli` guard now resolves `process.argv[1]` through `realpathSync` before comparison; Linux/macOS `npm install -g` symlink path `/usr/bin/create-soa-agent → /usr/lib/node_modules/create-soa-agent/dist/cli.js` no longer silently skips `main()`.
+
+| Stage | Wall-clock |
+|---|---|
+| scaffold (`npx create-soa-agent@next dryrun-agent`) | 7.0s |
+| install (`npm install`) | 0.8s |
+| boot (`node ./start.mjs`) + `/health` probe | 4.0s |
+| **Total** | **11.8s (0.20m)** |
+
+**Health probe:** `{"status":"alive","soaHarnessVersion":"1.0"}` HTTP 200
+**Boot log:** `aud_2c8a8d410c4e` audit genesis, `ses_1f3d76860fd436b1fcb03fd5` session, Runner serving
+**Budget:** 15m (POSIX)
+**Verdict:** ✅ PASS (0.20m < 15m, 76× headroom)
+
+## Cross-Platform Finding — rc.1 → rc.2
+
+The first WSL2 attempt (against rc.1) produced exit 0 with no output and no scaffold. Windows against identical rc.1 worked fine. Root cause traced to `src/cli.ts:267` `invokedAsCli` guard comparing `fileURLToPath(import.meta.url)` against `process.argv[1]` — identity on Windows (.cmd wrappers invoke the real path), but mismatch on Linux/macOS where `npm install -g` uses symlinks. Fix landed in `a404c7c`, published as `create-soa-agent@1.0.0-rc.2`, deprecated rc.1.
+
+**Lesson for future RCs:** fresh-install-on-Linux is a distinct test axis from any monorepo-internal vitest. The publish runbook's end-to-end gate (`npx → npm install → node start.mjs → /health probe`) on BOTH Windows and a POSIX platform must be mandatory before advancing `latest` or inviting external reviewers.
+
+## Gate Status
+
+- Windows cold: ✅ 7.5s
+- POSIX (WSL2): ✅ 11.8s
+- Both platforms at > 75× headroom against budget
+- Three E3 blockers all remediated, one cross-platform bug caught + patched (rc.2)
+- Gate reopens: recruitment can now proceed (Phase 0c)
