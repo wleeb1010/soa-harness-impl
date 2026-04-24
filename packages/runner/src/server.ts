@@ -1,6 +1,7 @@
 import { fastify, type FastifyInstance, type FastifyServerOptions } from "fastify";
 import type { InitialTrust } from "./bootstrap/index.js";
-import { cardPlugin, type JwsAlg, type PrivateKeyLike } from "./card/index.js";
+import { cardPlugin, signAgentCard, type JwsAlg, type PrivateKeyLike } from "./card/index.js";
+import { a2aPlugin } from "./a2a/index.js";
 import { probesPlugin, type ReadinessProbe } from "./probes/index.js";
 import {
   permissionsResolvePlugin,
@@ -374,6 +375,23 @@ export interface BuildRunnerOptions {
     clock: Clock;
     runnerVersion?: string;
   };
+  /**
+   * Optional — when present the Runner exposes POST /a2a/v1 per Core §17.
+   * Omit to disable the A2A surface entirely (Core-only deployments; an
+   * implementation without A2A advertises no /a2a/v1 endpoint per §18.3).
+   *
+   * The `agent.describe` result served at /a2a/v1 reuses the Runner's own
+   * signed Agent Card — the JWS is produced by the same `signAgentCard`
+   * path that feeds /.well-known/agent-card.jws, so per-response §17.2.4
+   * verification (`JWS-verify(result.jws, JCS(result.card))`) always
+   * succeeds by construction.
+   */
+  a2a?: {
+    /** Bearer token accepted at /a2a/v1 in W1 bearer mode (§17.1 JWT profile lands in W3). */
+    bearer: string;
+    /** Receiver-side §17.2.3 capability surface. Absence OR [] means "serves no A2A capabilities". */
+    a2aCapabilities?: string[];
+  };
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -388,6 +406,29 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
     x5c: opts.x5c,
     ...(opts.skipCardSchemaValidation ? { skipSchemaValidation: true } : {})
   });
+
+  if (opts.a2a !== undefined) {
+    // §17.2.4: per-response JWS-verify invariant — sign the same card
+    // bytes the cardPlugin signs so `result.jws` verifies against
+    // `JCS(result.card)` under §6.1.1. For EdDSA the resulting JWS
+    // bytes are deterministic and byte-identical to /.well-known/
+    // agent-card.jws; for ES256 they differ in the nonce but verify
+    // under the same key. The §17.2.4 race-free invariant is the
+    // verify check, not dual-endpoint byte-identity.
+    const signedCard = await signAgentCard({
+      card: opts.card,
+      alg: opts.alg,
+      kid: opts.kid,
+      privateKey: opts.privateKey,
+      x5c: opts.x5c,
+    });
+    await app.register(a2aPlugin, {
+      bearer: opts.a2a.bearer,
+      card: opts.card,
+      cardJws: signedCard.detachedJws,
+      ...(opts.a2a.a2aCapabilities !== undefined ? { a2aCapabilities: opts.a2a.a2aCapabilities } : {}),
+    });
+  }
 
   const readiness = opts.readiness;
   await app.register(probesPlugin, readiness ? { readiness } : {});
