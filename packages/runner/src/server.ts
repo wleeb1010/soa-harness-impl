@@ -43,6 +43,7 @@ import {
 } from "./observability/index.js";
 import { eventsRecentPlugin, StreamEventEmitter } from "./stream/index.js";
 import { dispatchPlugin } from "./dispatch/index.js";
+import { crlRefreshPlugin } from "./boot/index.js";
 import { memoryStatePlugin, InMemoryMemoryStateStore } from "./memory/index.js";
 import { BudgetTracker } from "./budget/index.js";
 import { versionPlugin } from "./governance/index.js";
@@ -361,6 +362,18 @@ export interface BuildRunnerOptions {
     /** Optional — exposes POST /dispatch/debug/set-behavior when the wired adapter is the in-memory test-double. */
     adapterForDebug?: import("./dispatch/index.js").ProviderAdapter;
   };
+  /**
+   * L-62 — POST /crl/refresh operator endpoint. When set, the route is
+   * registered and accepts admin-bearer POSTs to force a CRL refresh pass
+   * via BootOrchestrator.refreshAllNow(). Omit to leave the route unregistered
+   * (404) — in-process scheduler still handles refresh automatically.
+   */
+  crlRefresh?: {
+    orchestrator: import("./boot/index.js").BootOrchestrator;
+    bootstrapBearer: string;
+    clock: Clock;
+    runnerVersion?: string;
+  };
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -628,6 +641,16 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sl.skipReadinessGate !== undefined
         ? { skipReadinessGate: sl.skipReadinessGate }
         : {})
+    });
+  }
+
+  if (opts.crlRefresh !== undefined) {
+    const cr = opts.crlRefresh;
+    await app.register(crlRefreshPlugin, {
+      orchestrator: cr.orchestrator,
+      bootstrapBearer: cr.bootstrapBearer,
+      clock: cr.clock,
+      ...(cr.runnerVersion !== undefined ? { runnerVersion: cr.runnerVersion } : {})
     });
   }
 

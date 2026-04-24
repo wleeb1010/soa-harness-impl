@@ -1536,6 +1536,16 @@ async function main() {
       emitter: streamEmitter,
       systemLog
     },
+    ...(BOOTSTRAP_BEARER !== undefined
+      ? {
+          crlRefresh: {
+            orchestrator: boot,
+            bootstrapBearer: BOOTSTRAP_BEARER,
+            clock,
+            runnerVersion: "1.1"
+          }
+        }
+      : {}),
     ...(dispatcher !== undefined
       ? {
           dispatch: {
