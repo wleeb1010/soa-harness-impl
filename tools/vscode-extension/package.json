@@ -2,7 +2,7 @@
   "name": "soa-harness-vscode",
   "displayName": "SOA-Harness",
   "description": "VS Code support for SOA-Harness v1.2. Reads .soa/ workspace config, surfaces Runner status in the sidebar, fires dispatches against the configured Runner from the editor.",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "private": true,
   "license": "Apache-2.0",
   "publisher": "soa-harness",

@@ -1,6 +1,6 @@
 {
   "name": "@soa-harness/example-provider-adapter",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Reference ProviderAdapter scaffold for @soa-harness/runner §16.3 dispatcher. Shows the shape adopters follow when wiring a real LLM provider (OpenAI, Anthropic, Bedrock, Azure, local llama.cpp server, ...). NOT intended to be used as-is in production — this is a copy-and-customize starting point.",
   "license": "Apache-2.0",
   "type": "module",
