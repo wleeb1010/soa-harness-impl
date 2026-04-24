@@ -22,6 +22,12 @@ jobs:
         node: [20]
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Pin git line endings to LF (Windows runner would otherwise rewrite LF→CRLF)
+        shell: bash
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout impl
         uses: actions/checkout@v4
         with:
