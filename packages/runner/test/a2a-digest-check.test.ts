@@ -110,6 +110,50 @@ describe("checkTransferDigests (§17.2.5)", () => {
   });
 });
 
+describe("A2aTaskRegistry task-execution deadline (§17.2.2 MUST enforce)", () => {
+  it("synthesizes timed-out when pre-terminal row ages past deadline", () => {
+    const reg = new A2aTaskRegistry({ taskExecutionDeadlineS: 10 });
+    reg.record("t1", "accepted", null, 1000);
+    expect(reg.get("t1", 1009)?.status).toBe("accepted");
+    expect(reg.get("t1", 1010)?.status).toBe("accepted"); // boundary: equal, not "past"
+    expect(reg.get("t1", 1011)?.status).toBe("timed-out");
+  });
+
+  it("does NOT synthesize timed-out for terminal rows", () => {
+    const reg = new A2aTaskRegistry({ taskExecutionDeadlineS: 10 });
+    reg.record("t1", "accepted", null, 1000);
+    reg.record("t1", "completed", "evt_1");
+    expect(reg.get("t1", 9999)?.status).toBe("completed");
+  });
+
+  it("omitting nowS from get() returns raw row (no synthesis)", () => {
+    const reg = new A2aTaskRegistry({ taskExecutionDeadlineS: 10 });
+    reg.record("t1", "accepted", null, 1000);
+    expect(reg.get("t1")?.status).toBe("accepted"); // no synthesis when nowS absent
+  });
+
+  it("omitting acceptedAtS from record() means no synthesis ever fires", () => {
+    const reg = new A2aTaskRegistry({ taskExecutionDeadlineS: 10 });
+    reg.record("t1", "accepted", null); // no acceptedAtS
+    expect(reg.get("t1", 999999)?.status).toBe("accepted");
+  });
+
+  it("default 300s deadline applies when not overridden", () => {
+    const reg = new A2aTaskRegistry();
+    reg.record("t1", "accepted", null, 1000);
+    expect(reg.get("t1", 1300)?.status).toBe("accepted");
+    expect(reg.get("t1", 1301)?.status).toBe("timed-out");
+  });
+
+  it("synthesized timed-out preserves last_event_id", () => {
+    const reg = new A2aTaskRegistry({ taskExecutionDeadlineS: 10 });
+    reg.record("t1", "executing", "evt_42", 1000);
+    const row = reg.get("t1", 2000);
+    expect(row?.status).toBe("timed-out");
+    expect(row?.last_event_id).toBe("evt_42");
+  });
+});
+
 describe("A2aTaskRegistry offer retention (§17.2.5 retention window)", () => {
   it("returns offer metadata within retention window", () => {
     const reg = new A2aTaskRegistry({ retentionWindowS: 30 });

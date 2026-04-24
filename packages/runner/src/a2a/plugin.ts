@@ -52,6 +52,13 @@ interface A2aTaskRow {
   status: A2aHandoffStatus;
   last_event_id: string | null;
   offer?: A2aOfferMetadata;
+  /**
+   * §17.2.2 task-execution deadline timestamp. Set when the task
+   * transitions to `accepted` / `executing`; on handoff.status reads past
+   * this point, the registry synthesizes `timed-out` (per §17.2.2 MUST
+   * enforce clause) unless a terminal state has already locked in.
+   */
+  acceptedAtS?: number;
 }
 
 /**
@@ -60,24 +67,45 @@ interface A2aTaskRow {
  * handoff.offer and handoff.transfer. Production impl replaces this with
  * a §12 bracket-persisted store; v1.3 does not mandate persistence
  * (restart-crash collapses to workflow-state-incompatible per §17.2.5).
+ *
+ * §17.2.2 task-execution-deadline enforcement: computed-on-read rather
+ * than eager-transitioned. On handoff.status lookups, if the task is in
+ * a pre-terminal state (accepted | executing) AND its acceptedAtS +
+ * taskExecutionDeadlineS has elapsed, the registry returns a synthetic
+ * `timed-out` row. The locked-in backing state is only updated when the
+ * caller explicitly records a terminal state via `record()` — this keeps
+ * "timed out but not yet observed" and "observed as timed out" distinct
+ * in the state machine.
  */
 export class A2aTaskRegistry {
   private readonly tasks = new Map<string, A2aTaskRow>();
-  /** Retention window in seconds — defaults to §17.2.2 transfer deadline (30 s). */
+  /** §17.2.2 handoff.transfer retention window (default 30 s). */
   private readonly retentionWindowS: number;
+  /** §17.2.2 destination task-execution deadline (default 300 s). */
+  private readonly taskExecutionDeadlineS: number;
 
-  constructor(opts: { retentionWindowS?: number } = {}) {
+  constructor(opts: { retentionWindowS?: number; taskExecutionDeadlineS?: number } = {}) {
     this.retentionWindowS = opts.retentionWindowS ?? 30;
+    this.taskExecutionDeadlineS = opts.taskExecutionDeadlineS ?? 300;
   }
 
   /** §17.2.1 — record a status. Terminal states MUST NOT transition forward. */
-  record(taskId: string, status: A2aHandoffStatus, last_event_id: string | null): void {
+  record(
+    taskId: string,
+    status: A2aHandoffStatus,
+    last_event_id: string | null,
+    acceptedAtS?: number,
+  ): void {
     const prev = this.tasks.get(taskId);
     if (prev && A2A_TERMINAL_HANDOFF_STATUS.has(prev.status)) {
-      // Monotonicity: terminal states lock in per §17.2.1.
       return;
     }
-    this.tasks.set(taskId, { ...(prev ?? {}), status, last_event_id });
+    this.tasks.set(taskId, {
+      ...(prev ?? {}),
+      status,
+      last_event_id,
+      ...(acceptedAtS !== undefined ? { acceptedAtS } : {}),
+    });
   }
 
   /**
@@ -88,6 +116,7 @@ export class A2aTaskRegistry {
   recordOffer(taskId: string, meta: A2aOfferMetadata): void {
     const prev = this.tasks.get(taskId);
     this.tasks.set(taskId, {
+      ...(prev ?? {}),
       status: prev?.status ?? "accepted",
       last_event_id: prev?.last_event_id ?? null,
       offer: meta,
@@ -106,9 +135,27 @@ export class A2aTaskRegistry {
     return row.offer;
   }
 
-  get(taskId: string): { status: A2aHandoffStatus; last_event_id: string | null } | undefined {
+  /**
+   * Read the task status, applying §17.2.2 task-execution-deadline
+   * synthesis for pre-terminal rows whose acceptedAtS has elapsed. Passing
+   * `nowS` is how the caller opts into synthesis; omitting it reads the
+   * raw stored row (used internally + by tests that want deadline-free
+   * views).
+   */
+  get(
+    taskId: string,
+    nowS?: number,
+  ): { status: A2aHandoffStatus; last_event_id: string | null } | undefined {
     const row = this.tasks.get(taskId);
     if (!row) return undefined;
+    if (
+      nowS !== undefined &&
+      row.acceptedAtS !== undefined &&
+      !A2A_TERMINAL_HANDOFF_STATUS.has(row.status) &&
+      nowS - row.acceptedAtS > this.taskExecutionDeadlineS
+    ) {
+      return { status: "timed-out", last_event_id: row.last_event_id };
+    }
     return { status: row.status, last_event_id: row.last_event_id };
   }
 
@@ -223,7 +270,11 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
   const deadlines = resolveA2aDeadlines();
   const nowFn: () => number = opts.nowFn ?? (() => Math.floor(Date.now() / 1000));
   const registry =
-    opts.taskRegistry ?? new A2aTaskRegistry({ retentionWindowS: deadlines.transfer_s });
+    opts.taskRegistry ??
+    new A2aTaskRegistry({
+      retentionWindowS: deadlines.transfer_s,
+      taskExecutionDeadlineS: deadlines.task_execution_s,
+    });
   // W3 slice 1: a lazily-initialised jti cache the plugin owns when the
   // caller didn't supply one. Prevents each request from seeing an empty
   // cache and silently accepting replays.
@@ -309,7 +360,7 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
         response = handleHandoffTransfer(id, rpc.params, registry, nowFn);
         break;
       case "handoff.status":
-        response = handleHandoffStatus(id, rpc.params, registry);
+        response = handleHandoffStatus(id, rpc.params, registry, nowFn);
         break;
       case "handoff.return":
         response = handleHandoffReturn(id, rpc.params, registry);
@@ -434,9 +485,10 @@ function handleHandoffTransfer(
   }
 
   // §17.2.5 accept path: W1 stub session creation — W2+ wires real
-  // session import per §17.4. Record as `accepted` per §17.2.1.
+  // session import per §17.4. Record as `accepted` per §17.2.1 and
+  // stamp the §17.2.2 task-execution-deadline start.
   const destId = `ses_${p.task_id.slice(0, 16).padEnd(16, "0")}`;
-  registry.record(p.task_id, "accepted", null);
+  registry.record(p.task_id, "accepted", null, nowFn());
   return {
     jsonrpc: "2.0",
     id,
@@ -451,12 +503,15 @@ function handleHandoffStatus(
   id: string | number | null,
   params: unknown,
   registry: A2aTaskRegistry,
+  nowFn: () => number,
 ): JsonRpcResponse<A2aHandoffStatusResult> {
   const p = params as A2aHandoffStatusParams | undefined;
   if (!p || typeof p.task_id !== "string") {
     return a2aError(id, "HandoffStateIncompatible", { message: "missing task_id" });
   }
-  const row = registry.get(p.task_id);
+  // Pass nowFn() to let the registry synthesize §17.2.2 timed-out when
+  // the pre-terminal row has aged past the task-execution-deadline.
+  const row = registry.get(p.task_id, nowFn());
   if (!row) {
     return a2aError(id, "HandoffStateIncompatible", {
       message: "unknown task_id — was handoff.transfer called for this task?",
