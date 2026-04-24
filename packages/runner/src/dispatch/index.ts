@@ -22,4 +22,6 @@ export type {
   DispatchRecentResponse,
   StopReason,
   DispatcherErrorCode,
+  StreamedDispatchEvent,
 } from "./types.js";
+export { InFlightRegistry, serializeSseFrame, runStreamDispatch } from "./stream.js";

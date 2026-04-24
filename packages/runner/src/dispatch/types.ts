@@ -83,7 +83,9 @@ export type DispatcherErrorCode =
   | "ProviderNetworkFailed"
   | "ContentFilterRefusal"
   | "ContextLengthExceeded"
-  | "DispatcherRequestInvalid";
+  | "DispatcherRequestInvalid"
+  | "DispatcherStreamUnsupported"
+  | "DispatcherAdapterError";
 
 export interface DispatchUsage {
   input_tokens: number;
@@ -147,4 +149,47 @@ export interface DispatchRecentResponse {
   dispatches: DispatchRecentRow[];
   runner_version: string;
   generated_at: string;
+}
+
+/**
+ * §16.6 Streaming Dispatcher — StreamedDispatchEvent.
+ *
+ * Adapters that implement dispatchStream yield these events, which the
+ * dispatcher wraps into SSE frames per §16.6.2. The event types map 1-for-1
+ * onto the §14.1 StreamEvent closed enum; the dispatch layer enforces the
+ * §16.6.3 sequence invariants.
+ *
+ * Intentionally a narrow subset of the §14.1 enum: a dispatch stream only
+ * ever carries the five message-content events, not session-level events like
+ * SessionStart or tool events. The full §14.1 stream observed at /events/recent
+ * is a superset that stitches multiple dispatch streams together with
+ * session/tool framing.
+ */
+export interface StreamedDispatchEvent {
+  type:
+    | "MessageStart"
+    | "ContentBlockStart"
+    | "ContentBlockDelta"
+    | "ContentBlockEnd"
+    | "MessageEnd";
+  /** Monotonic per-session sequence counter (dispatcher-managed). */
+  sequence: number;
+  /** ISO 8601 instant. */
+  emitted_at: string;
+  /** Dispatch correlation — same as request.correlation_id. */
+  correlation_id: string;
+  /** Session ID — same as request.session_id. */
+  session_id: string;
+  /** Present on MessageStart — echoes request turn_id. */
+  turn_id?: string;
+  /** Present on ContentBlockStart / ContentBlockEnd — zero-based index within this message. */
+  content_block_index?: number;
+  /** Present on ContentBlockStart — block type classification. */
+  content_block_type?: "text" | "tool_use" | "image";
+  /** Present on ContentBlockDelta — incremental payload since the previous delta. */
+  delta?: { text?: string; partial_json?: string };
+  /** Present on MessageEnd — final stop classification and usage. */
+  stop_reason?: StopReason;
+  dispatcher_error_code?: DispatcherErrorCode | null;
+  usage?: DispatchUsage;
 }

@@ -18,13 +18,13 @@
  *     MUST NOT leak after abort
  *   - Returning a complete DispatchResponse on synchronous-mode success
  *
- * Streaming mode is deliberately NOT in this interface for the M7 skeleton —
- * it wires into the §14 StreamEventEmitter and is layered on top in M8 once
- * the chat-UI work needs it. M7 ships synchronous dispatch only, which is
- * enough for SV-LLM-01..07 conformance.
+ * Streaming mode landed in M8 (v1.2 per §16.6) as the optional dispatchStream
+ * method. Adapters that only implement the synchronous dispatch path remain
+ * v1.0-conformant; streaming-capable adapters advertise that capability via
+ * the optional dispatchStream method and flip SV-LLM-05 from skip to live.
  */
 
-import type { DispatchRequest, DispatchResponse } from "./types.js";
+import type { DispatchRequest, DispatchResponse, StreamedDispatchEvent } from "./types.js";
 
 export interface AdapterDispatchContext {
   /** Abort signal — adapters MUST respect this to honor §13.2 cancellation. */
@@ -50,4 +50,27 @@ export interface ProviderAdapter {
    * MUST echo the request's values. Dispatcher validates this echo.
    */
   dispatch(request: DispatchRequest, ctx: AdapterDispatchContext): Promise<DispatchResponse>;
+
+  /**
+   * §16.6.1 — optional streaming-mode dispatch. When implemented, the adapter
+   * MUST yield StreamedDispatchEvent items that the dispatcher wraps into the
+   * SSE response framing per §16.6.2. Adapters that do not provide this method
+   * advertise sync-only capability; the dispatcher returns HTTP 406
+   * DispatcherStreamUnsupported when a streaming request targets such an
+   * adapter.
+   *
+   * The yielded events follow the §14.1 StreamEvent closed enum (MessageStart,
+   * ContentBlockStart, ContentBlockDelta, ContentBlockEnd, MessageEnd). The
+   * dispatcher enforces the §16.6.3 sequence invariants; adapters that violate
+   * them surface as DispatcherAdapterError.
+   *
+   * Abort semantics: when ctx.signal fires, the adapter MUST stop emitting new
+   * ContentBlockDelta events at the next boundary. Adapters MAY emit a
+   * terminal ContentBlockEnd + MessageEnd pair after abort to close a
+   * half-open block; MUST stop iterating after that pair.
+   */
+  dispatchStream?(
+    request: DispatchRequest,
+    ctx: AdapterDispatchContext,
+  ): AsyncIterable<StreamedDispatchEvent>;
 }

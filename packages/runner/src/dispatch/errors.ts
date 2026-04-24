@@ -25,6 +25,9 @@ export const DISPATCHER_ERROR_SUBCODES: Record<DispatcherErrorCode, number> = {
   ContentFilterRefusal: -32104,
   ContextLengthExceeded: -32105,
   DispatcherRequestInvalid: -32110,
+  // v1.2 — streaming-mode additions per §16.6
+  DispatcherStreamUnsupported: -32111,
+  DispatcherAdapterError: -32112,
 };
 
 /**

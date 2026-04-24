@@ -31,8 +31,10 @@ import type { Dispatcher } from "./dispatcher.js";
 import type { InMemoryTestAdapter } from "./test-double.js";
 import type { ProviderAdapter } from "./adapter.js";
 import type { DispatchRequest } from "./types.js";
+import { InFlightRegistry, runStreamDispatch } from "./stream.js";
 
 const SESSION_ID_RE = /^ses_[A-Za-z0-9]{16,}$/;
+const CORRELATION_ID_RE = /^cor_[A-Za-z0-9]{16,}$/;
 const WINDOW_MS = 60_000;
 
 export interface DispatchRouteOptions {
@@ -58,6 +60,12 @@ export interface DispatchRouteOptions {
    * without restarting the Runner. Real adapters leave the debug route
    * unregistered (404) — a production leak of this is defense-in-depth
    * impossible because the adapter type check gates the registration.
+   *
+   * This same adapter (when non-undefined) is the source of the optional
+   * `dispatchStream` method for §16.6 streaming mode. If the adapter
+   * implements `dispatchStream`, `POST /dispatch` with
+   * `Accept: text/event-stream` returns an SSE response; otherwise the Runner
+   * returns HTTP 406 with `DispatcherStreamUnsupported` per §16.6.2.
    */
   adapterForDebug?: ProviderAdapter;
 }
@@ -94,11 +102,12 @@ function sha256Hex(s: string): string {
 }
 
 export const dispatchPlugin: FastifyPluginAsync<DispatchRouteOptions> = async (app, opts) => {
-  const runnerVersion = opts.runnerVersion ?? "1.1";
+  const runnerVersion = opts.runnerVersion ?? "1.2";
   const sessionLimiter = new PerBearerLimiter(opts.requestsPerMinute ?? 120, opts.clock);
   const adminLimiter = new PerBearerLimiter(opts.adminRequestsPerMinute ?? 60, opts.clock);
   const requestValidator = schemaRegistry["llm-dispatch-request"];
   const recentResponseValidator = schemaRegistry["dispatch-recent-response"];
+  const inflight = new InFlightRegistry();
 
   // ────────────────────────────────────────────────────────────────────────
   // POST /dispatch — fire a single dispatcher call
@@ -150,12 +159,89 @@ export const dispatchPlugin: FastifyPluginAsync<DispatchRouteOptions> = async (a
       return reply.code(403).send({ error: "session-bearer-mismatch" });
     }
 
+    // §16.6.2 — streaming mode trigger: Accept: text/event-stream AND body
+    // stream: true (stream is schema-default so absence counts as true). If
+    // the adapter wired into this dispatcher lacks dispatchStream, return
+    // HTTP 406 with DispatcherStreamUnsupported — the audit row is written
+    // by recordStreamDispatch with the matching error code.
+    const acceptHdr = (request.headers["accept"] ?? "") as string;
+    const wantsSse = acceptHdr.split(",").some((v) => v.trim().startsWith("text/event-stream"));
+    const bodyStream = req.stream !== false; // schema default is true
+    const streamingRequested = wantsSse && bodyStream;
+
+    if (streamingRequested) {
+      const streamingAdapter = opts.adapterForDebug;
+      if (!streamingAdapter || streamingAdapter.dispatchStream === undefined) {
+        // Record the DispatcherStreamUnsupported audit row before returning,
+        // so /audit/tail observes the failure per §16.6.2 step 1.
+        opts.dispatcher.recordStreamDispatch({
+          request: req,
+          stop_reason: "DispatcherError",
+          dispatcher_error_code: "DispatcherStreamUnsupported",
+          usage: { input_tokens: 0, output_tokens: 0 },
+          started_at: opts.clock().toISOString(),
+          completed_at: opts.clock().toISOString(),
+        });
+        return reply.code(406).send({
+          dispatcher_error_code: "DispatcherStreamUnsupported",
+          detail: "adapter does not implement dispatchStream",
+        });
+      }
+      await runStreamDispatch({
+        request: req,
+        dispatcher: opts.dispatcher,
+        adapter: streamingAdapter,
+        reply,
+        inflight,
+      });
+      return;
+    }
+
     const dispatchResponse = await opts.dispatcher.dispatch(req);
     // All successful + error-classified responses come back as valid
     // DispatchResponse — dispatcher preserves HTTP 200 semantics; the
     // stop_reason + dispatcher_error_code surface failure detail.
     return reply.code(200).send(dispatchResponse);
   });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // POST /dispatch/:correlation_id/cancel — §16.6.4 mid-stream cancellation
+  // ────────────────────────────────────────────────────────────────────────
+  app.post<{ Params: { correlation_id: string } }>(
+    "/dispatch/:correlation_id/cancel",
+    async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+
+      const notReady = opts.readiness.check();
+      if (notReady !== null) {
+        return reply.code(503).send({ status: "not-ready", reason: notReady });
+      }
+
+      const bearer = extractBearer(request);
+      if (!bearer) return reply.code(401).send({ error: "missing-or-invalid-bearer" });
+
+      const rl = sessionLimiter.consume(sha256Hex(bearer));
+      if (!rl.allowed) {
+        reply.header("Retry-After", String(rl.retryAfterSeconds));
+        return reply.code(429).send({ error: "rate-limit-exceeded" });
+      }
+
+      const { correlation_id } = request.params;
+      if (!CORRELATION_ID_RE.test(correlation_id)) {
+        return reply.code(400).send({ error: "malformed-correlation-id" });
+      }
+
+      // No in-flight dispatch → 404. Harder than "succeed anyway" but lets the
+      // test suite distinguish "the cancel landed before the stream started"
+      // from "the cancel landed mid-stream".
+      if (!inflight.has(correlation_id)) {
+        return reply.code(404).send({ error: "no-in-flight-dispatch" });
+      }
+
+      inflight.cancel(correlation_id);
+      return reply.code(202).send({ cancelling: true });
+    },
+  );
 
   // ────────────────────────────────────────────────────────────────────────
   // GET /dispatch/recent — read recent-dispatch observability

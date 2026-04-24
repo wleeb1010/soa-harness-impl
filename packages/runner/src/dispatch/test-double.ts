@@ -21,7 +21,12 @@
 
 import { AdapterError } from "./errors.js";
 import type { ProviderAdapter, AdapterDispatchContext } from "./adapter.js";
-import type { DispatchRequest, DispatchResponse, DispatcherErrorCode } from "./types.js";
+import type {
+  DispatchRequest,
+  DispatchResponse,
+  DispatcherErrorCode,
+  StreamedDispatchEvent,
+} from "./types.js";
 
 export interface TestAdapterCall {
   request: DispatchRequest;
@@ -137,6 +142,119 @@ export class InMemoryTestAdapter implements ProviderAdapter {
       billing_tag: request.billing_tag,
       correlation_id: request.correlation_id,
       generated_at: new Date(completed).toISOString(),
+    };
+  }
+
+  /**
+   * §16.6.1 streaming-mode dispatch. Supported behaviors:
+   *   - "stream:ok"            — emit Message/Block envelope + 5 deltas, NaturalStop
+   *   - "stream:N"             — emit N deltas (override default 5)
+   *   - "stream:error:<code>"  — yield MessageStart, then throw AdapterError
+   *   - "stream:never"         — hang forever until aborted
+   * Any "stream:*" prefix selects this path; otherwise we fall through to the
+   * synchronous "ok" default (so tests that opt in to streaming via a single
+   * behavior flip don't accidentally regress sync-mode tests).
+   */
+  async *dispatchStream(
+    request: DispatchRequest,
+    ctx: AdapterDispatchContext,
+  ): AsyncIterable<StreamedDispatchEvent> {
+    const started = this.now();
+    const call: TestAdapterCall = { request, attempt: ctx.attempt, aborted: false, at: started };
+    this.calls.push(call);
+
+    // Parse behavior — extract delta-count or error code if present
+    let deltaCount = 5;
+    let errorCode: DispatcherErrorCode | null = null;
+    let neverTerminate = false;
+    const errMatch = /^stream:error:(\w+)$/.exec(this.behavior);
+    const countMatch = /^stream:(\d+)$/.exec(this.behavior);
+    if (this.behavior === "stream:never") neverTerminate = true;
+    else if (errMatch) errorCode = errMatch[1] as DispatcherErrorCode;
+    else if (countMatch) deltaCount = Number(countMatch[1]);
+
+    let seq = 0;
+    const base = {
+      correlation_id: request.correlation_id,
+      session_id: request.session_id,
+    };
+
+    // 1. MessageStart
+    yield {
+      type: "MessageStart",
+      sequence: seq++,
+      emitted_at: new Date(this.now()).toISOString(),
+      turn_id: request.turn_id,
+      ...base,
+    };
+    if (errorCode) {
+      throw new AdapterError(errorCode, { message: `test-double: streaming ${errorCode}` });
+    }
+
+    // 2. ContentBlockStart
+    yield {
+      type: "ContentBlockStart",
+      sequence: seq++,
+      emitted_at: new Date(this.now()).toISOString(),
+      content_block_index: 0,
+      content_block_type: "text",
+      ...base,
+    };
+
+    // 3. ContentBlockDelta × deltaCount (honoring abort signal at boundaries)
+    for (let i = 0; i < deltaCount; i++) {
+      if (ctx.signal.aborted) {
+        call.aborted = true;
+        break;
+      }
+      // "stream:never" stalls between deltas until aborted
+      if (neverTerminate) {
+        await new Promise<void>((resolve) => {
+          const onAbort = () => {
+            call.aborted = true;
+            resolve();
+          };
+          if (ctx.signal.aborted) {
+            onAbort();
+            return;
+          }
+          ctx.signal.addEventListener("abort", onAbort, { once: true });
+        });
+        break;
+      }
+      yield {
+        type: "ContentBlockDelta",
+        sequence: seq++,
+        emitted_at: new Date(this.now()).toISOString(),
+        content_block_index: 0,
+        delta: { text: `chunk-${i} ` },
+        ...base,
+      };
+    }
+
+    // 4. ContentBlockEnd
+    yield {
+      type: "ContentBlockEnd",
+      sequence: seq++,
+      emitted_at: new Date(this.now()).toISOString(),
+      content_block_index: 0,
+      ...base,
+    };
+
+    // 5. MessageEnd — stop_reason depends on whether abort fired
+    const stopReason = call.aborted ? "UserInterrupt" : "NaturalStop";
+    yield {
+      type: "MessageEnd",
+      sequence: seq++,
+      emitted_at: new Date(this.now()).toISOString(),
+      stop_reason: stopReason,
+      dispatcher_error_code: null,
+      usage: {
+        input_tokens: this.usage.input_tokens,
+        output_tokens: this.usage.output_tokens,
+        cached_tokens: this.usage.cached_tokens,
+      },
+      ...base,
     };
   }
 }

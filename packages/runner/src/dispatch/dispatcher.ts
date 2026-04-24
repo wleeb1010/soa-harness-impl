@@ -444,4 +444,40 @@ export class Dispatcher {
       });
     }
   }
+
+  /**
+   * §16.6 streaming-mode audit row. Synthesizes a DispatchResponse from the
+   * stream's terminal state so the existing recordDispatch pipeline (ring
+   * buffer + hash-chained audit) stays single-source-of-truth for all
+   * dispatch rows regardless of mode.
+   */
+  recordStreamDispatch(args: {
+    request: DispatchRequest;
+    stop_reason: DispatchResponse["stop_reason"];
+    dispatcher_error_code: DispatchResponse["dispatcher_error_code"];
+    usage: { input_tokens: number; output_tokens: number; cached_tokens?: number };
+    started_at: string;
+    completed_at: string;
+  }): void {
+    const started = new Date(args.started_at);
+    const completed = new Date(args.completed_at);
+    const response: DispatchResponse = {
+      dispatch_id: `dsp_${args.request.turn_id.slice(4)}s1`.padEnd(20, "x").slice(0, 20),
+      session_id: args.request.session_id,
+      turn_id: args.request.turn_id,
+      content_blocks: [],
+      tool_calls: [],
+      usage: args.usage,
+      stop_reason: args.stop_reason,
+      dispatcher_error_code: args.dispatcher_error_code,
+      latency_ms: Math.max(0, completed.getTime() - started.getTime()),
+      provider_request_id: null,
+      provider: this.adapter.name,
+      model_echo: args.request.model,
+      billing_tag: args.request.billing_tag,
+      correlation_id: args.request.correlation_id,
+      generated_at: completed.toISOString(),
+    };
+    this.recordDispatch(response, args.request, started);
+  }
 }
