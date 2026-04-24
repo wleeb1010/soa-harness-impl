@@ -24,7 +24,7 @@ const advance = (ms: number) => {
   clockMs += ms;
 };
 
-async function bootAppWithDispatch(opts: { behavior?: string; adminBearer?: string } = {}) {
+async function bootAppWithDispatch(opts: { behavior?: string; adminBearer?: string; exposeDebug?: boolean } = {}) {
   const keys = await generateEd25519KeyPair();
   const cert = await generateSelfSignedEd25519Cert({ keys, subject: `CN=${KID},O=Test` });
 
@@ -59,6 +59,7 @@ async function bootAppWithDispatch(opts: { behavior?: string; adminBearer?: stri
       clock,
       runnerVersion: "1.1-test",
       ...(opts.adminBearer !== undefined ? { bootstrapBearer: opts.adminBearer } : {}),
+      ...(opts.exposeDebug ? { adapterForDebug: adapter } : {}),
     },
   });
   return { app, dispatcher, adapter, chain, sessionStore };
@@ -295,6 +296,93 @@ describe("GET /dispatch/recent — observability", () => {
         headers: { authorization: `Bearer ${BEARER}` },
       });
       expect(res.statusCode).toBe(400);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe("POST /dispatch/debug/set-behavior (test-double only)", () => {
+  const ADMIN = "admin-bearer-" + "a".repeat(20);
+
+  it("flips adapter behavior at runtime when admin bearer + adapterForDebug present", async () => {
+    const { app, adapter } = await bootAppWithDispatch({ adminBearer: ADMIN, exposeDebug: true });
+    try {
+      // Initial behavior is 'ok' → success
+      let res = await app.inject({
+        method: "POST",
+        url: "/dispatch",
+        headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+        payload: validDispatchRequest(),
+      });
+      expect(JSON.parse(res.body).stop_reason).toBe("NaturalStop");
+
+      // Flip to error via debug route
+      const debugRes = await app.inject({
+        method: "POST",
+        url: "/dispatch/debug/set-behavior",
+        headers: { authorization: `Bearer ${ADMIN}`, "content-type": "application/json" },
+        payload: { behavior: "error:ProviderRateLimited" },
+      });
+      expect(debugRes.statusCode).toBe(200);
+
+      // Next dispatch now returns DispatcherError
+      res = await app.inject({
+        method: "POST",
+        url: "/dispatch",
+        headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+        payload: validDispatchRequest({ turn_id: "trn_" + "y".repeat(20) }),
+      });
+      const body = JSON.parse(res.body);
+      expect(body.stop_reason).toBe("DispatcherError");
+      expect(body.dispatcher_error_code).toBe("ProviderRateLimited");
+      // adapter.calls shows retry attempts (rate-limited is retryable)
+      expect(adapter.calls.length).toBeGreaterThan(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("rejects non-admin bearers on the debug route", async () => {
+    const { app } = await bootAppWithDispatch({ adminBearer: ADMIN, exposeDebug: true });
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/dispatch/debug/set-behavior",
+        headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+        payload: { behavior: "ok" },
+      });
+      expect(res.statusCode).toBe(403);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("route is absent when adapterForDebug not passed (default — production safety)", async () => {
+    const { app } = await bootAppWithDispatch({ adminBearer: ADMIN /* no exposeDebug */ });
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/dispatch/debug/set-behavior",
+        headers: { authorization: `Bearer ${ADMIN}`, "content-type": "application/json" },
+        payload: { behavior: "ok" },
+      });
+      expect(res.statusCode).toBe(404);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("route is absent when bootstrapBearer not configured (can't verify admin)", async () => {
+    const { app } = await bootAppWithDispatch({ exposeDebug: true /* no adminBearer */ });
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/dispatch/debug/set-behavior",
+        headers: { authorization: `Bearer ${ADMIN}`, "content-type": "application/json" },
+        payload: { behavior: "ok" },
+      });
+      expect(res.statusCode).toBe(404);
     } finally {
       await app.close();
     }

@@ -1140,6 +1140,7 @@ async function main() {
   // production-safety pattern as §5.3.3 bootstrap test hooks.
   const dispatchAdapterKind = process.env["SOA_DISPATCH_ADAPTER"];
   let dispatcher: Dispatcher | undefined;
+  let dispatchTestDoubleAdapter: InMemoryTestAdapter | undefined;
   if (dispatchAdapterKind !== undefined) {
     if (dispatchAdapterKind !== "test-double") {
       throw new Error(
@@ -1157,7 +1158,9 @@ async function main() {
       );
     }
     const behavior = process.env["SOA_DISPATCH_TEST_DOUBLE_BEHAVIOR"] ?? "ok";
-    const adapter: ProviderAdapter = new InMemoryTestAdapter({ behavior });
+    const testDouble = new InMemoryTestAdapter({ behavior });
+    dispatchTestDoubleAdapter = testDouble;
+    const adapter: ProviderAdapter = testDouble;
     dispatcher = new Dispatcher({
       adapter,
       auditChain: chain,
@@ -1538,7 +1541,14 @@ async function main() {
             sessionStore,
             clock,
             runnerVersion: "1.1",
-            ...(BOOTSTRAP_BEARER !== undefined ? { bootstrapBearer: BOOTSTRAP_BEARER } : {})
+            ...(BOOTSTRAP_BEARER !== undefined ? { bootstrapBearer: BOOTSTRAP_BEARER } : {}),
+            // When test-double is wired, pass the adapter through so the
+            // plugin can expose POST /dispatch/debug/set-behavior. Real
+            // adapters never reach this line — we only set `dispatcher`
+            // at all when SOA_DISPATCH_ADAPTER=test-double is set.
+            ...(dispatchTestDoubleAdapter !== undefined
+              ? { adapterForDebug: dispatchTestDoubleAdapter }
+              : {})
           }
         }
       : {})

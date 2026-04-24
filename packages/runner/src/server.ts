@@ -356,6 +356,8 @@ export interface BuildRunnerOptions {
     requestsPerMinute?: number;
     bootstrapBearer?: string;
     adminRequestsPerMinute?: number;
+    /** Optional — exposes POST /dispatch/debug/set-behavior when the wired adapter is the in-memory test-double. */
+    adapterForDebug?: import("./dispatch/index.js").ProviderAdapter;
   };
   fastifyOptions?: FastifyServerOptions;
 }
@@ -638,7 +640,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(dp.bootstrapBearer !== undefined ? { bootstrapBearer: dp.bootstrapBearer } : {}),
       ...(dp.adminRequestsPerMinute !== undefined
         ? { adminRequestsPerMinute: dp.adminRequestsPerMinute }
-        : {})
+        : {}),
+      ...(dp.adapterForDebug !== undefined ? { adapterForDebug: dp.adapterForDebug } : {})
     });
   }
 

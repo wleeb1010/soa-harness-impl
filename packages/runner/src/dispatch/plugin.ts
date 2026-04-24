@@ -28,6 +28,8 @@ import type { Clock } from "../clock/index.js";
 import type { ReadinessProbe } from "../probes/index.js";
 import type { SessionStore } from "../permission/session-store.js";
 import type { Dispatcher } from "./dispatcher.js";
+import type { InMemoryTestAdapter } from "./test-double.js";
+import type { ProviderAdapter } from "./adapter.js";
 import type { DispatchRequest } from "./types.js";
 
 const SESSION_ID_RE = /^ses_[A-Za-z0-9]{16,}$/;
@@ -49,6 +51,15 @@ export interface DispatchRouteOptions {
   bootstrapBearer?: string;
   /** Per-bearer rate limit under admin:read (default 60). */
   adminRequestsPerMinute?: number;
+  /**
+   * Optional — the adapter wired into the dispatcher. When this is the
+   * InMemoryTestAdapter, the plugin exposes POST /dispatch/debug/set-behavior
+   * (admin-only) so conformance probes can drive fault injection at runtime
+   * without restarting the Runner. Real adapters leave the debug route
+   * unregistered (404) — a production leak of this is defense-in-depth
+   * impossible because the adapter type check gates the registration.
+   */
+  adapterForDebug?: ProviderAdapter;
 }
 
 class PerBearerLimiter {
@@ -202,4 +213,33 @@ export const dispatchPlugin: FastifyPluginAsync<DispatchRouteOptions> = async (a
     }
     return reply.code(200).send(body);
   });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // POST /dispatch/debug/set-behavior — conformance-probe fault injection.
+  //
+  // Only registered when the adapter wired into the dispatcher is the
+  // in-memory test-double. Real adapters never expose this route. Admin-
+  // bearer only — no session-bearer path. Accepts {"behavior": "<dsl>"}
+  // per the InMemoryTestAdapter behavior DSL.
+  // ────────────────────────────────────────────────────────────────────────
+  const adapter = opts.adapterForDebug;
+  const isTestDouble =
+    adapter !== undefined &&
+    typeof (adapter as InMemoryTestAdapter).setBehavior === "function" &&
+    adapter.name === "in-memory-test-adapter";
+
+  if (isTestDouble && opts.bootstrapBearer !== undefined) {
+    const td = adapter as InMemoryTestAdapter;
+    const admin = opts.bootstrapBearer;
+    app.post("/dispatch/debug/set-behavior", async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      const bearer = extractBearer(request);
+      if (bearer !== admin) return reply.code(403).send({ error: "admin-only" });
+      const body = request.body as Record<string, unknown> | null;
+      const behavior = body && typeof body["behavior"] === "string" ? (body["behavior"] as string) : null;
+      if (behavior === null) return reply.code(400).send({ error: "missing-behavior" });
+      td.setBehavior(behavior);
+      return reply.code(200).send({ status: "ok", behavior });
+    });
+  }
 };
