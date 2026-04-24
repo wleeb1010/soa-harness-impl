@@ -68,10 +68,17 @@ jobs:
           # immediately after /ready flips green.
           node ./start.mjs > demo.log 2>&1 &
           DEMO_PID=$!
-          # Poll /audit/tail until record_count > 0.
-          for i in $(seq 1 60); do
+          # Poll /audit/tail until record_count > 0. Two safety rails:
+          #   1. --max-time 1 caps each curl at 1s (connect + transfer).
+          #      Default curl TCP-connect timeout is ~130s on Windows; without
+          #      this bound, a single slow-to-bind Runner inflates total
+          #      wall-clock dramatically (observed: 190s on windows-latest).
+          #   2. 40 iterations × (1s sleep + ≤1s curl) = ≤80s poll ceiling,
+          #      leaving 40s of scaffold + Runner-boot headroom under the
+          #      120s overall demo ceiling.
+          for i in $(seq 1 40); do
             sleep 1
-            BODY=$(curl -s -H "Authorization: Bearer ${SOA_RUNNER_BOOTSTRAP_BEARER:-demo-bootstrap-bearer-replace-me}" http://127.0.0.1:7700/audit/tail || true)
+            BODY=$(curl -s --max-time 1 -H "Authorization: Bearer ${SOA_RUNNER_BOOTSTRAP_BEARER:-demo-bootstrap-bearer-replace-me}" http://127.0.0.1:7700/audit/tail || true)
             COUNT=$(echo "$BODY" | node -e "try{console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).record_count||0)}catch{console.log(0)}")
             if [ "$COUNT" -gt 0 ]; then
               break
