@@ -22,10 +22,6 @@ const TEMPLATE_DIR_BY_MEMORY: Record<MemoryBackendChoice, string> = {
 };
 const DEFAULT_MEMORY_BACKEND: MemoryBackendChoice = "sqlite";
 
-/** Legacy single-template export retained for tests; always resolves to
- *  the sqlite-default `runner-starter/` directory. */
-const TEMPLATE_ROOT = join(TEMPLATES_DIR, TEMPLATE_DIR_BY_MEMORY[DEFAULT_MEMORY_BACKEND]);
-
 function resolveTemplateRoot(memory: MemoryBackendChoice): string {
   const dir = TEMPLATE_DIR_BY_MEMORY[memory];
   if (!dir) throw new Error(`create-soa-agent: unknown --memory=${memory}`);
