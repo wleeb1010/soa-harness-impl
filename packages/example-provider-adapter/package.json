@@ -1,0 +1,37 @@
+{
+  "name": "@soa-harness/example-provider-adapter",
+  "version": "1.1.0-dev.0",
+  "description": "Reference ProviderAdapter scaffold for @soa-harness/runner §16.3 dispatcher. Shows the shape adopters follow when wiring a real LLM provider (OpenAI, Anthropic, Bedrock, Azure, local llama.cpp server, ...). NOT intended to be used as-is in production — this is a copy-and-customize starting point.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@soa-harness/runner": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
