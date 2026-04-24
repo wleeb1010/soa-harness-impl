@@ -55,7 +55,9 @@ MOCK_PORT="8001"
 
 # Validator-agreed literals (see STATUS.md entries for L-21 + L-24 era).
 # Do NOT rotate these mid-session without notifying the sibling validator.
-BOOTSTRAP_BEARER="soa-conformance-week3-test-bearer"
+# L-53 / Phase 2.6 handoff: validator requested `validator-baseline-bearer`
+# for the live-baseline poll against the adapter-published impl state.
+BOOTSTRAP_BEARER="validator-baseline-bearer"
 DEMO_SESSION="ses_demoWeek3Conformance01:soa-conformance-week3-decide-bearer:DangerFullAccess"
 
 # --- Helpers ----------------------------------------------------------------
