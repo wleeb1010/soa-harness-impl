@@ -151,6 +151,10 @@ export {
   MAX_DISPATCHER_RETRIES,
   DISPATCHER_ERROR_SUBCODES,
   classifyThrowable,
+  // §16.6 streaming dispatcher (v1.2 additions)
+  InFlightRegistry,
+  serializeSseFrame,
+  runStreamDispatch,
   type DispatcherOptions,
   type InMemoryTestAdapterOptions,
   type TestAdapterCall,
@@ -167,5 +171,6 @@ export {
   type DispatchRecentRow,
   type DispatchRecentResponse,
   type StopReason,
-  type DispatcherErrorCode
+  type DispatcherErrorCode,
+  type StreamedDispatchEvent
 } from "./dispatch/index.js";
