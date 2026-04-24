@@ -1,0 +1,90 @@
+{
+  "name": "soa-harness-vscode",
+  "displayName": "SOA-Harness",
+  "description": "VS Code support for SOA-Harness v1.2. Reads .soa/ workspace config, surfaces Runner status in the sidebar, fires dispatches against the configured Runner from the editor.",
+  "version": "1.2.0-dev.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "publisher": "soa-harness",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "soaHarness.refreshStatus",
+        "title": "SOA-Harness: Refresh Runner Status",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "soaHarness.dispatch",
+        "title": "SOA-Harness: Dispatch from Editor"
+      },
+      {
+        "command": "soaHarness.tailAudit",
+        "title": "SOA-Harness: Tail Audit Log"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "soaHarness.runnerStatus",
+          "name": "SOA Runner",
+          "icon": "$(dashboard)",
+          "contextualTitle": "SOA-Harness"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "soaHarness.refreshStatus",
+          "when": "view == soaHarness.runnerStatus",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "soaHarness.dispatch",
+          "group": "9_soa"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SOA-Harness",
+      "properties": {
+        "soaHarness.runnerUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:7700",
+          "description": "Base URL of the Runner. Also read from .soa/config.json when present."
+        },
+        "soaHarness.sessionBearer": {
+          "type": "string",
+          "default": "",
+          "description": "Session bearer for the configured Runner. Consider setting via .soa/config.json so the token isn't in your user settings."
+        },
+        "soaHarness.autoRefreshMs": {
+          "type": "number",
+          "default": 5000,
+          "description": "Refresh interval for the Runner-status tree view. Set 0 to disable auto-refresh."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.6.0"
+  }
+}
