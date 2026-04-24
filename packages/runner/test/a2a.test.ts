@@ -16,6 +16,8 @@ import {
   isWellFormedA2aDigest,
   matchA2aCapabilities,
   resolveA2aDeadlines,
+  computeA2aMessagesDigest,
+  computeA2aWorkflowDigest,
 } from "../src/a2a/index.js";
 
 const VALID_DIGEST = "sha256:" + "a".repeat(64);
@@ -378,6 +380,29 @@ describe("POST /a2a/v1 — handoff.offer §17.2.3 capability matching", () => {
 describe("POST /a2a/v1 — handoff.transfer + handoff.status flow", () => {
   it("transfer records accepted; status returns it; return records completed", async () => {
     const app = await bootApp();
+    const messages = [{ role: "user", content: "hi" }];
+    const workflow = { task_id: "task_flow", status: "Handoff", side_effects: [] };
+    // §17.2.5: offer MUST land before transfer so receiver retains digests
+    // to recompute against.
+    const offer = await app.inject({
+      method: "POST",
+      url: "/a2a/v1",
+      headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+      payload: {
+        jsonrpc: "2.0",
+        id: "0",
+        method: "handoff.offer",
+        params: {
+          task_id: "task_flow",
+          summary: "flow",
+          messages_digest: computeA2aMessagesDigest(messages),
+          workflow_digest: computeA2aWorkflowDigest(workflow),
+          capabilities_needed: [],
+        },
+      },
+    });
+    expect(JSON.parse(offer.body).result.accept).toBe(true);
+
     const transfer = await app.inject({
       method: "POST",
       url: "/a2a/v1",
@@ -388,8 +413,8 @@ describe("POST /a2a/v1 — handoff.transfer + handoff.status flow", () => {
         method: "handoff.transfer",
         params: {
           task_id: "task_flow",
-          messages: [{ role: "user", content: "hi" }],
-          workflow: { task_id: "task_flow", status: "Handoff", side_effects: [] },
+          messages,
+          workflow,
           billing_tag: "tenant-a/env-test",
           correlation_id: "cor_" + "c".repeat(20),
         },

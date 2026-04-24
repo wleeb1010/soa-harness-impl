@@ -2,7 +2,16 @@ export {
   a2aPlugin,
   A2aTaskRegistry,
   type A2aPluginOptions,
+  type A2aOfferMetadata,
 } from "./plugin.js";
+export {
+  computeA2aMessagesDigest,
+  computeA2aWorkflowDigest,
+  computeA2aResultDigest,
+  checkTransferDigests,
+  type A2aTransferDigestOutcome,
+  type CheckTransferDigestsInput,
+} from "./digest-check.js";
 export {
   A2A_ERROR_CODES,
   a2aError,

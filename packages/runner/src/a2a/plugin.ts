@@ -30,6 +30,7 @@ import type {
 } from "./types.js";
 import { resolveA2aDeadlines, A2A_TERMINAL_HANDOFF_STATUS } from "./types.js";
 import { matchA2aCapabilities } from "./matching.js";
+import { checkTransferDigests } from "./digest-check.js";
 import {
   verifyA2aJwt,
   a2aJwtOutcomeToError,
@@ -40,14 +41,34 @@ import {
 import type { A2aEtagDriftOutcome } from "./signer-discovery.js";
 import type { TLSSocket } from "node:tls";
 
+export interface A2aOfferMetadata {
+  messages_digest: string;
+  workflow_digest: string;
+  /** Unix seconds at which the offer was accepted (for §17.2.5 retention-window check). */
+  offeredAtS: number;
+}
+
+interface A2aTaskRow {
+  status: A2aHandoffStatus;
+  last_event_id: string | null;
+  offer?: A2aOfferMetadata;
+}
+
 /**
- * In-memory per-task status tracker for W1. Production impl replaces this
- * with a §12 bracket-persisted store; for now callers set status via
- * recordHandoffStatus() so SV-A2A-15 can assert transitions without
- * requiring the full workflow machinery.
+ * In-memory per-task registry. Carries per-task HandoffStatus (§17.2.1)
+ * AND the §17.2.5 offer-state tuple the receiver retains between
+ * handoff.offer and handoff.transfer. Production impl replaces this with
+ * a §12 bracket-persisted store; v1.3 does not mandate persistence
+ * (restart-crash collapses to workflow-state-incompatible per §17.2.5).
  */
 export class A2aTaskRegistry {
-  private readonly tasks = new Map<string, { status: A2aHandoffStatus; last_event_id: string | null }>();
+  private readonly tasks = new Map<string, A2aTaskRow>();
+  /** Retention window in seconds — defaults to §17.2.2 transfer deadline (30 s). */
+  private readonly retentionWindowS: number;
+
+  constructor(opts: { retentionWindowS?: number } = {}) {
+    this.retentionWindowS = opts.retentionWindowS ?? 30;
+  }
 
   /** §17.2.1 — record a status. Terminal states MUST NOT transition forward. */
   record(taskId: string, status: A2aHandoffStatus, last_event_id: string | null): void {
@@ -56,11 +77,39 @@ export class A2aTaskRegistry {
       // Monotonicity: terminal states lock in per §17.2.1.
       return;
     }
-    this.tasks.set(taskId, { status, last_event_id });
+    this.tasks.set(taskId, { ...(prev ?? {}), status, last_event_id });
+  }
+
+  /**
+   * §17.2.5 — record the advertised digests + offered-at timestamp when
+   * the receiver accepts a handoff.offer. Used by handoff.transfer to
+   * recompute and compare.
+   */
+  recordOffer(taskId: string, meta: A2aOfferMetadata): void {
+    const prev = this.tasks.get(taskId);
+    this.tasks.set(taskId, {
+      status: prev?.status ?? "accepted",
+      last_event_id: prev?.last_event_id ?? null,
+      offer: meta,
+    });
+  }
+
+  /**
+   * Return the offer metadata iff it was recorded AND is still within the
+   * §17.2.2 transfer-deadline retention window. Past-deadline offers
+   * collapse to null per §17.2.5.
+   */
+  getOfferMetadata(taskId: string, nowS: number): A2aOfferMetadata | null {
+    const row = this.tasks.get(taskId);
+    if (!row || !row.offer) return null;
+    if (nowS - row.offer.offeredAtS > this.retentionWindowS) return null;
+    return row.offer;
   }
 
   get(taskId: string): { status: A2aHandoffStatus; last_event_id: string | null } | undefined {
-    return this.tasks.get(taskId);
+    const row = this.tasks.get(taskId);
+    if (!row) return undefined;
+    return { status: row.status, last_event_id: row.last_event_id };
   }
 
   has(taskId: string): boolean {
@@ -130,6 +179,11 @@ export interface A2aPluginOptions {
    * surface cannot drift.
    */
   a2aCapabilities?: string[];
+  /**
+   * Clock source (unix seconds). Defaults to wall clock. Injected by tests
+   * that need to control the §17.2.5 transfer-deadline retention window.
+   */
+  nowFn?: () => number;
 }
 
 type AnyJsonRpcResponse = JsonRpcResponse<unknown>;
@@ -166,8 +220,10 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
   if (opts.bearer === undefined && opts.jwt === undefined) {
     throw new Error("a2aPlugin: at least one of { bearer, jwt } MUST be provided");
   }
-  const registry = opts.taskRegistry ?? new A2aTaskRegistry();
   const deadlines = resolveA2aDeadlines();
+  const nowFn: () => number = opts.nowFn ?? (() => Math.floor(Date.now() / 1000));
+  const registry =
+    opts.taskRegistry ?? new A2aTaskRegistry({ retentionWindowS: deadlines.transfer_s });
   // W3 slice 1: a lazily-initialised jti cache the plugin owns when the
   // caller didn't supply one. Prevents each request from seeing an empty
   // cache and silently accepting replays.
@@ -247,10 +303,10 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
         response = handleAgentDescribe(id, opts);
         break;
       case "handoff.offer":
-        response = handleHandoffOffer(id, rpc.params, registry, opts.a2aCapabilities);
+        response = handleHandoffOffer(id, rpc.params, registry, opts.a2aCapabilities, nowFn);
         break;
       case "handoff.transfer":
-        response = handleHandoffTransfer(id, rpc.params, registry);
+        response = handleHandoffTransfer(id, rpc.params, registry, nowFn);
         break;
       case "handoff.status":
         response = handleHandoffStatus(id, rpc.params, registry);
@@ -290,6 +346,7 @@ function handleHandoffOffer(
   params: unknown,
   registry: A2aTaskRegistry,
   a2aCapabilities: string[] | undefined,
+  nowFn: () => number,
 ): JsonRpcResponse<A2aHandoffOfferResult> {
   const p = params as A2aHandoffOfferParams | undefined;
   if (!p || typeof p.task_id !== "string" || typeof p.summary !== "string") {
@@ -306,6 +363,13 @@ function handleHandoffOffer(
   const outcome = matchA2aCapabilities(p.capabilities_needed, a2aCapabilities);
   switch (outcome.kind) {
     case "accept":
+      // §17.2.5 retention MUST: record advertised digests + timestamp for
+      // later recompute at handoff.transfer.
+      registry.recordOffer(p.task_id, {
+        messages_digest: p.messages_digest,
+        workflow_digest: p.workflow_digest,
+        offeredAtS: nowFn(),
+      });
       return { jsonrpc: "2.0", id, result: { accept: true } };
     case "reject-no-capabilities":
       return {
@@ -330,23 +394,47 @@ function handleHandoffTransfer(
   id: string | number | null,
   params: unknown,
   registry: A2aTaskRegistry,
+  nowFn: () => number,
 ): JsonRpcResponse<A2aHandoffTransferResult> {
   const p = params as A2aHandoffTransferParams | undefined;
   if (!p || typeof p.task_id !== "string" || !Array.isArray(p.messages) || typeof p.workflow !== "object") {
     return a2aError(id, "HandoffRejected", {
-      reason: "workflow-state-incompatible",
-      message: "malformed transfer params",
+      reason: "wire-incompatibility",
+      message: "malformed transfer params (task_id, messages, workflow)",
     });
   }
   if (typeof p.billing_tag !== "string" || typeof p.correlation_id !== "string") {
     return a2aError(id, "HandoffRejected", {
-      reason: "workflow-state-incompatible",
+      reason: "wire-incompatibility",
       message: "missing billing_tag or correlation_id",
     });
   }
-  // W1: W2 wires real session creation + state import. For now we mint a
-  // synthetic destination_session_id and record the task as `accepted` per
-  // §17.2.1.
+
+  // §17.2.5 per-method digest recompute: lookup the retained offer
+  // digests, recompute over the wire-delivered messages + workflow,
+  // compare. Missing offer state collapses to workflow-state-incompatible
+  // per §17.2.5's restart-crash observability rule.
+  const offerMeta = registry.getOfferMetadata(p.task_id, nowFn());
+  const digestOutcome = checkTransferDigests({
+    messages: p.messages,
+    workflow: p.workflow,
+    offerMetadata: offerMeta,
+  });
+  if (digestOutcome.kind === "missing-offer-state") {
+    return a2aError(id, "HandoffRejected", {
+      reason: "workflow-state-incompatible",
+      message: `no retained offer state for task_id=${p.task_id} (never-seen OR past §17.2.2 transfer deadline OR lost across receiver restart)`,
+    });
+  }
+  if (digestOutcome.kind === "digest-mismatch") {
+    return a2aError(id, "HandoffRejected", {
+      reason: "digest-mismatch",
+      message: `§17.2.5 recompute mismatch on fields: ${digestOutcome.fieldMismatches.join(", ")}`,
+    });
+  }
+
+  // §17.2.5 accept path: W1 stub session creation — W2+ wires real
+  // session import per §17.4. Record as `accepted` per §17.2.1.
   const destId = `ses_${p.task_id.slice(0, 16).padEnd(16, "0")}`;
   registry.record(p.task_id, "accepted", null);
   return {
