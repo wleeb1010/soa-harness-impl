@@ -45,6 +45,60 @@ The programmatic API exports `startRunner`, `loadInitialTrust`,
 `BootOrchestrator`, `AuditChain`, `loadToolRegistry`, `CrlCache`,
 `InMemorySessionStore`, `generateEd25519KeyPair`, and friends.
 
+## LLM Dispatcher (§16.3, v1.1+)
+
+The Runner includes an LLM dispatcher wrapping provider-specific adapters.
+Adopter's job: implement `ProviderAdapter` for their chosen LLM; the
+dispatcher handles budget pre-check, billing-tag propagation, cancellation,
+retry budget, error classification, and audit.
+
+Minimal wiring:
+
+```typescript
+import { buildRunnerApp, Dispatcher, BudgetTracker, AuditChain } from "@soa-harness/runner";
+import { ExampleProviderAdapter } from "@soa-harness/example-provider-adapter";
+
+const adapter = new ExampleProviderAdapter({
+  baseUrl: "https://api.openai.com/v1",
+  apiKey: process.env.OPENAI_API_KEY!,
+  name: "openai",
+});
+
+const dispatcher = new Dispatcher({
+  adapter,
+  budgetTracker: new BudgetTracker(),
+  auditChain: new AuditChain(() => new Date()),
+  clock: () => new Date(),
+  runnerVersion: "1.1",
+});
+
+const app = await buildRunnerApp({
+  // ... other opts
+  dispatch: {
+    dispatcher,
+    sessionStore,
+    clock: () => new Date(),
+    runnerVersion: "1.1",
+    bootstrapBearer: process.env.SOA_OPERATOR_BEARER, // optional — unlocks admin on /dispatch/recent
+  },
+});
+```
+
+Exposes:
+- `POST /dispatch` — fire one dispatch; session-bearer auth; schema-validated
+- `GET /dispatch/recent` — observability ring buffer; newest-first; session or admin bearer
+
+For a real-provider scaffold showing request shaping + error classification
++ abort-signal handling, see `@soa-harness/example-provider-adapter`.
+
+For conformance-probe fault injection (the `InMemoryTestAdapter` DSL), set
+`SOA_DISPATCH_ADAPTER=test-double + SOA_DISPATCH_TEST_DOUBLE_CONFIRM=1` at
+Runner boot. The dispatcher auto-registers in test-double mode and exposes
+`POST /dispatch/debug/set-behavior` (admin-only).
+
+See Core spec §16.3 / §16.3.1 / §16.4 / §16.5 for the normative contract
+and `SV-LLM-01..07` for the conformance probes.
+
 ## Conformance
 
 Validate against the Go [`soa-validate`](https://github.com/wleeb1010/soa-validate)
@@ -52,6 +106,15 @@ harness:
 
 ```
 soa-validate --agent-url http://localhost:7700 --profile core
+```
+
+For the scaffolded-agent flow: `npm run conform` inside a project produced
+by `create-soa-agent` auto-runs the validator.
+
+To sanity-check validator-vs-Runner pin alignment before the full suite:
+
+```
+soa-validate --check-pins --impl-url http://localhost:7700
 ```
 
 ## License
