@@ -1,6 +1,6 @@
 {
   "name": "@soa-harness/memory-mcp-mem0",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "mem0-backed Memory MCP implementing the SOA-Harness §8.1 6-tool protocol. Qdrant vector store + OpenAI or local Ollama LLM/embedder.",
   "license": "Apache-2.0",
   "type": "module",

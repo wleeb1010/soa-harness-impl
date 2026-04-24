@@ -10,6 +10,7 @@
     "conform": "node ./conform.mjs"
   },
   "dependencies": {
-    "@soa-harness/runner": "^1.0.0"
+    "@soa-harness/runner": "^1.1.1",
+    "@soa-harness/schemas": "^1.1.1"
   }
 }

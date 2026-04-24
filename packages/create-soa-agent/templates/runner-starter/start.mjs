@@ -19,6 +19,7 @@ import {
   loadToolRegistry,
   AuditChain
 } from "@soa-harness/runner";
+import { PINNED_SPEC_COMMIT } from "@soa-harness/schemas";
 import {
   SqliteMemoryBackend,
   buildSqliteServer
@@ -86,35 +87,40 @@ async function main() {
     readiness: boot,
     host: "127.0.0.1",
     port: PORT,
+    governance: {
+      clock: () => new Date(),
+      pinnedSpecCommit: PINNED_SPEC_COMMIT,
+      runnerVersion: "1.1"
+    },
     permissionsResolve: {
       registry,
       sessionStore,
       clock: () => new Date(),
       activeCapability: card.permissions?.activeMode ?? "ReadOnly",
-      runnerVersion: "1.0"
+      runnerVersion: "1.1"
     },
     sessionsBootstrap: {
       sessionStore,
       clock: () => new Date(),
       cardActiveMode: card.permissions?.activeMode ?? "ReadOnly",
       bootstrapBearer: BOOTSTRAP_BEARER,
-      runnerVersion: "1.0"
+      runnerVersion: "1.1"
     },
-    auditTail: { chain, sessionStore, clock: () => new Date(), runnerVersion: "1.0" },
-    auditRecords: { chain, sessionStore, clock: () => new Date(), runnerVersion: "1.0" },
+    auditTail: { chain, sessionStore, clock: () => new Date(), runnerVersion: "1.1" },
+    auditRecords: { chain, sessionStore, clock: () => new Date(), runnerVersion: "1.1" },
     permissionsDecisions: {
       registry,
       sessionStore,
       chain,
       clock: () => new Date(),
       activeCapability: card.permissions?.activeMode ?? "ReadOnly",
-      runnerVersion: "1.0"
+      runnerVersion: "1.1"
     },
     memoryState: {
       memoryStore,
       sessionStore,
       clock: () => new Date(),
-      runnerVersion: "1.0"
+      runnerVersion: "1.1"
     }
   });
 
