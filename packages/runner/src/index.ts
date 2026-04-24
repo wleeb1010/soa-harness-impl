@@ -143,3 +143,29 @@ export {
   type MemoryStateRouteOptions,
   type SharingPolicy
 } from "./memory/index.js";
+export {
+  Dispatcher,
+  AdapterError,
+  InMemoryTestAdapter,
+  RETRYABLE_ERRORS,
+  MAX_DISPATCHER_RETRIES,
+  DISPATCHER_ERROR_SUBCODES,
+  classifyThrowable,
+  type DispatcherOptions,
+  type InMemoryTestAdapterOptions,
+  type TestAdapterCall,
+  type ProviderAdapter,
+  type AdapterDispatchContext,
+  type DispatchRequest,
+  type DispatchResponse,
+  type DispatchMessage,
+  type DispatchRole,
+  type DispatchContentBlock,
+  type DispatchToolDescriptor,
+  type DispatchToolCall,
+  type DispatchUsage,
+  type DispatchRecentRow,
+  type DispatchRecentResponse,
+  type StopReason,
+  type DispatcherErrorCode
+} from "./dispatch/index.js";
