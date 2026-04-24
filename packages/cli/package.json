@@ -1,0 +1,40 @@
+{
+  "name": "@soa-harness/cli",
+  "version": "1.2.0-dev.0",
+  "description": "`soa` command-line client for SOA-Harness v1.2. Wraps the Runner HTTP surface + soa-validate binary so operators can chat, check health, tail the audit log, and drive conformance without hand-authoring fetch() calls or Go invocations.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "soa": "./dist/bin/soa.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@soa-harness/runner": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
