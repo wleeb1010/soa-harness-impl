@@ -391,6 +391,14 @@ export interface BuildRunnerOptions {
     bearer: string;
     /** Receiver-side §17.2.3 capability surface. Absence OR [] means "serves no A2A capabilities". */
     a2aCapabilities?: string[];
+    /**
+     * §17.2.2.1 loopback-guard assertion. Set to the host the caller
+     * intends to bind `/a2a/v1` on (e.g., "127.0.0.1" or "::1"). Only
+     * consulted when `SOA_A2A_AUTO_EXECUTE_AFTER_S` is set in the
+     * environment; if non-loopback in that case, `buildRunnerApp` throws
+     * per the §17.2.2.1 "MUST refuse startup" clause.
+     */
+    boundHost?: string;
   };
   fastifyOptions?: FastifyServerOptions;
 }
@@ -422,11 +430,51 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       privateKey: opts.privateKey,
       x5c: opts.x5c,
     });
+    // §17.2.2.1 destination-execute-hook startup validation. Fail-closed:
+    // refuse startup on any misconfiguration per the §17.2.2.1 MUST.
+    let autoExecuteAfterS: number | undefined;
+    const rawHook = process.env["SOA_A2A_AUTO_EXECUTE_AFTER_S"];
+    if (rawHook !== undefined && rawHook !== "") {
+      const n = Number.parseInt(rawHook, 10);
+      if (!Number.isInteger(n) || n <= 0) {
+        throw new Error(
+          `§17.2.2.1: SOA_A2A_AUTO_EXECUTE_AFTER_S=${rawHook} is not a positive integer — refusing startup.`,
+        );
+      }
+      const taskDeadlineS = Number.parseInt(
+        process.env["SOA_A2A_TASK_DEADLINE_S"] ?? "300",
+        10,
+      );
+      if (2 * n >= taskDeadlineS) {
+        throw new Error(
+          `§17.2.2.1: 2*SOA_A2A_AUTO_EXECUTE_AFTER_S (${2 * n}) must be < SOA_A2A_TASK_DEADLINE_S (${taskDeadlineS}) — refusing startup (deadline-collision guard).`,
+        );
+      }
+      const host = opts.a2a.boundHost;
+      const isLoopback =
+        host === undefined ||
+        host === "127.0.0.1" ||
+        host === "::1" ||
+        host === "localhost" ||
+        host === "0.0.0.0" === false; // 0.0.0.0 is NOT loopback
+      if (host !== undefined && !(host === "127.0.0.1" || host === "::1" || host === "localhost")) {
+        throw new Error(
+          `§17.2.2.1: SOA_A2A_AUTO_EXECUTE_AFTER_S set but boundHost=${host} is non-loopback — refusing startup. Set opts.a2a.boundHost to "127.0.0.1" / "::1" / "localhost" for loopback-only testing, or unset the env var.`,
+        );
+      }
+      if (!isLoopback) {
+        throw new Error(
+          "§17.2.2.1: SOA_A2A_AUTO_EXECUTE_AFTER_S set but boundHost is non-loopback — refusing startup.",
+        );
+      }
+      autoExecuteAfterS = n;
+    }
     await app.register(a2aPlugin, {
       bearer: opts.a2a.bearer,
       card: opts.card,
       cardJws: signedCard.detachedJws,
       ...(opts.a2a.a2aCapabilities !== undefined ? { a2aCapabilities: opts.a2a.a2aCapabilities } : {}),
+      ...(autoExecuteAfterS !== undefined ? { autoExecuteAfterS } : {}),
     });
   }
 

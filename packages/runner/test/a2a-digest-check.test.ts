@@ -8,7 +8,7 @@
  *   - transfer with digest mismatch → digest-mismatch
  *   - transfer past §17.2.2 deadline → workflow-state-incompatible
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import Fastify from "fastify";
 import {
   a2aPlugin,
@@ -151,6 +151,71 @@ describe("A2aTaskRegistry task-execution deadline (§17.2.2 MUST enforce)", () =
     const row = reg.get("t1", 2000);
     expect(row?.status).toBe("timed-out");
     expect(row?.last_event_id).toBe("evt_42");
+  });
+});
+
+describe("A2aTaskRegistry execute hook (§17.2.2.1)", () => {
+  it("schedules accepted → executing at N seconds", () => {
+    vi.useFakeTimers();
+    const reg = new A2aTaskRegistry();
+    reg.record("t1", "accepted", null);
+    reg.scheduleAutoExecute("t1", 2); // N=2
+    expect(reg.get("t1")?.status).toBe("accepted");
+    vi.advanceTimersByTime(1999);
+    expect(reg.get("t1")?.status).toBe("accepted");
+    vi.advanceTimersByTime(2);
+    expect(reg.get("t1")?.status).toBe("executing");
+    vi.useRealTimers();
+  });
+
+  it("schedules executing → completed at 2N seconds", () => {
+    vi.useFakeTimers();
+    const reg = new A2aTaskRegistry();
+    reg.record("t1", "accepted", null);
+    reg.scheduleAutoExecute("t1", 2);
+    vi.advanceTimersByTime(3999);
+    expect(reg.get("t1")?.status).toBe("executing");
+    vi.advanceTimersByTime(2);
+    expect(reg.get("t1")?.status).toBe("completed");
+    vi.useRealTimers();
+  });
+
+  it("cancelAutoExecute stops pending transitions", () => {
+    vi.useFakeTimers();
+    const reg = new A2aTaskRegistry();
+    reg.record("t1", "accepted", null);
+    reg.scheduleAutoExecute("t1", 5);
+    vi.advanceTimersByTime(2000);
+    reg.cancelAutoExecute("t1");
+    vi.advanceTimersByTime(20000);
+    expect(reg.get("t1")?.status).toBe("accepted"); // never transitioned
+    vi.useRealTimers();
+  });
+
+  it("duplicate scheduleAutoExecute is noop (first schedule wins)", () => {
+    vi.useFakeTimers();
+    const reg = new A2aTaskRegistry();
+    reg.record("t1", "accepted", null);
+    reg.scheduleAutoExecute("t1", 2);
+    // Second call with longer N — MUST NOT replace the first.
+    reg.scheduleAutoExecute("t1", 100);
+    vi.advanceTimersByTime(2001);
+    expect(reg.get("t1")?.status).toBe("executing"); // fired at the original N=2
+    vi.useRealTimers();
+  });
+
+  it("terminal state recorded via handoff.return + cancelAutoExecute wins over scheduled transitions", () => {
+    vi.useFakeTimers();
+    const reg = new A2aTaskRegistry();
+    reg.record("t1", "accepted", null);
+    reg.scheduleAutoExecute("t1", 5);
+    vi.advanceTimersByTime(3000);
+    reg.cancelAutoExecute("t1");
+    reg.record("t1", "completed", "evt_return");
+    vi.advanceTimersByTime(20000);
+    expect(reg.get("t1")?.status).toBe("completed");
+    expect(reg.get("t1")?.last_event_id).toBe("evt_return");
+    vi.useRealTimers();
   });
 });
 

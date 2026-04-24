@@ -83,10 +83,44 @@ export class A2aTaskRegistry {
   private readonly retentionWindowS: number;
   /** §17.2.2 destination task-execution deadline (default 300 s). */
   private readonly taskExecutionDeadlineS: number;
+  /** §17.2.2.1 pending auto-execute timer handles, keyed by task_id. */
+  private readonly autoExecuteTimers = new Map<string, Array<ReturnType<typeof setTimeout>>>();
 
   constructor(opts: { retentionWindowS?: number; taskExecutionDeadlineS?: number } = {}) {
     this.retentionWindowS = opts.retentionWindowS ?? 30;
     this.taskExecutionDeadlineS = opts.taskExecutionDeadlineS ?? 300;
+  }
+
+  /**
+   * §17.2.2.1 — schedule the accepted→executing→completed transitions at
+   * N and 2N seconds respectively. Noop if timers already scheduled for
+   * this task_id (duplicate-transfer clause: "MUST NOT reset or
+   * reschedule"). Returns cancellation handles for the caller to abort
+   * on handoff.return.
+   */
+  scheduleAutoExecute(taskId: string, afterS: number): void {
+    if (this.autoExecuteTimers.has(taskId)) return;
+    const t1 = setTimeout(() => {
+      this.record(taskId, "executing", null);
+    }, afterS * 1000);
+    const t2 = setTimeout(() => {
+      this.record(taskId, "completed", null);
+      this.autoExecuteTimers.delete(taskId);
+    }, 2 * afterS * 1000);
+    // Both timers are "soft" — they MUST NOT keep the event loop alive
+    // after the rest of the Runner shuts down. Node's Timeout.unref()
+    // achieves that.
+    (t1 as { unref?: () => void }).unref?.();
+    (t2 as { unref?: () => void }).unref?.();
+    this.autoExecuteTimers.set(taskId, [t1, t2]);
+  }
+
+  /** §17.2.2.1 — cancel pending auto-execute timers on handoff.return. */
+  cancelAutoExecute(taskId: string): void {
+    const timers = this.autoExecuteTimers.get(taskId);
+    if (!timers) return;
+    for (const t of timers) clearTimeout(t);
+    this.autoExecuteTimers.delete(taskId);
   }
 
   /** §17.2.1 — record a status. Terminal states MUST NOT transition forward. */
@@ -227,6 +261,17 @@ export interface A2aPluginOptions {
    */
   a2aCapabilities?: string[];
   /**
+   * §17.2.2.1 destination-execute-hook — positive integer N seconds.
+   * When set, the registry schedules accepted→executing at N seconds
+   * and executing→completed at 2N seconds for every successful
+   * handoff.transfer (unless handoff.return arrives first and cancels
+   * the pair). Loopback-guard + deadline-collision-guard validation is
+   * the CALLER's responsibility; the plugin trusts whatever positive
+   * integer is passed. Server-level validation happens in server.ts
+   * before this option is populated.
+   */
+  autoExecuteAfterS?: number;
+  /**
    * Clock source (unix seconds). Defaults to wall clock. Injected by tests
    * that need to control the §17.2.5 transfer-deadline retention window.
    */
@@ -357,7 +402,7 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
         response = handleHandoffOffer(id, rpc.params, registry, opts.a2aCapabilities, nowFn);
         break;
       case "handoff.transfer":
-        response = handleHandoffTransfer(id, rpc.params, registry, nowFn);
+        response = handleHandoffTransfer(id, rpc.params, registry, nowFn, opts.autoExecuteAfterS);
         break;
       case "handoff.status":
         response = handleHandoffStatus(id, rpc.params, registry, nowFn);
@@ -446,6 +491,7 @@ function handleHandoffTransfer(
   params: unknown,
   registry: A2aTaskRegistry,
   nowFn: () => number,
+  autoExecuteAfterS: number | undefined,
 ): JsonRpcResponse<A2aHandoffTransferResult> {
   const p = params as A2aHandoffTransferParams | undefined;
   if (!p || typeof p.task_id !== "string" || !Array.isArray(p.messages) || typeof p.workflow !== "object") {
@@ -489,6 +535,12 @@ function handleHandoffTransfer(
   // stamp the §17.2.2 task-execution-deadline start.
   const destId = `ses_${p.task_id.slice(0, 16).padEnd(16, "0")}`;
   registry.record(p.task_id, "accepted", null, nowFn());
+  // §17.2.2.1 — schedule the destination execute hook if configured.
+  // Callers that opt in pass a positive integer N; the registry
+  // dedupes on task_id so replay-transfers won't reschedule.
+  if (autoExecuteAfterS !== undefined && autoExecuteAfterS > 0) {
+    registry.scheduleAutoExecute(p.task_id, autoExecuteAfterS);
+  }
   return {
     jsonrpc: "2.0",
     id,
@@ -537,6 +589,10 @@ function handleHandoffReturn(
     });
   }
   // W1: record terminal status. W2 wires digest recomputation + compare.
+  // §17.2.2.1: handoff.return cancels any pending auto-execute timers
+  // for this task_id so the synthetic executing→completed transition
+  // doesn't fire after the real return path has locked in completed.
+  registry.cancelAutoExecute(p.task_id);
   registry.record(p.task_id, "completed", null);
   return { jsonrpc: "2.0", id, result: { ack: true } };
 }
