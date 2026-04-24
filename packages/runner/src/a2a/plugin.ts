@@ -30,6 +30,12 @@ import type {
 } from "./types.js";
 import { resolveA2aDeadlines, A2A_TERMINAL_HANDOFF_STATUS } from "./types.js";
 import { matchA2aCapabilities } from "./matching.js";
+import {
+  verifyA2aJwt,
+  a2aJwtOutcomeToError,
+  JtiReplayCache,
+  type A2aJwtKeyResolver,
+} from "./jwt.js";
 
 /**
  * In-memory per-task status tracker for W1. Production impl replaces this
@@ -59,20 +65,48 @@ export class A2aTaskRegistry {
   }
 }
 
+export interface A2aJwtAuthOptions {
+  /** The callee's own URL; JWT `aud` claim MUST equal this. */
+  audience: string;
+  /** §17.1 step 2 signing-key discovery function. */
+  resolveKey: A2aJwtKeyResolver;
+  /**
+   * §17.1 step 3 jti replay cache. When omitted the plugin creates a
+   * per-registration in-memory cache; supply an external one when the
+   * Runner clusters or when tests need to inject a clock.
+   */
+  jtiCache?: JtiReplayCache;
+  /** Acceptable forward clock skew on `iat` (seconds). Default: 60. */
+  clockSkewS?: number;
+  /** Clock source (unix seconds). Default: wall clock. */
+  nowFn?: () => number;
+}
+
 export interface A2aPluginOptions {
   /**
-   * Bearer token accepted by the a2a surface for W1. In W3 this is replaced
-   * by the §17.1 JWT profile. Required; set to a non-empty string.
+   * W1 bearer token. MAY be supplied alongside or instead of `jwt`:
+   *   - `jwt` alone  → production §17.1 mode.
+   *   - `bearer` alone → W1 smoke-test mode (tests, local dev).
+   *   - both present → `jwt` takes precedence on every request; `bearer`
+   *     is ignored.
+   * At least one of the two MUST be provided; the plugin throws at
+   * registration if both are absent.
    */
-  bearer: string;
+  bearer?: string;
+  /**
+   * §17.1 JWT normative profile. When present, bearer is ignored and the
+   * Authorization header is treated as a compact JWT verified per
+   * §17.1 steps 1-3 (slice-1 scope; steps 2-Agent-Card-fetch and 4 etag-
+   * drift land in W3 slice 2).
+   */
+  jwt?: A2aJwtAuthOptions;
   /**
    * Agent Card shipping with this Runner — echoed back as agent.describe
-   * result. W2 work wires a signed JWS; W1 echoes the card object with a
-   * placeholder JWS string the validator schema-probes for wire presence
-   * but does not cryptographically verify.
+   * result. Signed by the same key that signs /.well-known/agent-card.jws
+   * so §17.2.4's per-response JWS-verify invariant holds by construction.
    */
   card: unknown;
-  /** Placeholder JWS for agent.describe responses. W2 replaces with real signed JWS. */
+  /** Detached JWS over JCS(card) per §6.1.1 Agent Card JWS profile. */
   cardJws: string;
   /** In-memory task registry (or caller's store that conforms to the shape). */
   taskRegistry?: A2aTaskRegistry;
@@ -96,8 +130,15 @@ function extractBearer(req: FastifyRequest): string | null {
 }
 
 export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts) => {
+  if (opts.bearer === undefined && opts.jwt === undefined) {
+    throw new Error("a2aPlugin: at least one of { bearer, jwt } MUST be provided");
+  }
   const registry = opts.taskRegistry ?? new A2aTaskRegistry();
   const deadlines = resolveA2aDeadlines();
+  // W3 slice 1: a lazily-initialised jti cache the plugin owns when the
+  // caller didn't supply one. Prevents each request from seeing an empty
+  // cache and silently accepting replays.
+  const jtiCache = opts.jwt?.jtiCache ?? new JtiReplayCache(opts.jwt?.nowFn);
 
   app.post("/a2a/v1", async (request, reply) => {
     // JSON-RPC 2.0 envelope + auth + method dispatch. The envelope check
@@ -118,10 +159,31 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
     const rpc = body as JsonRpcRequest<string, unknown>;
     const id = rpc.id ?? null;
 
-    // §17.1 auth — W1 bearer mode. W3 adds the JWT profile.
-    const bearer = extractBearer(request);
-    if (!bearer || bearer !== opts.bearer) {
-      return reply.code(200).send(a2aError(id, "AuthFailed", { message: "bearer-mismatch-or-missing" }));
+    // §17.1 auth. JWT takes precedence when configured (§17.1 normative
+    // mode); bearer is the W1 smoke-test fallback.
+    const presentedToken = extractBearer(request);
+    if (opts.jwt !== undefined) {
+      if (!presentedToken) {
+        return reply.code(200).send(a2aError(id, "AuthFailed", { message: "missing Authorization: Bearer <jwt>" }));
+      }
+      const outcome = await verifyA2aJwt({
+        jwtCompact: presentedToken,
+        audience: opts.jwt.audience,
+        resolveKey: opts.jwt.resolveKey,
+        jtiCache,
+        ...(opts.jwt.clockSkewS !== undefined ? { clockSkewS: opts.jwt.clockSkewS } : {}),
+        ...(opts.jwt.nowFn !== undefined ? { nowFn: opts.jwt.nowFn } : {}),
+      });
+      const errResponse = a2aJwtOutcomeToError(id, outcome);
+      if (errResponse !== null) {
+        return reply.code(200).send(errResponse);
+      }
+      // JWT valid — proceed.
+    } else {
+      // Bearer fallback.
+      if (!presentedToken || presentedToken !== opts.bearer) {
+        return reply.code(200).send(a2aError(id, "AuthFailed", { message: "bearer-mismatch-or-missing" }));
+      }
     }
 
     let response: AnyJsonRpcResponse;

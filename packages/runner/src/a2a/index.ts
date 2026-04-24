@@ -16,6 +16,22 @@ export {
   type A2aCapabilityMatchOutcome,
 } from "./matching.js";
 export {
+  A2A_JWT_ALLOWED_ALGS,
+  A2A_JWT_MAX_LIFETIME_S,
+  A2A_JWT_JTI_RETENTION_EXTRA_S,
+  A2A_JWT_DEFAULT_CLOCK_SKEW_S,
+  JtiReplayCache,
+  a2aJwtOutcomeToError,
+  verifyA2aJwt,
+  type A2aJwtAlg,
+  type A2aJwtHeader,
+  type A2aJwtPayload,
+  type A2aJwtVerifyOutcome,
+  type A2aJwtKeyResolver,
+  type A2aJwtVerifyKey,
+  type VerifyA2aJwtOptions,
+} from "./jwt.js";
+export {
   A2A_DEFAULT_DEADLINES,
   A2A_TERMINAL_HANDOFF_STATUS,
   resolveA2aDeadlines,
