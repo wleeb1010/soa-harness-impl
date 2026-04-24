@@ -80,31 +80,31 @@ async function main() {
     governance: {
       clock: () => new Date(),
       pinnedSpecCommit: PINNED_SPEC_COMMIT,
-      runnerVersion: "1.2"
+      runnerVersion: "1.3"
     },
     permissionsResolve: {
       registry,
       sessionStore,
       clock: () => new Date(),
       activeCapability: card.permissions?.activeMode ?? "ReadOnly",
-      runnerVersion: "1.2"
+      runnerVersion: "1.3"
     },
     sessionsBootstrap: {
       sessionStore,
       clock: () => new Date(),
       cardActiveMode: card.permissions?.activeMode ?? "ReadOnly",
       bootstrapBearer: BOOTSTRAP_BEARER,
-      runnerVersion: "1.2"
+      runnerVersion: "1.3"
     },
-    auditTail: { chain, sessionStore, clock: () => new Date(), runnerVersion: "1.2" },
-    auditRecords: { chain, sessionStore, clock: () => new Date(), runnerVersion: "1.2" },
+    auditTail: { chain, sessionStore, clock: () => new Date(), runnerVersion: "1.3" },
+    auditRecords: { chain, sessionStore, clock: () => new Date(), runnerVersion: "1.3" },
     permissionsDecisions: {
       registry,
       sessionStore,
       chain,
       clock: () => new Date(),
       activeCapability: card.permissions?.activeMode ?? "ReadOnly",
-      runnerVersion: "1.2"
+      runnerVersion: "1.3"
     }
   });
 

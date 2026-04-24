@@ -481,6 +481,22 @@
           "description": "REQUIRED when Runner runs in SOA_COORD_MODE=distributed per §12.4; points at the etcd/ZooKeeper/Redis/MCP coordination service issuing monotonic fencing tokens for clustered self-improvement acceptance."
         }
       }
+    },
+    "a2a": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "§17 A2A-specific Agent Card fields. Introduced in v1.3; grouping object for any A2A-scoped schema additions so they do not pollute the top-level namespace. Absence of this object is semantically identical to a2a.capabilities absent or empty per §17.2.3.",
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "§17.2.3 A2A capability surface. Absence of the a2a object, a2a.capabilities absent, or a2a.capabilities=[] are the three equivalent encodings of 'serves no A2A capabilities'. Tokens are compared byte-exact over UTF-8; implementations MUST NOT apply Unicode normalization, case folding, whitespace trimming, or any other transformation before matching."
+        }
+      }
     }
   }
 }

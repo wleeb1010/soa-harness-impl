@@ -1,6 +1,6 @@
 {
   "name": "@soa-harness/cli",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "`soa` command-line client for SOA-Harness v1.2. Wraps the Runner HTTP surface + soa-validate binary so operators can chat, check health, tail the audit log, and drive conformance without hand-authoring fetch() calls or Go invocations.",
   "license": "Apache-2.0",
   "type": "module",
