@@ -451,20 +451,18 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
         );
       }
       const host = opts.a2a.boundHost;
+      // §17.2.2.1 loopback-guard: undefined host is permissive (caller
+      // hasn't declared a bind target — trust it for tests + local dev);
+      // any declared host must be one of the three canonical loopback
+      // values. Anything else → refuse startup per §17.2.2.1 MUST.
       const isLoopback =
         host === undefined ||
         host === "127.0.0.1" ||
         host === "::1" ||
-        host === "localhost" ||
-        host === "0.0.0.0" === false; // 0.0.0.0 is NOT loopback
-      if (host !== undefined && !(host === "127.0.0.1" || host === "::1" || host === "localhost")) {
-        throw new Error(
-          `§17.2.2.1: SOA_A2A_AUTO_EXECUTE_AFTER_S set but boundHost=${host} is non-loopback — refusing startup. Set opts.a2a.boundHost to "127.0.0.1" / "::1" / "localhost" for loopback-only testing, or unset the env var.`,
-        );
-      }
+        host === "localhost";
       if (!isLoopback) {
         throw new Error(
-          "§17.2.2.1: SOA_A2A_AUTO_EXECUTE_AFTER_S set but boundHost is non-loopback — refusing startup.",
+          `§17.2.2.1: SOA_A2A_AUTO_EXECUTE_AFTER_S set but boundHost=${host} is non-loopback — refusing startup. Set opts.a2a.boundHost to "127.0.0.1" / "::1" / "localhost" for loopback-only testing, or unset the env var.`,
         );
       }
       autoExecuteAfterS = n;
