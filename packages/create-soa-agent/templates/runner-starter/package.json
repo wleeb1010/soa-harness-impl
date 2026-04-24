@@ -10,8 +10,8 @@
     "conform": "node ./conform.mjs"
   },
   "dependencies": {
-    "@soa-harness/memory-mcp-sqlite": "^1.1.1",
-    "@soa-harness/runner": "^1.1.1",
-    "@soa-harness/schemas": "^1.1.1"
+    "@soa-harness/memory-mcp-sqlite": "^1.2.0",
+    "@soa-harness/runner": "^1.2.0",
+    "@soa-harness/schemas": "^1.2.0"
   }
 }

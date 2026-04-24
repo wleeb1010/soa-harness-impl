@@ -1,6 +1,6 @@
 {
   "name": "@soa-harness/schemas",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Compiled Ajv validators for SOA-Harness schemas, generated from the pinned spec commit.",
   "license": "Apache-2.0",
   "type": "module",
