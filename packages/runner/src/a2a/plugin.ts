@@ -272,6 +272,24 @@ export interface A2aPluginOptions {
    */
   autoExecuteAfterS?: number;
   /**
+   * §17.2.2 `SessionEnd(stop_reason=MaxTurns)` emission hook — fires
+   * on the destination session when the task-execution deadline
+   * elapses without handoff.return. When provided, the plugin
+   * schedules an eager setTimeout at transfer-accept time; on fire,
+   * if the task is still pre-terminal, it emits per this callback.
+   * Cancelled on handoff.return.
+   *
+   * Typical wire-up: server.ts injects a closure that calls the
+   * Runner's StreamEventEmitter.emit with session_id = the synthetic
+   * destination_session_id produced at transfer-accept. Omit to skip
+   * emission (pre-v1.3.3 behavior).
+   */
+  onTaskExecutionDeadline?: (ctx: {
+    task_id: string;
+    destination_session_id: string;
+    deadlineS: number;
+  }) => void;
+  /**
    * Clock source (unix seconds). Defaults to wall clock. Injected by tests
    * that need to control the §17.2.5 transfer-deadline retention window.
    */
@@ -320,6 +338,17 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
       retentionWindowS: deadlines.transfer_s,
       taskExecutionDeadlineS: deadlines.task_execution_s,
     });
+  // §17.2.2 eager deadline timers, keyed by task_id. Scheduled on
+  // handoff.transfer accept, cancelled on handoff.return (via
+  // cancelTaskDeadline below).
+  const taskDeadlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const cancelTaskDeadline = (taskId: string): void => {
+    const t = taskDeadlineTimers.get(taskId);
+    if (t) {
+      clearTimeout(t);
+      taskDeadlineTimers.delete(taskId);
+    }
+  };
   // W3 slice 1: a lazily-initialised jti cache the plugin owns when the
   // caller didn't supply one. Prevents each request from seeing an empty
   // cache and silently accepting replays.
@@ -401,15 +430,55 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
       case "handoff.offer":
         response = handleHandoffOffer(id, rpc.params, registry, opts.a2aCapabilities, nowFn);
         break;
-      case "handoff.transfer":
+      case "handoff.transfer": {
         response = handleHandoffTransfer(id, rpc.params, registry, nowFn, opts.autoExecuteAfterS);
+        // §17.2.2 eager deadline schedule — only on accept-path
+        // responses (result.destination_session_id present). Fires
+        // SessionEnd(stop_reason=MaxTurns) on the destination session
+        // when the task-execution deadline elapses without handoff.
+        // return having cancelled it.
+        if (opts.onTaskExecutionDeadline !== undefined && "result" in response) {
+          const r = (response as { result?: A2aHandoffTransferResult }).result;
+          const taskParam = (rpc.params as { task_id?: string } | undefined)?.task_id;
+          if (r !== undefined && typeof taskParam === "string") {
+            const taskId = taskParam;
+            const destId = r.destination_session_id;
+            const deadlineS = deadlines.task_execution_s;
+            cancelTaskDeadline(taskId); // re-schedule not allowed, but prior cleanup
+            const t = setTimeout(() => {
+              const row = registry.get(taskId, nowFn());
+              if (row && !A2A_TERMINAL_HANDOFF_STATUS.has(row.status)) {
+                try {
+                  opts.onTaskExecutionDeadline!({
+                    task_id: taskId,
+                    destination_session_id: destId,
+                    deadlineS,
+                  });
+                } catch {
+                  // Never let a consumer-emit throw bubble up from a
+                  // timer callback; the status-sync path is already
+                  // guaranteed by computed-on-read synthesis.
+                }
+              }
+              taskDeadlineTimers.delete(taskId);
+            }, deadlineS * 1000);
+            (t as { unref?: () => void }).unref?.();
+            taskDeadlineTimers.set(taskId, t);
+          }
+        }
         break;
+      }
       case "handoff.status":
         response = handleHandoffStatus(id, rpc.params, registry, nowFn);
         break;
-      case "handoff.return":
+      case "handoff.return": {
+        const taskParam = (rpc.params as { task_id?: string } | undefined)?.task_id;
+        if (typeof taskParam === "string") {
+          cancelTaskDeadline(taskParam);
+        }
         response = handleHandoffReturn(id, rpc.params, registry);
         break;
+      }
       default:
         response = {
           jsonrpc: "2.0",
