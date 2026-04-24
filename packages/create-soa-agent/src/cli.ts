@@ -276,6 +276,7 @@ function printHelp(): void {
       "  hooks/pre-tool-use.mjs   — illustrative §15 hook",
       "  permission-decisions/auto-allow.json — first-boot decision body",
       "  start.mjs                — demo entrypoint driving the first audit row",
+      "  conform.mjs              — `npm run conform` runs soa-validate against this Runner",
       "  docker-compose.yml       — present for mem0/zep variants"
     ].join("\n")
   );

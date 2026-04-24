@@ -53,3 +53,35 @@ so a `GET /audit/tail` returns `record_count: 1` within a few seconds of
 
 That's the deterministic time-to-first-row measurement that
 `create-soa-agent-demo` in CI exercises.
+
+## Conformance check
+
+With the Runner running (`npm start` in another terminal), verify your
+deployment against the pinned SOA-Harness spec:
+
+```
+npm run conform
+```
+
+This invokes the `soa-validate` CLI against your Runner. Prerequisites:
+
+1. **`soa-validate` on PATH.** Install via:
+   ```
+   go install github.com/wleeb1010/soa-validate/cmd/soa-validate@latest
+   ```
+   (requires Go ≥ 1.22; add `$(go env GOPATH)/bin` to PATH). Or download a
+   release binary from https://github.com/wleeb1010/soa-validate/releases.
+
+2. **Spec-vectors checkout.** Clone the spec at the pinned commit:
+   ```
+   git clone https://github.com/wleeb1010/soa-harness-specification ../soa-harness-specification
+   ```
+   The conform script auto-discovers this path. Override via `SOA_SPEC_VECTORS`.
+
+3. **Bootstrap bearer** matches what `start.mjs` printed. Export it:
+   ```
+   export SOA_RUNNER_BOOTSTRAP_BEARER=<the-bearer>
+   ```
+
+A passing run prints per-test status and exits 0. Failures land in
+`release-gate.json` alongside.

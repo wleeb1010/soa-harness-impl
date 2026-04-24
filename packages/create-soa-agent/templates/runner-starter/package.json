@@ -6,7 +6,8 @@
   "description": "Demo SOA-Harness agent scaffolded by create-soa-agent.",
   "main": "./start.mjs",
   "scripts": {
-    "start": "node ./start.mjs"
+    "start": "node ./start.mjs",
+    "conform": "node ./conform.mjs"
   },
   "dependencies": {
     "@soa-harness/runner": "^1.0.0",
