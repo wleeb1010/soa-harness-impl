@@ -157,7 +157,7 @@ async function synthesizeSigning(): Promise<NonNullable<StartLangGraphAdapterRun
     keys,
     subject: "CN=soa-langgraph-adapter-demo,O=SOA-Harness Adapter Self-Signed",
   });
-  // eslint-disable-next-line no-console -- single-use warning mirrors create-soa-agent scaffold
+   
   console.warn(DEMO_WARNING);
   return {
     alg: "EdDSA",

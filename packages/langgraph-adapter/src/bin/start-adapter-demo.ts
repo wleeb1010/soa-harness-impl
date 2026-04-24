@@ -169,23 +169,23 @@ async function main(): Promise<void> {
   });
 
   // Human-readable startup banner.
-  // eslint-disable-next-line no-console -- bin logging
+   
   console.log(`[adapter-demo] adapter listening at ${running.adapterUrl}`);
-  // eslint-disable-next-line no-console
+   
   console.log(`[adapter-demo] back-end Runner at ${running.backEndUrl}`);
-  // eslint-disable-next-line no-console
+   
   console.log(`[adapter-demo] publisher_kid: ${running.publisherKid}`);
-  // eslint-disable-next-line no-console
+   
   console.log(`[adapter-demo] session_id: ${running.sessionId}`);
-  // eslint-disable-next-line no-console
+   
   console.log(`[adapter-demo] session_bearer: ${sessionBearer}`);
-  // eslint-disable-next-line no-console
+   
   console.log(
     "[adapter-demo] validator: soa-validate --adapter=langgraph --impl-url " +
       running.adapterUrl,
   );
   if (demoMode) {
-    // eslint-disable-next-line no-console
+     
     console.log(`[adapter-demo] /debug/backend-info enabled (SOA_ADAPTER_DEMO_MODE=1)`);
   }
 
@@ -193,11 +193,11 @@ async function main(): Promise<void> {
   // from the human-readable `[adapter-demo]` banner so test harnesses
   // can regex `^\[soa-adapter-demo\] backend_url=(.*)$` without
   // false-positives against the prose lines above.
-  // eslint-disable-next-line no-console
+   
   console.log(`[soa-adapter-demo] backend_url=${running.backEndUrl}`);
 
   async function shutdown(signal: string) {
-    // eslint-disable-next-line no-console
+     
     console.log(`[adapter-demo] ${signal} received, shutting down`);
     await running.close();
     process.exit(0);
@@ -222,7 +222,7 @@ const invokedAsCli =
 
 if (invokedAsCli) {
   main().catch((err: unknown) => {
-    // eslint-disable-next-line no-console
+     
     console.error("[adapter-demo] FATAL:", err);
     process.exit(1);
   });
