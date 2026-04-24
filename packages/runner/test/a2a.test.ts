@@ -12,21 +12,42 @@ import {
   A2A_ERROR_CODES,
   A2A_TERMINAL_HANDOFF_STATUS,
   A2A_DEFAULT_DEADLINES,
+  A2A_CAPABILITIES_NEEDED_SOFT_CAP,
   isWellFormedA2aDigest,
+  matchA2aCapabilities,
   resolveA2aDeadlines,
 } from "../src/a2a/index.js";
 
 const VALID_DIGEST = "sha256:" + "a".repeat(64);
 const BEARER = "test-a2a-bearer-" + "x".repeat(20);
 
-async function bootApp(): Promise<ReturnType<typeof Fastify>> {
+async function bootApp(
+  opts: { a2aCapabilities?: string[] } = {},
+): Promise<ReturnType<typeof Fastify>> {
   const app = Fastify({ logger: false });
   await app.register(a2aPlugin, {
     bearer: BEARER,
     card: { name: "test-agent", version: "1.0", capabilities: [] },
     cardJws: "header.PLACEHOLDER.sig",
+    a2aCapabilities: opts.a2aCapabilities,
   });
   return app;
+}
+
+function offerPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    jsonrpc: "2.0",
+    id: "1",
+    method: "handoff.offer",
+    params: {
+      task_id: "task_abc",
+      summary: "summarize last 5 turns",
+      messages_digest: VALID_DIGEST,
+      workflow_digest: VALID_DIGEST,
+      capabilities_needed: [],
+      ...overrides,
+    },
+  };
 }
 
 describe("A2aTaskRegistry (§17.2.1 monotonicity)", () => {
@@ -170,24 +191,13 @@ describe("POST /a2a/v1 — agent.describe", () => {
 });
 
 describe("POST /a2a/v1 — handoff.offer", () => {
-  it("accepts well-formed offer", async () => {
-    const app = await bootApp();
+  it("accepts well-formed offer with subset capabilities (truth-table row 4)", async () => {
+    const app = await bootApp({ a2aCapabilities: ["summarize", "translate"] });
     const res = await app.inject({
       method: "POST",
       url: "/a2a/v1",
       headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
-      payload: {
-        jsonrpc: "2.0",
-        id: "1",
-        method: "handoff.offer",
-        params: {
-          task_id: "task_abc",
-          summary: "summarize last 5 turns",
-          messages_digest: VALID_DIGEST,
-          workflow_digest: VALID_DIGEST,
-          capabilities_needed: ["summarize"],
-        },
-      },
+      payload: offerPayload({ capabilities_needed: ["summarize"] }),
     });
     const body = JSON.parse(res.body);
     expect(body.result.accept).toBe(true);
@@ -199,22 +209,169 @@ describe("POST /a2a/v1 — handoff.offer", () => {
       method: "POST",
       url: "/a2a/v1",
       headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
-      payload: {
-        jsonrpc: "2.0",
-        id: "1",
-        method: "handoff.offer",
-        params: {
-          task_id: "task_abc",
-          summary: "x",
-          messages_digest: "not-a-digest",
-          workflow_digest: VALID_DIGEST,
-          capabilities_needed: [],
-        },
-      },
+      payload: offerPayload({
+        summary: "x",
+        messages_digest: "not-a-digest",
+      }),
     });
     const body = JSON.parse(res.body);
     expect(body.error.code).toBe(A2A_ERROR_CODES.HandoffRejected);
     expect(body.error.data.reason).toBe("digest-mismatch");
+  });
+});
+
+// §17.2.3 A2A capability advertisement and matching — pure-function truth table.
+describe("matchA2aCapabilities (§17.2.3 truth table)", () => {
+  it("row 1: serves-none × empty needed → accept", () => {
+    expect(matchA2aCapabilities([], undefined)).toEqual({ kind: "accept" });
+    expect(matchA2aCapabilities([], [])).toEqual({ kind: "accept" });
+  });
+
+  it("row 2: serves-none × non-empty needed → reject-no-capabilities", () => {
+    expect(matchA2aCapabilities(["x"], undefined)).toEqual({ kind: "reject-no-capabilities" });
+    expect(matchA2aCapabilities(["x"], [])).toEqual({ kind: "reject-no-capabilities" });
+  });
+
+  it("row 3: serves set S × empty needed → accept", () => {
+    expect(matchA2aCapabilities([], ["summarize"])).toEqual({ kind: "accept" });
+  });
+
+  it("row 4: serves S × needed ⊆ S → accept", () => {
+    expect(matchA2aCapabilities(["a"], ["a", "b", "c"])).toEqual({ kind: "accept" });
+    expect(matchA2aCapabilities(["a", "b"], ["a", "b", "c"])).toEqual({ kind: "accept" });
+  });
+
+  it("row 5: serves S × needed ⊄ S → capability-mismatch with missing tokens in first-occurrence order", () => {
+    const out = matchA2aCapabilities(["a", "z", "y", "z"], ["a", "b"]);
+    expect(out).toEqual({ kind: "capability-mismatch", missing: ["z", "y"] });
+  });
+
+  it("three encodings of serves-none are semantically identical (§17.2.3)", () => {
+    expect(matchA2aCapabilities(["x"], undefined)).toEqual({ kind: "reject-no-capabilities" });
+    expect(matchA2aCapabilities(["x"], [])).toEqual({ kind: "reject-no-capabilities" });
+  });
+
+  it("deduplicates capabilities_needed order-preserving on first occurrence (not observable as rejection)", () => {
+    const out = matchA2aCapabilities(["a", "b", "a"], ["a", "b"]);
+    expect(out).toEqual({ kind: "accept" });
+  });
+
+  it("missing_capabilities preserves first-occurrence order across duplicates", () => {
+    const out = matchA2aCapabilities(["z", "a", "z", "y"], ["a"]);
+    // After dedup needed = [z, a, y]; servedSet = {a}; missing = [z, y] in that order.
+    expect(out).toEqual({ kind: "capability-mismatch", missing: ["z", "y"] });
+  });
+
+  it("byte-exact comparison: case-different tokens do NOT match", () => {
+    const out = matchA2aCapabilities(["Summarize"], ["summarize"]);
+    expect(out).toEqual({ kind: "capability-mismatch", missing: ["Summarize"] });
+  });
+
+  it("byte-exact comparison: NFC vs NFD normalizations do NOT match", () => {
+    // "café" — NFC (single char é, U+00E9) vs NFD (e + combining acute, U+0065 U+0301)
+    const nfc = "café";
+    const nfd = "café";
+    expect(nfc).not.toBe(nfd); // sanity: JS strings differ
+    const out = matchA2aCapabilities([nfc], [nfd]);
+    expect(out).toEqual({ kind: "capability-mismatch", missing: [nfc] });
+  });
+
+  it("rejects non-array capabilities_needed as wire-incompatible", () => {
+    expect(matchA2aCapabilities("summarize", ["summarize"])).toMatchObject({
+      kind: "wire-incompatible",
+    });
+    expect(matchA2aCapabilities(undefined, ["summarize"])).toMatchObject({
+      kind: "wire-incompatible",
+    });
+    expect(matchA2aCapabilities(null, ["summarize"])).toMatchObject({
+      kind: "wire-incompatible",
+    });
+  });
+
+  it("rejects empty-string entries in capabilities_needed as wire-incompatible", () => {
+    const out = matchA2aCapabilities(["summarize", ""], ["summarize"]);
+    expect(out.kind).toBe("wire-incompatible");
+  });
+
+  it("rejects non-string entries as wire-incompatible", () => {
+    expect(matchA2aCapabilities([123], ["summarize"]).kind).toBe("wire-incompatible");
+    expect(matchA2aCapabilities([{}], ["summarize"]).kind).toBe("wire-incompatible");
+  });
+
+  it("rejects length > soft-cap as wire-incompatible", () => {
+    const oversized = new Array(A2A_CAPABILITIES_NEEDED_SOFT_CAP + 1).fill(0).map((_, i) => `cap-${i}`);
+    const out = matchA2aCapabilities(oversized, ["cap-0"]);
+    expect(out.kind).toBe("wire-incompatible");
+  });
+
+  it("accepts length === soft-cap (boundary)", () => {
+    const exact = new Array(A2A_CAPABILITIES_NEEDED_SOFT_CAP).fill(0).map((_, i) => `cap-${i}`);
+    const out = matchA2aCapabilities(exact, exact);
+    expect(out).toEqual({ kind: "accept" });
+  });
+});
+
+// §17.2.3 truth table end-to-end over the JSON-RPC wire.
+describe("POST /a2a/v1 — handoff.offer §17.2.3 capability matching", () => {
+  it("row 2 wire: non-empty needed against serves-none → {accept:false, reason:'no-a2a-capabilities-advertised'}", async () => {
+    const app = await bootApp(); // a2aCapabilities undefined
+    const res = await app.inject({
+      method: "POST",
+      url: "/a2a/v1",
+      headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+      payload: offerPayload({ capabilities_needed: ["summarize"] }),
+    });
+    const body = JSON.parse(res.body);
+    expect(body.result).toEqual({ accept: false, reason: "no-a2a-capabilities-advertised" });
+  });
+
+  it("row 5 wire: non-subset needed → -32003 CapabilityMismatch with error.data.missing_capabilities", async () => {
+    const app = await bootApp({ a2aCapabilities: ["summarize"] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/a2a/v1",
+      headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+      payload: offerPayload({ capabilities_needed: ["summarize", "translate-en-de"] }),
+    });
+    const body = JSON.parse(res.body);
+    expect(body.error.code).toBe(A2A_ERROR_CODES.CapabilityMismatch);
+    expect(body.error.data.missing_capabilities).toEqual(["translate-en-de"]);
+  });
+
+  it("row 3 wire: empty needed against non-empty S → accept", async () => {
+    const app = await bootApp({ a2aCapabilities: ["summarize"] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/a2a/v1",
+      headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+      payload: offerPayload({ capabilities_needed: [] }),
+    });
+    expect(JSON.parse(res.body).result.accept).toBe(true);
+  });
+
+  it("wire: empty-string entry in capabilities_needed → HandoffRejected reason=wire-incompatibility", async () => {
+    const app = await bootApp({ a2aCapabilities: ["summarize"] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/a2a/v1",
+      headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+      payload: offerPayload({ capabilities_needed: ["summarize", ""] }),
+    });
+    const body = JSON.parse(res.body);
+    expect(body.error.code).toBe(A2A_ERROR_CODES.HandoffRejected);
+    expect(body.error.data.reason).toBe("wire-incompatibility");
+  });
+
+  it("wire: a2aCapabilities:[] behaves identically to undefined (three encodings of serves-none)", async () => {
+    const app = await bootApp({ a2aCapabilities: [] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/a2a/v1",
+      headers: { authorization: `Bearer ${BEARER}`, "content-type": "application/json" },
+      payload: offerPayload({ capabilities_needed: ["summarize"] }),
+    });
+    const body = JSON.parse(res.body);
+    expect(body.result).toEqual({ accept: false, reason: "no-a2a-capabilities-advertised" });
   });
 });
 

@@ -29,6 +29,7 @@ import type {
   A2aHandoffStatus,
 } from "./types.js";
 import { resolveA2aDeadlines, A2A_TERMINAL_HANDOFF_STATUS } from "./types.js";
+import { matchA2aCapabilities } from "./matching.js";
 
 /**
  * In-memory per-task status tracker for W1. Production impl replaces this
@@ -75,6 +76,14 @@ export interface A2aPluginOptions {
   cardJws: string;
   /** In-memory task registry (or caller's store that conforms to the shape). */
   taskRegistry?: A2aTaskRegistry;
+  /**
+   * §17.2.3 receiver-side A2A capability surface. Undefined OR empty array
+   * both mean "serves no A2A capabilities" (§17.2.3 three-encodings rule).
+   * Production adopters SHOULD source this from their own Agent Card's
+   * `a2a.capabilities` field so the advertised surface and the matched
+   * surface cannot drift.
+   */
+  a2aCapabilities?: string[];
 }
 
 type AnyJsonRpcResponse = JsonRpcResponse<unknown>;
@@ -121,7 +130,7 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
         response = handleAgentDescribe(id, opts);
         break;
       case "handoff.offer":
-        response = handleHandoffOffer(id, rpc.params, registry);
+        response = handleHandoffOffer(id, rpc.params, registry, opts.a2aCapabilities);
         break;
       case "handoff.transfer":
         response = handleHandoffTransfer(id, rpc.params, registry);
@@ -163,21 +172,41 @@ function handleHandoffOffer(
   id: string | number | null,
   params: unknown,
   registry: A2aTaskRegistry,
+  a2aCapabilities: string[] | undefined,
 ): JsonRpcResponse<A2aHandoffOfferResult> {
   const p = params as A2aHandoffOfferParams | undefined;
   if (!p || typeof p.task_id !== "string" || typeof p.summary !== "string") {
-    return a2aError(id, "HandoffRejected", { reason: "digest-mismatch", message: "malformed offer params" });
+    return a2aError(id, "HandoffRejected", {
+      reason: "wire-incompatibility",
+      message: "malformed offer params (task_id, summary)",
+    });
   }
   if (!isWellFormedA2aDigest(p.messages_digest) || !isWellFormedA2aDigest(p.workflow_digest)) {
     return a2aError(id, "HandoffRejected", { reason: "digest-mismatch", message: "digest not sha256:<64hex>" });
   }
-  if (!Array.isArray(p.capabilities_needed)) {
-    return a2aError(id, "CapabilityMismatch", { message: "capabilities_needed missing" });
+
+  // §17.2.3 truth table + validation.
+  const outcome = matchA2aCapabilities(p.capabilities_needed, a2aCapabilities);
+  switch (outcome.kind) {
+    case "accept":
+      return { jsonrpc: "2.0", id, result: { accept: true } };
+    case "reject-no-capabilities":
+      return {
+        jsonrpc: "2.0",
+        id,
+        result: { accept: false, reason: "no-a2a-capabilities-advertised" },
+      };
+    case "wire-incompatible":
+      return a2aError(id, "HandoffRejected", {
+        reason: "wire-incompatibility",
+        message: outcome.detail,
+      });
+    case "capability-mismatch":
+      return a2aError(id, "CapabilityMismatch", {
+        message: "capabilities_needed not a subset of a2a.capabilities",
+        data: { missing_capabilities: outcome.missing },
+      });
   }
-  // W1 always accepts — W2 wires real capability-matching against the Agent
-  // Card. The acceptance here is enough to exercise SV-A2A-04's offer-accept
-  // path; the offer-reject path lands in W2 with the card matcher.
-  return { jsonrpc: "2.0", id, result: { accept: true } };
 }
 
 function handleHandoffTransfer(

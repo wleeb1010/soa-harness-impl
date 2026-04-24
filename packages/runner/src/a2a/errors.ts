@@ -32,7 +32,8 @@ export type A2aHandoffRejectedReason =
   | "digest-mismatch"
   | "capability-mismatch"
   | "workflow-state-incompatible"
-  | "unknown-status";
+  | "unknown-status"
+  | "wire-incompatibility";
 
 export interface A2aErrorOptions {
   message?: string;

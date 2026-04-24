@@ -11,6 +11,11 @@ export {
   type A2aHandoffRejectedReason,
 } from "./errors.js";
 export {
+  A2A_CAPABILITIES_NEEDED_SOFT_CAP,
+  matchA2aCapabilities,
+  type A2aCapabilityMatchOutcome,
+} from "./matching.js";
+export {
   A2A_DEFAULT_DEADLINES,
   A2A_TERMINAL_HANDOFF_STATUS,
   resolveA2aDeadlines,
