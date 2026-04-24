@@ -122,7 +122,20 @@ export class JtiReplayCache {
  * MUST NOT throw for a missing key; reserve throws for infrastructure
  * failures that should surface as 500-class errors.
  */
-export type A2aJwtKeyResolver = (header: A2aJwtHeader) => Promise<A2aJwtVerifyKey | null>;
+/**
+ * Transport context passed to the resolver — currently carries the mTLS
+ * peer certificate (DER bytes) when the connection is mutually
+ * authenticated, enabling the §17.1 step 2 `x5t#S256` path.
+ */
+export interface A2aJwtResolverContext {
+  peerCertDer?: Buffer;
+}
+
+export type A2aJwtKeyResolver = (
+  header: A2aJwtHeader,
+  payload: A2aJwtPayload,
+  context?: A2aJwtResolverContext,
+) => Promise<A2aJwtVerifyKey | null>;
 
 export interface VerifyA2aJwtOptions {
   /** The compact-JWT string pulled from the Authorization: Bearer header. */
@@ -133,6 +146,8 @@ export interface VerifyA2aJwtOptions {
   resolveKey: A2aJwtKeyResolver;
   /** §17.1 step 3 replay cache. */
   jtiCache: JtiReplayCache;
+  /** Transport context forwarded to the resolver (mTLS peer cert, etc.). */
+  context?: A2aJwtResolverContext;
   /** Acceptable forward clock skew on `iat`. Default: 60s. */
   clockSkewS?: number;
   /** Clock source. Default: wall clock (unix seconds). */
@@ -223,7 +238,7 @@ export async function verifyA2aJwt(opts: VerifyA2aJwtOptions): Promise<A2aJwtVer
   // §17.1 step 2 signing-key discovery.
   let key: A2aJwtVerifyKey | null;
   try {
-    key = await opts.resolveKey(header);
+    key = await opts.resolveKey(header, payload, opts.context);
   } catch (e) {
     return { kind: "key-not-found", detail: `resolveKey threw: ${(e as Error).message}` };
   }

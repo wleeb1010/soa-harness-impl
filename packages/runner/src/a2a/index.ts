@@ -29,8 +29,26 @@ export {
   type A2aJwtVerifyOutcome,
   type A2aJwtKeyResolver,
   type A2aJwtVerifyKey,
+  type A2aJwtResolverContext,
   type VerifyA2aJwtOptions,
 } from "./jwt.js";
+export {
+  A2A_CARD_FETCH_CONNECT_TIMEOUT_MS,
+  A2A_CARD_FETCH_TOTAL_TIMEOUT_MS,
+  A2A_CARD_CACHE_TTL_S,
+  CallerCardCache,
+  computeAgentCardEtag,
+  fetchCallerCard,
+  loadCallerCard,
+  extractSignerFromCardJws,
+  buildCardKidResolver,
+  buildPeerCertResolver,
+  composeSignerResolvers,
+  checkAgentCardEtagDrift,
+  type FetchedCallerCard,
+  type CallerCardFetcher,
+  type A2aEtagDriftOutcome,
+} from "./signer-discovery.js";
 export {
   A2A_DEFAULT_DEADLINES,
   A2A_TERMINAL_HANDOFF_STATUS,

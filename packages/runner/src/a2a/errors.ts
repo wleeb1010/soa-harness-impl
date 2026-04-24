@@ -27,6 +27,7 @@ export type A2aErrorName = keyof typeof A2A_ERROR_CODES;
 export type A2aHandoffRejectedReason =
   | "bad-alg"
   | "card-unreachable"
+  | "card-version-drift"
   | "key-not-found"
   | "jti-replay"
   | "digest-mismatch"

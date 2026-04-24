@@ -35,7 +35,10 @@ import {
   a2aJwtOutcomeToError,
   JtiReplayCache,
   type A2aJwtKeyResolver,
+  type A2aJwtPayload,
 } from "./jwt.js";
+import type { A2aEtagDriftOutcome } from "./signer-discovery.js";
+import type { TLSSocket } from "node:tls";
 
 /**
  * In-memory per-task status tracker for W1. Production impl replaces this
@@ -76,6 +79,15 @@ export interface A2aJwtAuthOptions {
    * Runner clusters or when tests need to inject a clock.
    */
   jtiCache?: JtiReplayCache;
+  /**
+   * §17.1 step 4 etag-drift check. Called only after a JWT has passed
+   * signature verification; returning `drift` routes to HandoffRejected
+   * reason=card-version-drift per §17.1 step 4, `card-unreachable` routes
+   * to reason=card-unreachable per §17.1 step 2's disjointness clause,
+   * and `match` passes through. Omit to skip drift detection entirely
+   * (W3 slice 1 compatibility).
+   */
+  checkEtagDrift?: (payload: A2aJwtPayload) => Promise<A2aEtagDriftOutcome>;
   /** Acceptable forward clock skew on `iat` (seconds). Default: 60. */
   clockSkewS?: number;
   /** Clock source (unix seconds). Default: wall clock. */
@@ -129,6 +141,27 @@ function extractBearer(req: FastifyRequest): string | null {
   return m ? (m[1] ?? null) : null;
 }
 
+/**
+ * Pull the mTLS client cert's DER bytes off the request when available
+ * so the §17.1 step 2 peer-cert resolver can compare x5t#S256. Returns
+ * undefined when the transport is not TLS, the client didn't send a
+ * cert, or the Fastify inject harness is in use (tests).
+ */
+function extractPeerCertDer(req: FastifyRequest): Buffer | undefined {
+  const sock = req.raw?.socket as TLSSocket | undefined;
+  if (sock === undefined || typeof (sock as { getPeerCertificate?: unknown }).getPeerCertificate !== "function") {
+    return undefined;
+  }
+  try {
+    const info = sock.getPeerCertificate(true);
+    if (!info || typeof info !== "object") return undefined;
+    const raw = (info as { raw?: Buffer }).raw;
+    return raw instanceof Buffer && raw.length > 0 ? raw : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts) => {
   if (opts.bearer === undefined && opts.jwt === undefined) {
     throw new Error("a2aPlugin: at least one of { bearer, jwt } MUST be provided");
@@ -166,11 +199,13 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
       if (!presentedToken) {
         return reply.code(200).send(a2aError(id, "AuthFailed", { message: "missing Authorization: Bearer <jwt>" }));
       }
+      const peerCertDer = extractPeerCertDer(request);
       const outcome = await verifyA2aJwt({
         jwtCompact: presentedToken,
         audience: opts.jwt.audience,
         resolveKey: opts.jwt.resolveKey,
         jtiCache,
+        ...(peerCertDer !== undefined ? { context: { peerCertDer } } : {}),
         ...(opts.jwt.clockSkewS !== undefined ? { clockSkewS: opts.jwt.clockSkewS } : {}),
         ...(opts.jwt.nowFn !== undefined ? { nowFn: opts.jwt.nowFn } : {}),
       });
@@ -178,7 +213,27 @@ export const a2aPlugin: FastifyPluginAsync<A2aPluginOptions> = async (app, opts)
       if (errResponse !== null) {
         return reply.code(200).send(errResponse);
       }
-      // JWT valid — proceed.
+      // §17.1 step 4 etag-drift check runs only after JWT signature + claims pass.
+      if (outcome.kind === "valid" && opts.jwt.checkEtagDrift !== undefined) {
+        const driftOutcome = await opts.jwt.checkEtagDrift(outcome.payload);
+        if (driftOutcome.kind === "drift") {
+          return reply.code(200).send(
+            a2aError(id, "HandoffRejected", {
+              reason: "card-version-drift",
+              message: `agent_card_etag drift: fetched=${driftOutcome.fetched} presented=${driftOutcome.presented}`,
+            }),
+          );
+        }
+        if (driftOutcome.kind === "card-unreachable") {
+          return reply.code(200).send(
+            a2aError(id, "HandoffRejected", {
+              reason: "card-unreachable",
+              message: driftOutcome.detail,
+            }),
+          );
+        }
+        // match — proceed.
+      }
     } else {
       // Bearer fallback.
       if (!presentedToken || presentedToken !== opts.bearer) {
