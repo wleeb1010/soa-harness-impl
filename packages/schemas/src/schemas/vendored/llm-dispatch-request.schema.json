@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.1/llm-dispatch-request.schema.json",
+  "title": "SOA-Harness v1.1 LLM Dispatch Request",
+  "description": "Normative schema for the dispatcher request envelope passed to a provider adapter per Core §16.3. The dispatcher validates every request against this schema BEFORE any provider call; schema failure returns DispatcherError with dispatcher_error_code DispatcherRequestInvalid (§24 -32110).",
+  "type": "object",
+  "required": [
+    "session_id",
+    "turn_id",
+    "model",
+    "messages",
+    "budget_ceiling_tokens",
+    "billing_tag",
+    "correlation_id",
+    "idempotency_key"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[A-Za-z0-9]{16,}$" },
+    "turn_id": { "type": "string", "pattern": "^trn_[A-Za-z0-9]{16,}$" },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Free-form provider-adapter model identifier. The spec makes no claim about valid values; the per-adapter contract defines acceptable strings."
+    },
+    "messages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["role", "content"],
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["system", "user", "assistant", "tool"]
+          },
+          "content": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["type"],
+                  "properties": {
+                    "type": { "type": "string", "enum": ["text", "image", "tool_result", "tool_use"] }
+                  }
+                }
+              }
+            ]
+          },
+          "tool_call_id": { "type": "string" },
+          "name": { "type": "string" }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "description": "Optional — provider-native tool descriptors. Adapters MAY map the Runner's §11 registry into this field; adapters MAY ignore it entirely for providers that do not support native tool schemas.",
+      "items": {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "input_schema": { "type": "object" }
+        }
+      }
+    },
+    "budget_ceiling_tokens": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Hard cap for this dispatch's cumulative token use. The dispatcher checks the §13.1 projection against this value BEFORE any provider call and returns a synthetic BudgetExhausted response if projected exhaustion exceeds the ceiling."
+    },
+    "billing_tag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9/_.:-]{0,127}$",
+      "description": "§13.3 billing tag. MUST match the session's billing tag or the dispatcher emits BillingTagMismatch."
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^cor_[A-Za-z0-9]{16,}$"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 128,
+      "description": "Stable across adapter-level retries of the same logical request. Adapters whose providers accept idempotency tokens MUST propagate this key."
+    },
+    "stream": { "type": "boolean", "default": true },
+    "stop_sequences": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+      "maxItems": 16
+    },
+    "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+    "top_p": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+    "max_output_tokens": { "type": "integer", "minimum": 1 }
+  }
+}

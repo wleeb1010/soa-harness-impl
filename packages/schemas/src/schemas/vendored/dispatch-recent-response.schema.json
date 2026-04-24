@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.1/dispatch-recent-response.schema.json",
+  "title": "SOA-Harness v1.1 Dispatcher Recent-Activity Observability Response",
+  "description": "Normative schema for GET /dispatch/recent per Core §16.4. Byte-identity excludes generated_at. Not-a-side-effect: reads MUST NOT fire retries, write audit rows, or emit events. Ordering: newest first by started_at. Runners that do not yet expose a dispatcher MUST return 404 on this endpoint, not an empty list.",
+  "type": "object",
+  "required": ["session_id", "dispatches", "runner_version", "generated_at"],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[A-Za-z0-9]{16,}$" },
+    "dispatches": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": [
+          "dispatch_id",
+          "turn_id",
+          "provider",
+          "model_echo",
+          "stop_reason",
+          "dispatcher_error_code",
+          "usage",
+          "latency_ms",
+          "billing_tag",
+          "correlation_id",
+          "started_at",
+          "completed_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "dispatch_id": { "type": "string", "pattern": "^dsp_[A-Za-z0-9]{16,}$" },
+          "turn_id": { "type": "string", "pattern": "^trn_[A-Za-z0-9]{16,}$" },
+          "provider": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "model_echo": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "stop_reason": {
+            "type": "string",
+            "enum": [
+              "NaturalStop",
+              "MaxTurns",
+              "UserInterrupt",
+              "BudgetExhausted",
+              "MemoryDegraded",
+              "CardVersionDrift",
+              "ToolPoolStale",
+              "SelfImproveLockBusy",
+              "Crash",
+              "DispatcherError"
+            ]
+          },
+          "dispatcher_error_code": {
+            "type": ["string", "null"],
+            "enum": [
+              "ProviderRateLimited",
+              "ProviderAuthFailed",
+              "ProviderUnavailable",
+              "ProviderNetworkFailed",
+              "ContentFilterRefusal",
+              "ContextLengthExceeded",
+              "DispatcherRequestInvalid",
+              null
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "required": ["input_tokens", "output_tokens"],
+            "additionalProperties": false,
+            "properties": {
+              "input_tokens": { "type": "integer", "minimum": 0 },
+              "output_tokens": { "type": "integer", "minimum": 0 },
+              "cached_tokens": { "type": "integer", "minimum": 0, "default": 0 }
+            }
+          },
+          "latency_ms": { "type": "integer", "minimum": 0 },
+          "billing_tag": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9/_.:-]{0,127}$" },
+          "correlation_id": { "type": "string", "pattern": "^cor_[A-Za-z0-9]{16,}$" },
+          "provider_request_id": { "type": ["string", "null"] },
+          "started_at": { "type": "string", "format": "date-time" },
+          "completed_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "runner_version": { "type": "string", "pattern": "^\\d+\\.\\d+(\\.\\d+)?(-[A-Za-z0-9.-]+)?$" },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soa-harness.org/schemas/v1.1/llm-dispatch-response.schema.json",
+  "title": "SOA-Harness v1.1 LLM Dispatch Response (Synchronous Mode)",
+  "description": "Normative schema for the dispatcher response body when the request was made with stream=false per Core §16.3. Streaming-mode dispatches do not produce this envelope — they emit StreamEvents (§14.1) instead. Byte-identity excludes generated_at.",
+  "type": "object",
+  "required": [
+    "dispatch_id",
+    "session_id",
+    "turn_id",
+    "content_blocks",
+    "tool_calls",
+    "usage",
+    "stop_reason",
+    "latency_ms",
+    "provider",
+    "model_echo",
+    "billing_tag",
+    "correlation_id",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "dispatch_id": { "type": "string", "pattern": "^dsp_[A-Za-z0-9]{16,}$" },
+    "session_id": { "type": "string", "pattern": "^ses_[A-Za-z0-9]{16,}$" },
+    "turn_id": { "type": "string", "pattern": "^trn_[A-Za-z0-9]{16,}$" },
+    "content_blocks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "enum": ["text", "refusal"] },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "arguments"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^call_[A-Za-z0-9]{16,}$" },
+          "name": { "type": "string" },
+          "arguments": { "type": "object" }
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "required": ["input_tokens", "output_tokens"],
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "cached_tokens": { "type": "integer", "minimum": 0, "default": 0 },
+        "cache_accounting_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.1,
+          "description": "§13.3 — defaults to 0.10 unless the provider adapter advertises a different ratio."
+        }
+      }
+    },
+    "stop_reason": {
+      "type": "string",
+      "enum": [
+        "NaturalStop",
+        "MaxTurns",
+        "UserInterrupt",
+        "BudgetExhausted",
+        "MemoryDegraded",
+        "CardVersionDrift",
+        "ToolPoolStale",
+        "SelfImproveLockBusy",
+        "Crash",
+        "DispatcherError"
+      ]
+    },
+    "dispatcher_error_code": {
+      "type": ["string", "null"],
+      "enum": [
+        "ProviderRateLimited",
+        "ProviderAuthFailed",
+        "ProviderUnavailable",
+        "ProviderNetworkFailed",
+        "ContentFilterRefusal",
+        "ContextLengthExceeded",
+        "DispatcherRequestInvalid",
+        null
+      ],
+      "description": "Populated when stop_reason == 'DispatcherError'. MUST be null on success. See §16.3.1 taxonomy and §24 numeric subcodes."
+    },
+    "latency_ms": { "type": "integer", "minimum": 0 },
+    "provider_request_id": { "type": ["string", "null"] },
+    "provider": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "model_echo": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "billing_tag": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9/_.:-]{0,127}$" },
+    "correlation_id": { "type": "string", "pattern": "^cor_[A-Za-z0-9]{16,}$" },
+    "generated_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "description": "If stop_reason is DispatcherError, dispatcher_error_code MUST be a string (not null).",
+      "if": { "properties": { "stop_reason": { "const": "DispatcherError" } } },
+      "then": {
+        "properties": { "dispatcher_error_code": { "type": "string" } },
+        "required": ["dispatcher_error_code"]
+      }
+    },
+    {
+      "description": "If stop_reason is NOT DispatcherError, dispatcher_error_code MUST be null.",
+      "if": { "not": { "properties": { "stop_reason": { "const": "DispatcherError" } } } },
+      "then": { "properties": { "dispatcher_error_code": { "type": "null" } } }
+    }
+  ]
+}
