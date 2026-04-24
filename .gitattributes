@@ -1,0 +1,43 @@
+# Normalize line endings to LF everywhere that matters.
+# Stops the CRLF-replacement warnings on Windows commits and keeps the
+# package.json + dist/ artifact byte shape stable across contributor
+# platforms. Matches the sibling soa-harness-specification repo's
+# .gitattributes (same file, same rules — siblings should agree).
+
+* text=auto eol=lf
+
+# JSON + JS + TS — exact byte shape matters for tarball-stability and
+# for any JCS canonicalization the runner does at runtime.
+*.json                text eol=lf
+*.jws                 text eol=lf
+*.md                  text eol=lf
+*.py                  text eol=lf
+*.mjs                 text eol=lf
+*.ts                  text eol=lf
+*.tsx                 text eol=lf
+*.js                  text eol=lf
+*.jsx                 text eol=lf
+*.yaml                text eol=lf
+*.yml                 text eol=lf
+*.toml                text eol=lf
+
+# Shell scripts on Linux / macOS must be LF.
+*.sh                  text eol=lf
+*.bash                text eol=lf
+
+# Binary — don't touch.
+*.png                 binary
+*.jpg                 binary
+*.jpeg                binary
+*.gif                 binary
+*.pdf                 binary
+*.zip                 binary
+*.tar                 binary
+*.gz                  binary
+*.tgz                 binary
+*.ico                 binary
+*.woff                binary
+*.woff2               binary
+*.ttf                 binary
+*.otf                 binary
+*.node                binary
