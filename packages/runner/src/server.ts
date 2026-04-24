@@ -42,6 +42,7 @@ import {
   backpressureStatusPlugin
 } from "./observability/index.js";
 import { eventsRecentPlugin, StreamEventEmitter } from "./stream/index.js";
+import { dispatchPlugin } from "./dispatch/index.js";
 import { memoryStatePlugin, InMemoryMemoryStateStore } from "./memory/index.js";
 import { BudgetTracker } from "./budget/index.js";
 import { versionPlugin } from "./governance/index.js";
@@ -342,6 +343,20 @@ export interface BuildRunnerOptions {
     /** Finding AN — allow reads under /ready=503. */
     skipReadinessGate?: boolean;
   };
+  /**
+   * L-62 §16.3 + §16.4 — POST /dispatch + GET /dispatch/recent. When omitted,
+   * neither route is registered and /dispatch/recent returns 404 per spec
+   * ("absence is observable"). Early-milestone deployments may stay omitted.
+   */
+  dispatch?: {
+    dispatcher: import("./dispatch/index.js").Dispatcher;
+    sessionStore: SessionStore;
+    clock: Clock;
+    runnerVersion?: string;
+    requestsPerMinute?: number;
+    bootstrapBearer?: string;
+    adminRequestsPerMinute?: number;
+  };
   fastifyOptions?: FastifyServerOptions;
 }
 
@@ -607,6 +622,22 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
       ...(sl.maxLimit !== undefined ? { maxLimit: sl.maxLimit } : {}),
       ...(sl.skipReadinessGate !== undefined
         ? { skipReadinessGate: sl.skipReadinessGate }
+        : {})
+    });
+  }
+
+  if (opts.dispatch !== undefined) {
+    const dp = opts.dispatch;
+    await app.register(dispatchPlugin, {
+      dispatcher: dp.dispatcher,
+      sessionStore: dp.sessionStore,
+      readiness: readiness ?? { check: () => null },
+      clock: dp.clock,
+      ...(dp.runnerVersion !== undefined ? { runnerVersion: dp.runnerVersion } : {}),
+      ...(dp.requestsPerMinute !== undefined ? { requestsPerMinute: dp.requestsPerMinute } : {}),
+      ...(dp.bootstrapBearer !== undefined ? { bootstrapBearer: dp.bootstrapBearer } : {}),
+      ...(dp.adminRequestsPerMinute !== undefined
+        ? { adminRequestsPerMinute: dp.adminRequestsPerMinute }
         : {})
     });
   }

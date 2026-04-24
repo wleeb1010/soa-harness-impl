@@ -49,6 +49,8 @@ import {
 } from "../session/index.js";
 import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
+import { Dispatcher, InMemoryTestAdapter } from "../dispatch/index.js";
+import type { ProviderAdapter } from "../dispatch/index.js";
 import { HookReentrancyTracker } from "../hook/index.js";
 import { OtelSpanStore, BackpressureState, OtelEmitter } from "../observability/index.js";
 import { SystemLogBuffer } from "../system-log/index.js";
@@ -1121,6 +1123,53 @@ async function main() {
     clock
   };
 
+  // L-62 §16.3 — optional LLM dispatcher. Wired only when an adapter is
+  // selected via env var. v1.1 ships the in-memory test-double adapter so
+  // conformance probes can drive the dispatcher without a real provider;
+  // production adopters wire their own real adapter (OpenAI / Anthropic /
+  // local llama.cpp / corporate proxy) behind the same ProviderAdapter
+  // interface from ../dispatch/adapter.js.
+  //
+  // Env contract:
+  //   SOA_DISPATCH_ADAPTER=test-double           (only supported value in v1.1)
+  //   SOA_DISPATCH_TEST_DOUBLE_BEHAVIOR=ok       (default) | "error:<CODE>" |
+  //                                               "flaky:N:<CODE>" | "never"
+  //
+  // The test-double env vars are LOOPBACK-ONLY. Start-runner refuses to
+  // boot with a test-double adapter on a non-loopback listener — same
+  // production-safety pattern as §5.3.3 bootstrap test hooks.
+  const dispatchAdapterKind = process.env["SOA_DISPATCH_ADAPTER"];
+  let dispatcher: Dispatcher | undefined;
+  if (dispatchAdapterKind !== undefined) {
+    if (dispatchAdapterKind !== "test-double") {
+      throw new Error(
+        `[start-runner] SOA_DISPATCH_ADAPTER='${dispatchAdapterKind}' unsupported in v1.1. ` +
+          `Only 'test-double' ships in-tree; wire your own ProviderAdapter for production.`,
+      );
+    }
+    // Require explicit confirmation to boot with a test-double adapter.
+    // Validator subprocesses set this alongside SOA_DISPATCH_ADAPTER;
+    // accidental production use is blocked at boot.
+    if (process.env["SOA_DISPATCH_TEST_DOUBLE_CONFIRM"] !== "1") {
+      throw new Error(
+        `[start-runner] SOA_DISPATCH_ADAPTER=test-double requires SOA_DISPATCH_TEST_DOUBLE_CONFIRM=1 to ` +
+          `acknowledge this is a non-production conformance-probe configuration. Refusing to boot.`,
+      );
+    }
+    const behavior = process.env["SOA_DISPATCH_TEST_DOUBLE_BEHAVIOR"] ?? "ok";
+    const adapter: ProviderAdapter = new InMemoryTestAdapter({ behavior });
+    dispatcher = new Dispatcher({
+      adapter,
+      auditChain: chain,
+      clock,
+      runnerVersion: "1.1",
+    });
+    console.warn(
+      `[start-runner] WARNING: LLM dispatcher is using the in-memory test-double adapter ` +
+        `(behavior='${behavior}'). This is for conformance probing only — NEVER ship to production.`,
+    );
+  }
+
   const app = await startRunner({
     trust,
     card,
@@ -1481,7 +1530,18 @@ async function main() {
       ...(BOOTSTRAP_BEARER !== undefined ? { operatorBearer: BOOTSTRAP_BEARER } : {}),
       emitter: streamEmitter,
       systemLog
-    }
+    },
+    ...(dispatcher !== undefined
+      ? {
+          dispatch: {
+            dispatcher,
+            sessionStore,
+            clock,
+            runnerVersion: "1.1",
+            ...(BOOTSTRAP_BEARER !== undefined ? { bootstrapBearer: BOOTSTRAP_BEARER } : {})
+          }
+        }
+      : {})
   });
 
   const addr = app.server.address();

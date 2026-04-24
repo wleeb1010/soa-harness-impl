@@ -7,6 +7,7 @@ export {
   classifyThrowable,
 } from "./errors.js";
 export { InMemoryTestAdapter, type InMemoryTestAdapterOptions, type TestAdapterCall } from "./test-double.js";
+export { dispatchPlugin, type DispatchRouteOptions } from "./plugin.js";
 export type { ProviderAdapter, AdapterDispatchContext } from "./adapter.js";
 export type {
   DispatchRequest,
