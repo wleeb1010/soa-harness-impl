@@ -81,6 +81,12 @@ export interface VersionPluginOptions {
   errataPath?: string;
   errataBody?: unknown;
   /**
+   * L-62 — pinned spec commit SHA baked in at build time via
+   * @soa-harness/schemas PINNED_SPEC_COMMIT. Exposed at /version so
+   * validators can check pin alignment via `soa-validate --check-pins`.
+   */
+  pinnedSpecCommit?: string;
+  /**
    * Finding AF — HTTP doc routes. Each entry wires a GET route that
    * returns the pre-loaded body with the declared Content-Type. Keeps
    * the validator from needing filesystem access to probe docs + the
@@ -99,12 +105,16 @@ export const versionPlugin: FastifyPluginAsync<VersionPluginOptions> = async (ap
     if (notReady !== null) {
       return reply.code(503).send({ status: "not-ready", reason: notReady });
     }
-    return reply.code(200).send({
+    const body: Record<string, unknown> = {
       soaHarnessVersion: RUNNER_SOA_HARNESS_VERSION,
       supported_core_versions: [...supported],
       runner_version: runnerVersion,
       generated_at: opts.clock().toISOString()
-    });
+    };
+    if (opts.pinnedSpecCommit !== undefined) {
+      body["spec_commit_sha"] = opts.pinnedSpecCommit;
+    }
+    return reply.code(200).send(body);
   });
 
   const errataBody = opts.errataBody;

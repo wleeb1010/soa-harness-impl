@@ -199,6 +199,8 @@ const registry = [
   "",
   "export type SchemaName = keyof typeof registry;",
   "export const schemaNames = Object.keys(registry) as SchemaName[];",
+  "",
+  `export const PINNED_SPEC_COMMIT = ${JSON.stringify(pinnedSha)} as const;`,
   ""
 ].join("\n");
 writeFileSync(join(pkgRoot, "src", "registry.ts"), registry);

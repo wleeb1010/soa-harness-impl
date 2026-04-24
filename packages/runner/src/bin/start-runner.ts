@@ -51,6 +51,7 @@ import { composeReadiness } from "../probes/index.js";
 import { StreamEventEmitter } from "../stream/index.js";
 import { Dispatcher, InMemoryTestAdapter } from "../dispatch/index.js";
 import type { ProviderAdapter } from "../dispatch/index.js";
+import { PINNED_SPEC_COMMIT } from "@soa-harness/schemas";
 import { HookReentrancyTracker } from "../hook/index.js";
 import { OtelSpanStore, BackpressureState, OtelEmitter } from "../observability/index.js";
 import { SystemLogBuffer } from "../system-log/index.js";
@@ -1522,7 +1523,8 @@ async function main() {
         ? { supportedCoreVersions: card.supported_core_versions }
         : {}),
       ...(errataBody !== undefined ? { errataBody } : {}),
-      ...(docRoutes.length > 0 ? { docRoutes } : {})
+      ...(docRoutes.length > 0 ? { docRoutes } : {}),
+      pinnedSpecCommit: PINNED_SPEC_COMMIT
     },
     privacy: {
       subjectStore,

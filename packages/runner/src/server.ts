@@ -123,6 +123,8 @@ export interface BuildRunnerOptions {
     errataPath?: string;
     /** Finding AF — HTTP doc routes serving bundled repo artifacts. */
     docRoutes?: readonly import("./governance/index.js").DocRoute[];
+    /** L-62 — exposes spec_commit_sha at /version for validator --check-pins. */
+    pinnedSpecCommit?: string;
   };
   /**
    * Optional — when present the Runner exposes GET /audit/tail per Core §10.5.2.
@@ -436,7 +438,8 @@ export async function buildRunnerApp(opts: BuildRunnerOptions): Promise<FastifyI
         : {}),
       ...(gv.errataBody !== undefined ? { errataBody: gv.errataBody } : {}),
       ...(gv.errataPath !== undefined ? { errataPath: gv.errataPath } : {}),
-      ...(gv.docRoutes !== undefined ? { docRoutes: gv.docRoutes } : {})
+      ...(gv.docRoutes !== undefined ? { docRoutes: gv.docRoutes } : {}),
+      ...(gv.pinnedSpecCommit !== undefined ? { pinnedSpecCommit: gv.pinnedSpecCommit } : {})
     });
   }
 
