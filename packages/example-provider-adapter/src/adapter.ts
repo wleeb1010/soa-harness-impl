@@ -180,18 +180,20 @@ function buildDispatchResponse(
     output_tokens: parsed.usage?.completion_tokens ?? 0,
     cached_tokens: parsed.usage?.cached_tokens ?? 0,
   };
-  // Map provider's finish_reason to our StopReason. ADOPTERS: extend.
-  let stop_reason: DispatchResponse["stop_reason"] = "NaturalStop";
-  if (choice?.finish_reason === "length") {
-    // Provider hit max_tokens — from the runtime's perspective this is
-    // NaturalStop with a non-empty body. Budget-level concerns live in §13,
-    // not here.
-  } else if (choice?.finish_reason === "content_filter") {
-    // Some providers surface content filter on-path rather than via a refusal
-    // — we could either return a refusal content block (recommended) or
-    // throw ContentFilterRefusal. Here we choose the refusal-block path so
-    // the turn completes cleanly with a visible refusal in content_blocks.
-  }
+  // Map provider's finish_reason to our StopReason. The default response
+  // is always NaturalStop; adopters extend this when their provider
+  // surfaces conditions that need different classification.
+  //
+  // ADOPTER EXTENSION NOTES (kept for reference; no current-impl change):
+  //   - finish_reason "length" (max_tokens hit): from the runtime's view
+  //     this is still NaturalStop with a non-empty body. Budget-level
+  //     concerns live in §13, not here.
+  //   - finish_reason "content_filter" (provider-side safety refusal):
+  //     recommended to return a refusal content block so the turn
+  //     completes cleanly with the refusal visible; alternative is
+  //     throwing AdapterError("ContentFilterRefusal") to drop through
+  //     the dispatcher's error path.
+  const stop_reason: DispatchResponse["stop_reason"] = "NaturalStop";
   return {
     dispatch_id: mintDispatchId(request.turn_id, parsed.id),
     session_id: request.session_id,
